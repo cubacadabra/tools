@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cubacadabra-tools"
+version = "0.1.0"
+description = "Developer tools for building and maintaining Cubacadabra projects"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Cubacadabra" },
+]
+dependencies = []
+
+[project.scripts]
+cubacadabra = "cubacadabra.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
