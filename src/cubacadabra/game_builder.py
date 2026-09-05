@@ -158,7 +158,7 @@ def build_game(
         + _read_source_file(entry, source_root, ())
         + "\n"
     )
-    (output / "game.luau").write_text(generated_script, encoding="utf-8", newline="\n")
+    (output / "game.luau").write_text(generated_script, encoding="utf-8")
     shutil.copyfile(manifest_path, output / "manifest.json")
 
     assets = manifest_path.parent / "assets"
@@ -181,7 +181,6 @@ def build_game(
     (output / "package.json").write_text(
         json.dumps(package_info, indent=2) + "\n",
         encoding="utf-8",
-        newline="\n",
     )
 
     resolved_zip = zip_path.resolve() if zip_path is not None else None
