@@ -4,6 +4,10 @@
 It is intentionally small at the start and organized so new commands can be
 added without putting build logic back into individual game repositories.
 
+## Run
+
+PYTHONPATH=src python3 -m cubacadabra --help
+
 ## Install
 
 From this repository, install the CLI in an environment you control:
