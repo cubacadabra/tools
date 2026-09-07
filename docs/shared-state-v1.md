@@ -88,7 +88,10 @@ end
 `start` is idempotent. `dispatch` queues at most 32 table intents and returns
 `false` if that bound is reached. `receive` returns `true` when an event
 belongs to the store's channel. `update` advances `ageSeconds` and retries
-an unanswered compare-and-set.
+an unanswered compare-and-set. Before the first authoritative snapshot,
+`update` also repeats the initial sequence-zero proposal. If the first send or
+response is lost during a connection transition, a later proposal either
+initializes the channel or receives the retained state as a conflict response.
 
 Public read-only state used by game presentation:
 

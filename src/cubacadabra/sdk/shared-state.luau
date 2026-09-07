@@ -46,6 +46,8 @@ function CubaSharedState.create(config)
         ageSeconds = 0,
         started = false,
         hasSnapshot = false,
+        bootstrapValue = nil,
+        bootstrapSeconds = 0,
         pending = {},
         inflight = nil,
         inflightSeconds = 0,
@@ -95,6 +97,8 @@ function CubaSharedState:start(api)
         error("CubaSharedState initial state is invalid")
     end
     self.started = true
+    self.bootstrapValue = initial_value
+    self.bootstrapSeconds = 0
     api.network:compare_set_state(self.channel, 0, initial_value)
 end
 
@@ -126,7 +130,7 @@ function CubaSharedState:receive(api, event)
         return true
     end
 
-    if event.sequence == self.sequence then
+    if self.hasSnapshot and event.sequence == self.sequence then
         if event.conflict == true and self.inflight ~= nil then
             self.inflight = nil
             self.inflightSeconds = 0
@@ -143,6 +147,8 @@ function CubaSharedState:receive(api, event)
         and math.max(0, event.ageMs / 1000)
         or 0
     self.hasSnapshot = true
+    self.bootstrapValue = nil
+    self.bootstrapSeconds = 0
 
     local completed_intent = nil
     if self.inflight ~= nil then
@@ -166,13 +172,22 @@ function CubaSharedState:receive(api, event)
 end
 
 function CubaSharedState:update(api, delta_seconds)
-    self.ageSeconds = self.ageSeconds + math.max(0, delta_seconds)
+    local elapsed = math.max(0, delta_seconds)
+    self.ageSeconds = self.ageSeconds + elapsed
+    if self.started and not self.hasSnapshot then
+        self.bootstrapSeconds = self.bootstrapSeconds + elapsed
+        if self.bootstrapSeconds >= self.retrySeconds then
+            self.bootstrapSeconds = 0
+            api.network:compare_set_state(self.channel, 0, self.bootstrapValue)
+        end
+        return
+    end
     if self.inflight == nil then
         self:_submit_next(api)
         return
     end
 
-    self.inflightSeconds = self.inflightSeconds + math.max(0, delta_seconds)
+    self.inflightSeconds = self.inflightSeconds + elapsed
     if self.inflightSeconds < self.retrySeconds then
         return
     end
