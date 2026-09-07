@@ -20,10 +20,19 @@ from pathlib import Path, PurePosixPath
 
 
 INCLUDE_RE = re.compile(r'^\s*--\s*@include\s+"([^"]+)"\s*$')
+SDK_INCLUDE_PREFIX = "@cubacadabra/"
+SDK_INCLUDE_RE = re.compile(r"^@cubacadabra/[a-z0-9-]+\.luau$")
+SDK_INCLUDES = {
+    "@cubacadabra/shared-state-v1.luau": "shared-state.luau",
+}
 AUDIO_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 AUDIO_PATH_RE = re.compile(
     r"^assets/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*"
     r"[A-Za-z0-9_-][A-Za-z0-9._-]*\.wav$"
+)
+EFFECTS_SOURCE_RE = re.compile(
+    r"^(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*"
+    r"[A-Za-z0-9_-][A-Za-z0-9._-]*\.json$"
 )
 SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
@@ -36,6 +45,35 @@ MAX_AUDIO_ASSET_BYTES = 4 * 1024 * 1024
 
 class GameBuildError(ValueError):
     """An input project cannot be turned into a valid game package."""
+
+
+def _read_sdk_include(include_value: str) -> str:
+    if not SDK_INCLUDE_RE.fullmatch(include_value):
+        raise GameBuildError(
+            "Cubacadabra SDK includes must use "
+            '"@cubacadabra/<module-name>.luau"'
+        )
+    sdk_file = SDK_INCLUDES.get(include_value)
+    if sdk_file is None:
+        raise GameBuildError(f"unknown Cubacadabra SDK include: {include_value}")
+    sdk_path = Path(__file__).with_name("sdk") / sdk_file
+
+    try:
+        source = sdk_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise GameBuildError(f"{include_value}: SDK source is not valid UTF-8") from error
+
+    for line_number, line in enumerate(source.splitlines(), start=1):
+        if re.match(r"^return(?:\s|$)", line):
+            raise GameBuildError(
+                f"{include_value}:{line_number}: SDK modules share the entry "
+                "chunk and cannot contain a top-level return"
+            )
+        if INCLUDE_RE.match(line):
+            raise GameBuildError(
+                f"{include_value}:{line_number}: SDK modules cannot include other files"
+            )
+    return source
 
 
 @dataclass(frozen=True)
@@ -76,6 +114,13 @@ def _read_source_file(
             lines.append(line)
             continue
 
+        if match.group(1).startswith(SDK_INCLUDE_PREFIX):
+            include_name = match.group(1)
+            lines.append(f"-- begin SDK include: {include_name}")
+            lines.append(_read_sdk_include(include_name))
+            lines.append(f"-- end SDK include: {include_name}")
+            continue
+
         include_value = PurePosixPath(match.group(1))
         if (
             not match.group(1)
@@ -109,6 +154,52 @@ def _manifest_value(manifest: dict[str, object], key: str) -> object:
     if value is None:
         raise GameBuildError(f"manifest.{key} must be present")
     return value
+
+
+def _resolve_effects_source(
+    manifest: dict[str, object],
+    project_root: Path,
+) -> dict[str, object]:
+    effects = manifest.get("effects")
+    if not isinstance(effects, dict) or "source" not in effects:
+        return manifest
+    if set(effects) != {"source"}:
+        raise GameBuildError(
+            "manifest.effects.source cannot be combined with inline effect fields"
+        )
+
+    source_value = effects["source"]
+    if not isinstance(source_value, str) or not EFFECTS_SOURCE_RE.fullmatch(source_value):
+        raise GameBuildError(
+            "manifest.effects.source must be a relative JSON path inside the game project"
+        )
+    source_path = project_root.joinpath(*PurePosixPath(source_value).parts)
+    try:
+        source_path.resolve().relative_to(project_root.resolve())
+    except ValueError as error:
+        raise GameBuildError(
+            "manifest.effects.source must stay inside the game project"
+        ) from error
+    if not source_path.is_file():
+        raise GameBuildError(
+            f"manifest.effects.source was not found: {source_value}"
+        )
+    try:
+        resolved_effects = json.loads(source_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as error:
+        raise GameBuildError(
+            f"manifest.effects.source is not valid UTF-8: {source_value}"
+        ) from error
+    except json.JSONDecodeError as error:
+        raise GameBuildError(
+            f"manifest.effects.source is not valid JSON: {error.msg}"
+        ) from error
+    if not isinstance(resolved_effects, dict):
+        raise GameBuildError("manifest.effects.source must contain a JSON object")
+
+    resolved_manifest = dict(manifest)
+    resolved_manifest["effects"] = resolved_effects
+    return resolved_manifest
 
 
 def _validate_output(output: Path, source_root: Path) -> None:
@@ -222,6 +313,7 @@ def build_game(
         raise GameBuildError(f"manifest is not valid JSON: {error.msg}") from error
     if not isinstance(manifest, dict):
         raise GameBuildError("manifest must contain a JSON object")
+    manifest = _resolve_effects_source(manifest, manifest_path.parent)
 
     game_id = _manifest_value(manifest, "id")
     version = _manifest_value(manifest, "version")
@@ -247,7 +339,10 @@ def build_game(
         + "\n"
     )
     (output / "game.luau").write_text(generated_script, encoding="utf-8")
-    shutil.copyfile(manifest_path, output / "manifest.json")
+    (output / "manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     assets = manifest_path.parent / "assets"
     if assets.is_dir():

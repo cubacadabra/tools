@@ -19,3 +19,6 @@ cubacadabra = "cubacadabra.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+cubacadabra = ["sdk/*.luau"]

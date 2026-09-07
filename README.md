@@ -42,9 +42,35 @@ become package metadata; legacy positive integer versions remain accepted.
 Luau files can include other files with `-- @include "relative/path.luau"`
 directives.
 
+Portable SDK helpers use the same explicit syntax with a reserved namespace:
+
+```luau
+-- @include "@cubacadabra/shared-state-v1.luau"
+```
+
+`CubaSharedState` v1 owns bounded intent queuing, compare-and-set retries,
+conflict rebasing, and reconnect snapshots. Games provide their own initial
+state, validator, reducer, and optional change callback, so neither the SDK nor
+the backend needs to know game-specific rules.
+
+See [Shared state SDK v1](docs/shared-state-v1.md) for the reducer contract and
+lifecycle API.
+
 One-shot game audio is declared under `assets.audio` with an id, path, and
 optional volume. The builder validates up to 64 package-local WAV files as
 48 kHz, 16-bit PCM with one or two channels and a maximum size of 4 MiB each.
+
+Large game-owned effect libraries may live in a separate source file:
+
+```json
+{
+  "effects": { "source": "effects.json" }
+}
+```
+
+The builder validates the relative path and inlines the effect library into the
+portable package manifest. Runtime clients still receive one self-contained
+manifest and do not need filesystem or include behavior.
 
 Run `cubacadabra build-game --help` for all options.
 

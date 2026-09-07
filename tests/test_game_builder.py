@@ -54,6 +54,93 @@ class GameBuilderTests(unittest.TestCase):
                 "package.json",
             ])
 
+    def test_expands_a_versioned_cubacadabra_sdk_include(self) -> None:
+        (self.project / "src/main.luau").write_text(
+            '-- @include "@cubacadabra/shared-state-v1.luau"\n'
+            'return { shared = CubaSharedState }\n',
+            encoding="utf-8",
+        )
+
+        output = self.project / "build/package"
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+
+        script = (output / "game.luau").read_text()
+        self.assertIn(
+            "begin SDK include: @cubacadabra/shared-state-v1.luau",
+            script,
+        )
+        self.assertIn("local CubaSharedState = {}", script)
+
+    def test_rejects_an_unknown_cubacadabra_sdk_include(self) -> None:
+        (self.project / "src/main.luau").write_text(
+            '-- @include "@cubacadabra/missing.luau"\nreturn {}\n',
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "unknown Cubacadabra SDK include"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
+    def test_inlines_a_game_owned_effects_source(self) -> None:
+        (self.project / "effects.json").write_text(
+            json.dumps({
+                "version": 1,
+                "templates": {
+                    "pulse": {
+                        "nodes": [{"shape": "ring", "color": "accent"}],
+                    },
+                },
+            }),
+            encoding="utf-8",
+        )
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": 3,
+                "effects": {"source": "effects.json"},
+            }),
+            encoding="utf-8",
+        )
+
+        output = self.project / "build/package"
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+
+        manifest = json.loads((output / "manifest.json").read_text())
+        self.assertEqual(manifest["effects"]["version"], 1)
+        self.assertEqual(
+            manifest["effects"]["templates"]["pulse"]["nodes"][0]["shape"],
+            "ring",
+        )
+        self.assertNotIn("source", manifest["effects"])
+
+    def test_rejects_effects_source_traversal(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": 3,
+                "effects": {"source": "../effects.json"},
+            }),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "relative JSON path"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
     def test_rejects_include_traversal(self) -> None:
         (self.project / "src/ui/document.luau").write_text(
             '-- @include "../main.luau"\n', encoding="utf-8"
