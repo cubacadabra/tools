@@ -75,6 +75,27 @@ class GameBuilderTests(unittest.TestCase):
         )
         self.assertIn("local CubaSharedState = {}", script)
 
+    def test_expands_the_disclosure_sdk_include(self) -> None:
+        (self.project / "src/main.luau").write_text(
+            '-- @include "@cubacadabra/disclosure-v1.luau"\n'
+            'return { disclosure = CubaDisclosure }\n',
+            encoding="utf-8",
+        )
+
+        output = self.project / "build/package"
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+
+        script = (output / "game.luau").read_text()
+        self.assertIn(
+            "begin SDK include: @cubacadabra/disclosure-v1.luau",
+            script,
+        )
+        self.assertIn("local CubaDisclosure = {}", script)
+
     def test_rejects_an_unknown_cubacadabra_sdk_include(self) -> None:
         (self.project / "src/main.luau").write_text(
             '-- @include "@cubacadabra/missing.luau"\nreturn {}\n',

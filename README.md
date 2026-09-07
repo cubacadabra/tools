@@ -46,6 +46,7 @@ Portable SDK helpers use the same explicit syntax with a reserved namespace:
 
 ```luau
 -- @include "@cubacadabra/shared-state-v1.luau"
+-- @include "@cubacadabra/disclosure-v1.luau"
 ```
 
 `CubaSharedState` v1 owns bounded intent queuing, compare-and-set retries,
@@ -54,7 +55,8 @@ state, validator, reducer, and optional change callback, so neither the SDK nor
 the backend needs to know game-specific rules.
 
 See [Shared state SDK v1](docs/shared-state-v1.md) for the reducer contract and
-lifecycle API.
+lifecycle API. [Disclosure SDK v1](docs/disclosure-v1.md) provides a generic
+tap-to-reveal controller while each game continues to own its HUD composition.
 
 One-shot game audio is declared under `assets.audio` with an id, path, and
 optional volume. The builder validates up to 64 package-local WAV files as
