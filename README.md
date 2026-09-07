@@ -37,9 +37,14 @@ cubacadabra build-game ../third-game --zip ../third-game/build/third-game.zip
 ```
 
 By convention, a game project contains `manifest.json`, `src/main.luau`, and
-an optional `assets/` directory. The manifest's `id` and positive integer
-`version` become package metadata. Luau files can include other files with
-`-- @include "relative/path.luau"` directives.
+an optional `assets/` directory. The manifest's `id` and SemVer `version`
+become package metadata; legacy positive integer versions remain accepted.
+Luau files can include other files with `-- @include "relative/path.luau"`
+directives.
+
+One-shot game audio is declared under `assets.audio` with an id, path, and
+optional volume. The builder validates up to 64 package-local WAV files as
+48 kHz, 16-bit PCM with one or two channels and a maximum size of 4 MiB each.
 
 Run `cubacadabra build-game --help` for all options.
 

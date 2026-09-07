@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import wave
 import zipfile
 from pathlib import Path
 
@@ -86,4 +87,90 @@ class GameBuilderTests(unittest.TestCase):
                 source_root=self.project / "src",
                 manifest_path=self.project / "manifest.json",
                 output=self.project / "src/output",
+            )
+
+    def test_accepts_a_semantic_release_version(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({"id": "test-game", "version": "0.0.1"}),
+            encoding="utf-8",
+        )
+
+        result = build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=self.project / "build/package",
+        )
+
+        self.assertEqual(result.version, "0.0.1")
+
+    def test_copies_declared_audio_assets(self) -> None:
+        audio = self.project / "assets/audio/chime.wav"
+        audio.parent.mkdir()
+        with wave.open(str(audio), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(48_000)
+            wav.writeframes(b"\0\0" * 48)
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": 3,
+                "assets": {
+                    "audio": {
+                        "chime": {"path": "assets/audio/chime.wav", "volume": 0.8},
+                    },
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        output = self.project / "build/package"
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+
+        self.assertEqual((output / "assets/audio/chime.wav").read_bytes(), audio.read_bytes())
+
+    def test_rejects_audio_asset_outside_assets(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": 3,
+                "assets": {
+                    "audio": {
+                        "chime": {"path": "../chime.wav"},
+                    },
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "must stay inside assets"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
+    def test_rejects_missing_audio_asset(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": 3,
+                "assets": {
+                    "audio": {
+                        "chime": {"path": "assets/audio/missing.wav"},
+                    },
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "was not found"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
             )

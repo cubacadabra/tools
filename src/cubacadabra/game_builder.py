@@ -13,12 +13,25 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import wave
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 
 INCLUDE_RE = re.compile(r'^\s*--\s*@include\s+"([^"]+)"\s*$')
+AUDIO_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+AUDIO_PATH_RE = re.compile(
+    r"^assets/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*"
+    r"[A-Za-z0-9_-][A-Za-z0-9._-]*\.wav$"
+)
+SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
+MAX_AUDIO_ASSETS = 64
+MAX_AUDIO_ASSET_BYTES = 4 * 1024 * 1024
 
 
 class GameBuildError(ValueError):
@@ -30,7 +43,7 @@ class GameBuildResult:
     """The useful outputs and metadata produced by a successful build."""
 
     game_id: str
-    version: int
+    version: int | str
     output: Path
     zip_path: Path | None
 
@@ -108,6 +121,78 @@ def _validate_output(output: Path, source_root: Path) -> None:
     raise GameBuildError(f"output directory cannot be inside the source directory: {output}")
 
 
+def _validate_audio_assets(manifest: dict[str, object], project_root: Path) -> None:
+    assets = manifest.get("assets")
+    if assets is None:
+        return
+    if not isinstance(assets, dict):
+        raise GameBuildError("manifest.assets must be an object")
+    audio = assets.get("audio")
+    if audio is None:
+        return
+    if not isinstance(audio, dict):
+        raise GameBuildError("manifest.assets.audio must be an object")
+    if len(audio) > MAX_AUDIO_ASSETS:
+        raise GameBuildError(f"manifest.assets.audio cannot contain more than {MAX_AUDIO_ASSETS} sounds")
+
+    for audio_id, definition in audio.items():
+        if not isinstance(audio_id, str) or not AUDIO_ID_RE.fullmatch(audio_id):
+            raise GameBuildError(
+                "manifest.assets.audio ids must be 1–64 ASCII letters, numbers, dots, "
+                "dashes, or underscores"
+            )
+        if not isinstance(definition, dict):
+            raise GameBuildError(f"manifest.assets.audio.{audio_id} must be an object")
+        path_value = definition.get("path")
+        if not isinstance(path_value, str) or not path_value:
+            raise GameBuildError(f"manifest.assets.audio.{audio_id}.path must be a non-empty string")
+        relative_path = PurePosixPath(path_value)
+        if not AUDIO_PATH_RE.fullmatch(path_value):
+            raise GameBuildError(
+                f"manifest.assets.audio.{audio_id}.path must stay inside assets/"
+            )
+        audio_path = project_root.joinpath(*relative_path.parts)
+        if not audio_path.is_file():
+            raise GameBuildError(
+                f"manifest.assets.audio.{audio_id}.path was not found: {path_value}"
+            )
+        try:
+            audio_path.resolve().relative_to((project_root / "assets").resolve())
+        except ValueError as error:
+            raise GameBuildError(
+                f"manifest.assets.audio.{audio_id}.path must stay inside assets/"
+            ) from error
+        if audio_path.stat().st_size > MAX_AUDIO_ASSET_BYTES:
+            raise GameBuildError(
+                f"manifest.assets.audio.{audio_id}.path exceeds 4 MiB: {path_value}"
+            )
+        try:
+            with wave.open(str(audio_path), "rb") as wav:
+                if (
+                    wav.getcomptype() != "NONE"
+                    or wav.getsampwidth() != 2
+                    or wav.getframerate() != 48_000
+                    or wav.getnchannels() not in (1, 2)
+                ):
+                    raise GameBuildError(
+                        f"manifest.assets.audio.{audio_id}.path must be 48 kHz, "
+                        "16-bit PCM WAV with one or two channels"
+                    )
+        except (EOFError, wave.Error) as error:
+            raise GameBuildError(
+                f"manifest.assets.audio.{audio_id}.path is not a valid WAV file"
+            ) from error
+        volume = definition.get("volume", 1)
+        if (
+            not isinstance(volume, (int, float))
+            or isinstance(volume, bool)
+            or not 0 <= volume <= 1
+        ):
+            raise GameBuildError(
+                f"manifest.assets.audio.{audio_id}.volume must be between 0 and 1"
+            )
+
+
 def build_game(
     *,
     source_root: Path,
@@ -142,8 +227,11 @@ def build_game(
     version = _manifest_value(manifest, "version")
     if not isinstance(game_id, str) or not game_id:
         raise GameBuildError("manifest.id must be a non-empty string")
-    if not isinstance(version, int) or isinstance(version, bool) or version < 1:
-        raise GameBuildError("manifest.version must be a positive integer")
+    legacy_version = isinstance(version, int) and not isinstance(version, bool) and version >= 1
+    semantic_version = isinstance(version, str) and SEMVER_RE.fullmatch(version) is not None
+    if not legacy_version and not semantic_version:
+        raise GameBuildError("manifest.version must be SemVer or a legacy positive integer")
+    _validate_audio_assets(manifest, manifest_path.parent)
 
     if output.exists():
         if not output.is_dir():
