@@ -15,6 +15,7 @@ function CubaObby.create(config)
         checkpoint = "start",
         deaths = 0,
         state = "ready",
+        onSpawn = config.onSpawn,
         onCheckpoint = config.onCheckpoint,
         onDeath = config.onDeath,
         onRespawn = config.onRespawn,
@@ -25,7 +26,14 @@ function CubaObby:handle(api, event)
     if type(event) ~= "table" or type(event.kind) ~= "string" then
         return false
     end
-    if event.kind == "checkpoint" then
+    if event.kind == "spawn" then
+        self.deaths = event.deaths or self.deaths
+        self.state = "running"
+        if type(self.onSpawn) == "function" then
+            self.onSpawn(api, event, self)
+        end
+        return true
+    elseif event.kind == "checkpoint" then
         self.checkpoint = event.id or self.checkpoint
         self.state = "running"
         if type(self.onCheckpoint) == "function" then
@@ -33,7 +41,7 @@ function CubaObby:handle(api, event)
         end
         return true
     elseif event.kind == "death" then
-        self.deaths = event.deaths or (self.deaths + 1)
+        self.deaths = event.deaths or self.deaths
         self.state = "dead"
         if type(self.onDeath) == "function" then
             self.onDeath(api, event, self)
@@ -52,5 +60,9 @@ function CubaObby:handle(api, event)
 end
 
 function CubaObby:status()
-    return self.state, self.checkpoint, self.deaths
+    return {
+        state = self.state,
+        checkpoint = self.checkpoint,
+        deaths = self.deaths,
+    }
 end

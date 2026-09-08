@@ -11,13 +11,13 @@ function CubaSurvival.create(config)
     if type(config) ~= "table" then
         error("CubaSurvival.create requires a config table")
     end
-    local max_health = config.maxHealth or 100
     return setmetatable({
-        health = config.startHealth or max_health,
-        max_health = max_health,
+        health = 0,
+        max_health = 0,
         deaths = 0,
-        state = "ready",
+        state = "waiting",
         source = nil,
+        onSpawn = config.onSpawn,
         onDamage = config.onDamage,
         onDeath = config.onDeath,
         onRespawn = config.onRespawn,
@@ -28,11 +28,21 @@ function CubaSurvival:handle(api, event)
     if type(event) ~= "table" or type(event.kind) ~= "string" then
         return false
     end
-    if event.kind == "damage" then
+    if event.kind == "spawn" then
+        self.health = event.health or self.health
+        self.max_health = event.maxHealth or self.max_health
+        self.deaths = event.deaths or self.deaths
+        self.source = nil
+        self.state = "running"
+        if type(self.onSpawn) == "function" then
+            self.onSpawn(api, event, self)
+        end
+        return true
+    elseif event.kind == "damage" then
         self.health = event.health or self.health
         self.max_health = event.maxHealth or self.max_health
         self.source = event.source or self.source
-        self.state = "exposed"
+        self.state = "running"
         if type(self.onDamage) == "function" then
             self.onDamage(api, event, self)
         end
@@ -40,7 +50,7 @@ function CubaSurvival:handle(api, event)
     elseif event.kind == "death" then
         self.health = event.health or 0
         self.max_health = event.maxHealth or self.max_health
-        self.deaths = event.deaths or (self.deaths + 1)
+        self.deaths = event.deaths or self.deaths
         self.state = "dead"
         if type(self.onDeath) == "function" then
             self.onDeath(api, event, self)
@@ -61,5 +71,11 @@ function CubaSurvival:handle(api, event)
 end
 
 function CubaSurvival:status()
-    return self.state, self.health, self.max_health, self.deaths, self.source
+    return {
+        state = self.state,
+        health = self.health,
+        maxHealth = self.max_health,
+        deaths = self.deaths,
+        source = self.source,
+    }
 end

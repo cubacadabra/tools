@@ -79,10 +79,13 @@ return Game
 Interaction events contain `id`, `phase` (`"enter"` or `"exit"`), and `players`.
 UI events contain `node_id`, `action`, and `phase`; sliders and toggles also
 contain `value`. Launch events contain `pad_id` and `player_ids`.
-Player events contain `kind` (`"checkpoint"`, `"damage"`, `"death"`, or
-`"respawn"`). Damage, death, and respawn events include `health` and
-`maxHealth`; damage also identifies its `source` and `amount`. Death includes
-the `cause` (`"fall"`, a hazard id, or `"hazard"`) and death count.
+Player events contain `type: "player"` and `kind` (`"spawn"`,
+`"checkpoint"`, `"damage"`, `"death"`, or `"respawn"`). Spawn, damage, death,
+and respawn events include authoritative `health`, `maxHealth`, and `deaths`;
+damage also identifies its `source` and accumulated `amount`. Death includes
+the `cause` (`"fall"` or a hazard id). Player lifecycle events are broadcast
+to every interested SDK helper; handling one must not prevent another helper
+from observing it.
 
 ## 3. Game-facing Luau API
 
@@ -258,7 +261,9 @@ Include `@cubacadabra/obby-v1.luau` for a small game-owned lifecycle helper.
 Inside a ladder volume, forward/back input (or the explicit `player.climb`
 button action) moves the player vertically. The helper is presentation/state
 convenience only; an important multiplayer reward still needs authoritative
-server validation.
+server validation. `CubaObby:status()` returns a named table containing
+`state`, `checkpoint`, and `deaths`, so future lifecycle fields can be added
+without changing positional return values.
 
 ### Survival rules v1
 
@@ -290,8 +295,10 @@ more authored damage volumes:
 `respawn.mode` defaults to `"checkpoint"` for compatibility with existing
 obby packages. `"spawn"` keeps route/checkpoint events useful without moving a
 survival player’s respawn point. Include `@cubacadabra/survival-v1.luau` when
-the game wants a reusable health/death/respawn state tracker; mission rules,
-healing, shelter timers, inventory, and HUD presentation remain game-owned.
+the game wants a reusable health/death/respawn state tracker. The helper starts
+in `waiting` state and mirrors the runtime’s `spawn` event; its `status()` call
+returns a named table. Mission rules, healing, shelter timers, inventory, and
+HUD presentation remain game-owned.
 
 ### Disclosure v1
 
