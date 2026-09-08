@@ -42,6 +42,7 @@ SEMVER_RE = re.compile(
 )
 MAX_AUDIO_ASSETS = 64
 MAX_AUDIO_ASSET_BYTES = 4 * 1024 * 1024
+PREVIEW_SDK_VERSION = "0.3.0"
 
 
 class GameBuildError(ValueError):
@@ -324,6 +325,15 @@ def build_game(
     semantic_version = isinstance(version, str) and SEMVER_RE.fullmatch(version) is not None
     if not legacy_version and not semantic_version:
         raise GameBuildError("manifest.version must be SemVer or a legacy positive integer")
+    sdk_version = manifest.get("sdkVersion")
+    if sdk_version is not None:
+        if not isinstance(sdk_version, str) or SEMVER_RE.fullmatch(sdk_version) is None:
+            raise GameBuildError("manifest.sdkVersion must be a SemVer string")
+        if sdk_version != PREVIEW_SDK_VERSION:
+            raise GameBuildError(
+                f"manifest.sdkVersion {sdk_version!r} is unsupported; "
+                f"this builder supports {PREVIEW_SDK_VERSION}"
+            )
     _validate_audio_assets(manifest, manifest_path.parent)
 
     if output.exists():

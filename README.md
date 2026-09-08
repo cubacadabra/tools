@@ -1,4 +1,4 @@
-# Cubacadabra Tools
+# Cubacadabra Tools — Developer Preview 0.3
 
 `cubacadabra` is the shared command-line toolbox for Cubacadabra projects.
 It is intentionally small at the start and organized so new commands can be
@@ -57,6 +57,9 @@ the backend needs to know game-specific rules.
 See [Shared state SDK v1](docs/shared-state-v1.md) for the reducer contract and
 lifecycle API. [Disclosure SDK v1](docs/disclosure-v1.md) provides a generic
 tap-to-reveal controller while each game continues to own its HUD composition.
+
+The complete preview contract is in the
+[Cubacadabra Game Developer Guide](docs/cubacadabra-game-developer-guide-preview-0.3.md).
 
 One-shot game audio is declared under `assets.audio` with an id, path, and
 optional volume. The builder validates up to 64 package-local WAV files as

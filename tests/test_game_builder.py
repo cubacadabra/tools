@@ -211,6 +211,41 @@ class GameBuilderTests(unittest.TestCase):
 
         self.assertEqual(result.version, "0.0.1")
 
+    def test_accepts_the_frozen_preview_sdk_version(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": "0.3.0",
+                "sdkVersion": "0.3.0",
+            }),
+            encoding="utf-8",
+        )
+
+        result = build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=self.project / "build/package",
+        )
+
+        self.assertEqual(result.version, "0.3.0")
+
+    def test_rejects_an_unsupported_sdk_version(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": "0.3.0",
+                "sdkVersion": "0.4.0",
+            }),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "sdkVersion.*unsupported"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
     def test_copies_declared_audio_assets(self) -> None:
         audio = self.project / "assets/audio/chime.wav"
         audio.parent.mkdir()
