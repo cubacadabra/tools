@@ -10,7 +10,7 @@ PYTHONPATH=src python3 -m cubacadabra --help
 
 PYTHONPATH=src python3 -m cubacadabra create-game --title "The Wild West" --path /Users/aa/cubacadabra/examples
 
-PYTHONPATH=src python3 -m cubacadabra build-game --source /Users/aa/cubacadabra/examples/the-wild-west --output /tmp --zip ../the-wild-west.zip
+PYTHONPATH=src python3 -m cubacadabra build-game --source /Users/aa/cubacadabra/examples/the-wild-west --output /tmp/foo --zip ../the-wild-west.zip
 
 ## Install
 
