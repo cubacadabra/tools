@@ -79,8 +79,10 @@ return Game
 Interaction events contain `id`, `phase` (`"enter"` or `"exit"`), and `players`.
 UI events contain `node_id`, `action`, and `phase`; sliders and toggles also
 contain `value`. Launch events contain `pad_id` and `player_ids`.
-Player events contain `kind` (`"checkpoint"`, `"death"`, or `"respawn"`)
-plus the relevant checkpoint, fall cause, and death-count fields.
+Player events contain `kind` (`"checkpoint"`, `"damage"`, `"death"`, or
+`"respawn"`). Damage, death, and respawn events include `health` and
+`maxHealth`; damage also identifies its `source` and `amount`. Death includes
+the `cause` (`"fall"`, a hazard id, or `"hazard"`) and death count.
 
 ## 3. Game-facing Luau API
 
@@ -253,10 +255,43 @@ respawns. A world opts in with fields like:
 ```
 
 Include `@cubacadabra/obby-v1.luau` for a small game-owned lifecycle helper.
-Inside a ladder volume, movement along its declared horizontal axis becomes
-vertical climbing: move toward the negative axis to climb up and the positive
-axis to climb down. The helper is presentation/state convenience only; an
-important multiplayer reward still needs authoritative server validation.
+Inside a ladder volume, forward/back input (or the explicit `player.climb`
+button action) moves the player vertically. The helper is presentation/state
+convenience only; an important multiplayer reward still needs authoritative
+server validation.
+
+### Survival rules v1
+
+Gravity, falling, hazards, health, and respawn are world-level primitives, not
+obby-only behavior. A survival world can use a spawn respawn policy and one or
+more authored damage volumes:
+
+```json
+{
+  "world": {
+    "physics": {
+      "groundCollision": false,
+      "deathY": -12,
+      "respawnDelay": 1.1
+    },
+    "health": { "max": 100, "start": 100 },
+    "respawn": { "mode": "spawn", "delay": 1.1 }
+  },
+  "hazards": [
+    { "id": "deep-water", "kind": "damage",
+      "position": [0, 0.25, -8], "size": [18, 0.5, 10],
+      "damagePerSecond": 18 },
+    { "id": "void", "kind": "kill",
+      "position": [0, -11, 0], "size": [70, 2, 70] }
+  ]
+}
+```
+
+`respawn.mode` defaults to `"checkpoint"` for compatibility with existing
+obby packages. `"spawn"` keeps route/checkpoint events useful without moving a
+survival player’s respawn point. Include `@cubacadabra/survival-v1.luau` when
+the game wants a reusable health/death/respawn state tracker; mission rules,
+healing, shelter timers, inventory, and HUD presentation remain game-owned.
 
 ### Disclosure v1
 
