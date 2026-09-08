@@ -25,7 +25,16 @@ The command is then available as `cubacadabra`. Without installing, use
 cubacadabra [--version] COMMAND
 
 Commands:
+  create-game Create a new starter game.
   build-game  Build a portable game package from a game project.
+```
+
+Create a new game from a title and a parent directory. The command creates a
+directory named from the title, with a starter `manifest.json` and `game.luau`:
+
+```sh
+cubacadabra --create-game --title "The Wild West" --path ~/games
+# or: cubacadabra create-game --title "The Wild West" --path ~/games
 ```
 
 Build any compatible game repository from its project directory:

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import __version__
 from .game_builder import GameBuildError, build_game
+from .game_creator import GameCreateError, create_game
 
 
 DESCRIPTION = "Tools for building and maintaining Cubacadabra projects."
@@ -27,6 +28,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {__version__}",
     )
+    parser.add_argument(
+        "--create-game",
+        action="store_true",
+        help="Create a new starter game (use with --title and --path).",
+    )
+    parser.add_argument("--title", help=argparse.SUPPRESS)
+    parser.add_argument("--path", type=Path, help=argparse.SUPPRESS)
 
     commands = parser.add_subparsers(
         dest="command",
@@ -87,6 +95,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also write a distributable ZIP archive.",
     )
     build_parser.set_defaults(handler=_run_build_game)
+
+    create_parser = commands.add_parser(
+        "create-game",
+        help="Create a new starter game.",
+        description="Create a new Cubacadabra game directory and starter files.",
+        epilog=(
+            "Examples:\n"
+            '  cubacadabra create-game --title "The Wild West" --path ~/games\n'
+            '  cubacadabra --create-game --title "The Wild West" --path ~/games'
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    create_parser.add_argument(
+        "--title",
+        required=True,
+        help="Display name for the game.",
+    )
+    create_parser.add_argument(
+        "--path",
+        required=True,
+        type=Path,
+        metavar="DIR",
+        help="Directory in which to create the game directory.",
+    )
+    create_parser.set_defaults(handler=_run_create_game)
     return parser
 
 
@@ -135,9 +168,24 @@ def _run_build_game(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_create_game(args: argparse.Namespace) -> int:
+    try:
+        result = create_game(title=args.title, path=args.path)
+    except (GameCreateError, OSError) as error:
+        print(f"cubacadabra create-game failed: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Created {result.display_name} ({result.game_id}) -> {result.project}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.create_game:
+        if args.title is None or args.path is None:
+            parser.error("--create-game requires --title and --path")
+        return _run_create_game(args)
     if not hasattr(args, "handler"):
         parser.print_help()
         return 0

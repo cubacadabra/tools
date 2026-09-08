@@ -7,7 +7,9 @@ import wave
 import zipfile
 from pathlib import Path
 
+from cubacadabra.cli import main
 from cubacadabra.game_builder import GameBuildError, build_game
+from cubacadabra.game_creator import GameCreateError, create_game
 
 
 class GameBuilderTests(unittest.TestCase):
@@ -29,6 +31,38 @@ class GameBuilderTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_create_game_writes_starter_manifest_and_luau(self) -> None:
+        games = self.project / "games"
+        result = create_game(title="The Wild West", path=games)
+
+        self.assertEqual(result.game_id, "the-wild-west")
+        self.assertEqual(result.project, (games / "the-wild-west").resolve())
+        manifest = json.loads((result.project / "manifest.json").read_text())
+        self.assertEqual(manifest["id"], "the-wild-west")
+        self.assertEqual(manifest["displayName"], "The Wild West")
+        self.assertEqual(manifest["version"], "0.3.0")
+        self.assertEqual(manifest["sdkVersion"], "0.3.0")
+        self.assertEqual(manifest["package"], {"formatVersion": 3, "entry": "game.luau"})
+        self.assertEqual(manifest["palette"]["signal"], "#57E5D0")
+        source = (result.project / "game.luau").read_text()
+        self.assertIn("api.session:start(\"the-wild-west\"", source)
+
+    def test_create_game_refuses_to_overwrite(self) -> None:
+        games = self.project / "games"
+        create_game(title="The Wild West", path=games)
+
+        with self.assertRaises(GameCreateError):
+            create_game(title="The Wild West", path=games)
+
+    def test_create_game_cli_flag(self) -> None:
+        games = self.project / "games"
+
+        self.assertEqual(
+            main(["--create-game", "--title", "The Wild West", "--path", str(games)]),
+            0,
+        )
+        self.assertTrue((games / "the-wild-west" / "manifest.json").exists())
 
     def test_builds_package_and_zip(self) -> None:
         output = self.project / "build/package"
