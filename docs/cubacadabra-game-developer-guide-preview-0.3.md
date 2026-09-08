@@ -251,8 +251,35 @@ checked state synchronized.
 The manifest owns content, not engine code. At minimum, define `id`, `version`,
 `package`, `scene`, a `world`, and `worlds` when the game has named destinations.
 World content can include palettes, blocks, signs, clouds, generic interaction
-zones, and launch pads. `launch.destinationWorld` selects the destination when
-the shared lobby is disabled. The `effects` object may contain an inline
+zones, launch pads, and image-backed billboards. A preview package may declare
+one JPG, JPEG, or PNG under `assets.images`, then place it in a world with a
+`billboards` entry:
+
+```json
+{
+  "assets": {
+    "images": {
+      "poster": { "path": "assets/images/poster.jpg" }
+    }
+  },
+  "worlds": {
+    "arena": {
+      "billboards": [
+        {
+          "image": "poster",
+          "position": [0, 4.15, -20],
+          "width": 7.2,
+          "height": 4.05
+        }
+      ]
+    }
+  }
+}
+```
+
+The web host decodes the package image and the 3D runtime renders it on a
+framed board with a stand. `launch.destinationWorld` selects the destination
+when the shared lobby is disabled. The `effects` object may contain an inline
 library or `{ "source": "effects.json" }`.
 
 Keep state schemas and interaction IDs stable within a package version. Use

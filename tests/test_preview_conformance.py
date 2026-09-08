@@ -16,6 +16,7 @@ class PreviewConformanceTests(unittest.TestCase):
     def test_capability_probe_covers_the_documented_game_api(self) -> None:
         game = ROOT / "third-game"
         source = (game / "src/main.luau").read_text(encoding="utf-8")
+        manifest_source = (game / "manifest.json").read_text(encoding="utf-8")
         guide = GUIDE.read_text(encoding="utf-8")
 
         documented_and_exercised = [
@@ -41,6 +42,7 @@ class PreviewConformanceTests(unittest.TestCase):
             "api.audio:play",
             "api.effects:set_state",
             "api.effects:play",
+            "billboards",
             "CubaSharedState.create",
             ":start(api)",
             ":dispatch(api",
@@ -62,8 +64,15 @@ class PreviewConformanceTests(unittest.TestCase):
             generated = (output / "game.luau").read_text(encoding="utf-8")
 
         for marker in documented_and_exercised:
-            self.assertIn(marker, source + generated, marker)
+            self.assertIn(marker, source + generated + manifest_source, marker)
             self.assertIn(marker, guide, marker)
+
+        manifest = json.loads((game / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            manifest["assets"]["images"]["billboard"]["path"],
+            "assets/images/billboard.jpg",
+        )
+        self.assertEqual(manifest["worlds"]["probe-arena"]["billboards"][0]["image"], "billboard")
 
     def test_preview_packages_use_one_compatible_version(self) -> None:
         for game_id in ("first-game", "second-game", "third-game"):

@@ -31,6 +31,12 @@ AUDIO_PATH_RE = re.compile(
     r"^assets/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*"
     r"[A-Za-z0-9_-][A-Za-z0-9._-]*\.wav$"
 )
+IMAGE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+IMAGE_PATH_RE = re.compile(
+    r"^assets/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*"
+    r"[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:jpg|jpeg|png)$",
+    re.IGNORECASE,
+)
 EFFECTS_SOURCE_RE = re.compile(
     r"^(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*"
     r"[A-Za-z0-9_-][A-Za-z0-9._-]*\.json$"
@@ -42,6 +48,8 @@ SEMVER_RE = re.compile(
 )
 MAX_AUDIO_ASSETS = 64
 MAX_AUDIO_ASSET_BYTES = 4 * 1024 * 1024
+MAX_IMAGE_ASSETS = 1
+MAX_IMAGE_ASSET_BYTES = 8 * 1024 * 1024
 PREVIEW_SDK_VERSION = "0.3.0"
 
 
@@ -286,6 +294,53 @@ def _validate_audio_assets(manifest: dict[str, object], project_root: Path) -> N
             )
 
 
+def _validate_image_assets(manifest: dict[str, object], project_root: Path) -> None:
+    assets = manifest.get("assets")
+    if assets is None:
+        return
+    if not isinstance(assets, dict):
+        raise GameBuildError("manifest.assets must be an object")
+    images = assets.get("images")
+    if images is None:
+        return
+    if not isinstance(images, dict):
+        raise GameBuildError("manifest.assets.images must be an object")
+    if len(images) > MAX_IMAGE_ASSETS:
+        raise GameBuildError(
+            f"manifest.assets.images cannot contain more than {MAX_IMAGE_ASSETS} image"
+        )
+
+    for image_id, definition in images.items():
+        if not isinstance(image_id, str) or not IMAGE_ID_RE.fullmatch(image_id):
+            raise GameBuildError(
+                "manifest.assets.images ids must be 1–64 ASCII letters, numbers, dots, "
+                "dashes, or underscores"
+            )
+        if not isinstance(definition, dict):
+            raise GameBuildError(f"manifest.assets.images.{image_id} must be an object")
+        path_value = definition.get("path")
+        if not isinstance(path_value, str) or not IMAGE_PATH_RE.fullmatch(path_value):
+            raise GameBuildError(
+                f"manifest.assets.images.{image_id}.path must reference a JPG, JPEG, "
+                "or PNG inside assets/"
+            )
+        image_path = project_root.joinpath(*PurePosixPath(path_value).parts)
+        if not image_path.is_file():
+            raise GameBuildError(
+                f"manifest.assets.images.{image_id}.path was not found: {path_value}"
+            )
+        try:
+            image_path.resolve().relative_to((project_root / "assets").resolve())
+        except ValueError as error:
+            raise GameBuildError(
+                f"manifest.assets.images.{image_id}.path must stay inside assets/"
+            ) from error
+        if image_path.stat().st_size > MAX_IMAGE_ASSET_BYTES:
+            raise GameBuildError(
+                f"manifest.assets.images.{image_id}.path exceeds 8 MiB: {path_value}"
+            )
+
+
 def build_game(
     *,
     source_root: Path,
@@ -335,6 +390,7 @@ def build_game(
                 f"this builder supports {PREVIEW_SDK_VERSION}"
             )
     _validate_audio_assets(manifest, manifest_path.parent)
+    _validate_image_assets(manifest, manifest_path.parent)
 
     if output.exists():
         if not output.is_dir():

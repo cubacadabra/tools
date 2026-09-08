@@ -276,6 +276,32 @@ class GameBuilderTests(unittest.TestCase):
 
         self.assertEqual((output / "assets/audio/chime.wav").read_bytes(), audio.read_bytes())
 
+    def test_copies_declared_image_assets(self) -> None:
+        image = self.project / "assets/images/billboard.jpg"
+        image.parent.mkdir()
+        image.write_bytes(b"jpeg fixture")
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": 3,
+                "assets": {
+                    "images": {
+                        "billboard": {"path": "assets/images/billboard.jpg"},
+                    },
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        output = self.project / "build/package"
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+
+        self.assertEqual((output / "assets/images/billboard.jpg").read_bytes(), image.read_bytes())
+
     def test_rejects_audio_asset_outside_assets(self) -> None:
         (self.project / "manifest.json").write_text(
             json.dumps({
