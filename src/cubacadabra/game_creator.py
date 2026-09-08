@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+import shutil
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -151,20 +152,20 @@ def create_game(*, title: str, path: Path) -> GameCreateResult:
     base_path.mkdir(parents=True, exist_ok=True)
     project.mkdir()
     try:
+        (project / "src").mkdir()
+        (project / "assets").mkdir()
         (project / "manifest.json").write_text(
             json.dumps(_manifest(title, game_id), indent=2) + "\n",
             encoding="utf-8",
         )
-        (project / "game.luau").write_text(
+        (project / "src/main.luau").write_text(
             _source(title, game_id),
             encoding="utf-8",
         )
     except OSError:
         # The project directory is new and contains only files from this
         # operation, so avoid leaving a misleading half-created project.
-        for child in project.iterdir():
-            child.unlink()
-        project.rmdir()
+        shutil.rmtree(project)
         raise
 
     return GameCreateResult(game_id=game_id, display_name=title, project=project)

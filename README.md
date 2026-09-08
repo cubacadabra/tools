@@ -30,7 +30,8 @@ Commands:
 ```
 
 Create a new game from a title and a parent directory. The command creates a
-directory named from the title, with a starter `manifest.json` and `game.luau`:
+directory named from the title, with a starter `manifest.json`, `src/main.luau`,
+and empty `assets/` directory:
 
 ```sh
 cubacadabra --create-game --title "The Wild West" --path ~/games
@@ -43,6 +44,15 @@ Build any compatible game repository from its project directory:
 cubacadabra build-game ../first-game
 cubacadabra build-game ../second-game --output ../second-game/build/package
 cubacadabra build-game ../third-game --zip ../third-game/build/third-game.zip
+```
+
+The starter created above follows the standard `src/main.luau` and `assets/`
+layout. It can be built by pointing `--source` at the project directory; the
+CLI selects `src/` and finds its `manifest.json` automatically:
+
+```sh
+cubacadabra build-game --source ~/games/the-wild-west --output ../the-wild-west \
+  --zip ../the-wild-west.zip
 ```
 
 By convention, a game project contains `manifest.json`, `src/main.luau`, and

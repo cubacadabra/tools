@@ -70,7 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("src"),
         metavar="DIR",
-        help="Source directory relative to the project (default: src).",
+        help=(
+            "Source directory relative to the project (default: src); "
+            "an absolute game directory is also accepted."
+        ),
     )
     build_parser.add_argument(
         "--manifest",
@@ -131,10 +134,24 @@ def _project_path(project: Path, value: Path) -> Path:
     return project / value
 
 
+def _source_path(project: Path, value: Path) -> Path:
+    """Resolve a source path, accepting either a source dir or project root."""
+
+    source = _project_path(project, value).resolve()
+    if not (source / "main.luau").is_file() and (source / "src/main.luau").is_file():
+        return source / "src"
+    return source
+
+
 def _run_build_game(args: argparse.Namespace) -> int:
     project = args.project.resolve()
-    source_dir = _project_path(project, args.source_dir).resolve()
+    source_dir = _source_path(project, args.source_dir)
     manifest = _project_path(project, args.manifest).resolve()
+    if args.manifest == Path("manifest.json") and not manifest.is_file():
+        for candidate in (source_dir / "manifest.json", source_dir.parent / "manifest.json"):
+            if candidate.is_file():
+                manifest = candidate.resolve()
+                break
     if args.output is None:
         output = (project / "build/package").resolve()
     else:

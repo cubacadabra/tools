@@ -32,7 +32,7 @@ class GameBuilderTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_create_game_writes_starter_manifest_and_luau(self) -> None:
+    def test_create_game_writes_standard_starter_layout(self) -> None:
         games = self.project / "games"
         result = create_game(title="The Wild West", path=games)
 
@@ -45,7 +45,8 @@ class GameBuilderTests(unittest.TestCase):
         self.assertEqual(manifest["sdkVersion"], "0.3.0")
         self.assertEqual(manifest["package"], {"formatVersion": 3, "entry": "game.luau"})
         self.assertEqual(manifest["palette"]["signal"], "#57E5D0")
-        source = (result.project / "game.luau").read_text()
+        self.assertTrue((result.project / "assets").is_dir())
+        source = (result.project / "src/main.luau").read_text()
         self.assertIn("api.session:start(\"the-wild-west\"", source)
 
     def test_create_game_refuses_to_overwrite(self) -> None:
@@ -63,6 +64,41 @@ class GameBuilderTests(unittest.TestCase):
             0,
         )
         self.assertTrue((games / "the-wild-west" / "manifest.json").exists())
+
+    def test_created_game_builds_from_its_project_directory(self) -> None:
+        games = self.project / "games"
+        result = create_game(title="The Wild West", path=games)
+        output = self.project / "build/package"
+
+        build_game(
+            source_root=result.project / "src",
+            manifest_path=result.project / "manifest.json",
+            output=output,
+        )
+
+        self.assertTrue((output / "game.luau").exists())
+        self.assertEqual(
+            json.loads((output / "manifest.json").read_text())["id"],
+            "the-wild-west",
+        )
+
+    def test_build_cli_accepts_an_absolute_game_project_directory(self) -> None:
+        games = self.project / "games"
+        result = create_game(title="The Wild West", path=games)
+        output = self.project / "build/package"
+
+        self.assertEqual(
+            main(
+                [
+                    "build-game",
+                    "--source",
+                    str(result.project),
+                    "--output",
+                    str(output),
+                ]
+            ),
+            0,
+        )
 
     def test_builds_package_and_zip(self) -> None:
         output = self.project / "build/package"
