@@ -50,6 +50,15 @@ class GameBuilderTests(unittest.TestCase):
         self.assertTrue((result.project / "assets/images").is_dir())
         source = (result.project / "src/main.luau").read_text()
         self.assertIn("api.session:start(\"the-wild-west\"", source)
+        for control in (
+            'id = "player-joystick"',
+            'kind = "joystick"',
+            'id = "player-jump"',
+            'action = "player.jump"',
+            'id = "player-run"',
+            'action = "player.run"',
+        ):
+            self.assertIn(control, source)
 
     def test_create_game_refuses_to_overwrite(self) -> None:
         games = self.project / "games"
