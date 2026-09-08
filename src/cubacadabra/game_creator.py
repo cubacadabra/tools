@@ -153,7 +153,8 @@ def create_game(*, title: str, path: Path) -> GameCreateResult:
     project.mkdir()
     try:
         (project / "src").mkdir()
-        (project / "assets").mkdir()
+        (project / "assets/audio").mkdir(parents=True)
+        (project / "assets/images").mkdir(parents=True)
         (project / "manifest.json").write_text(
             json.dumps(_manifest(title, game_id), indent=2) + "\n",
             encoding="utf-8",

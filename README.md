@@ -31,7 +31,7 @@ Commands:
 
 Create a new game from a title and a parent directory. The command creates a
 directory named from the title, with a starter `manifest.json`, `src/main.luau`,
-and empty `assets/` directory:
+and empty `assets/audio/` and `assets/images/` directories:
 
 ```sh
 cubacadabra --create-game --title "The Wild West" --path ~/games

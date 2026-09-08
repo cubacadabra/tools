@@ -46,6 +46,8 @@ class GameBuilderTests(unittest.TestCase):
         self.assertEqual(manifest["package"], {"formatVersion": 3, "entry": "game.luau"})
         self.assertEqual(manifest["palette"]["signal"], "#57E5D0")
         self.assertTrue((result.project / "assets").is_dir())
+        self.assertTrue((result.project / "assets/audio").is_dir())
+        self.assertTrue((result.project / "assets/images").is_dir())
         source = (result.project / "src/main.luau").read_text()
         self.assertIn("api.session:start(\"the-wild-west\"", source)
 
