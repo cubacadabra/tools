@@ -8,6 +8,10 @@ added without putting build logic back into individual game repositories.
 
 PYTHONPATH=src python3 -m cubacadabra --help
 
+PYTHONPATH=src python3 -m cubacadabra create-game --title "The Wild West" --path /Users/aa/cubacadabra/examples
+
+PYTHONPATH=src python3 -m cubacadabra build-game --source /Users/aa/cubacadabra/examples/the-wild-west --output /tmp --zip ../the-wild-west.zip
+
 ## Install
 
 From this repository, install the CLI in an environment you control:
