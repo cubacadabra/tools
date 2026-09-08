@@ -169,10 +169,30 @@ requires the expected sequence and is the primitive used by
 Incoming events are delivered to `on_network_message`:
 
 ```luau
--- event.type is "game_message" or "game_state"
+-- event.type is "game_message", "game_state", or "player_state"
 -- event.channel, event.payload, and (for retained state) event.sequence
 -- retained game_state events may also contain conflict, authoritative, ageMs.
 ```
+
+Player lifecycle helpers also publish a small live snapshot on the reserved
+`__player_state` channel. The backend adds the player `id` and `generation`
+and delivers it as `event.type == "player_state"` with `event.state`.
+`CubaSurvival` publishes health, max health, deaths, and alive state;
+`CubaObby` publishes checkpoint, deaths, and alive state. This is a connected
+player view, not a save file or cheat-resistant authority:
+
+```luau
+function Game.on_network_message(api, event)
+    if event.type == "player_state" and event.state.kind == "survival" then
+        -- Update teammate indicators from event.id and event.state.
+    end
+end
+```
+
+Do not call `set_state` or `compare_set_state` for this channel. Live player
+state is kept on the active WebSocket and disappears when the instance has no
+connected sockets; retained game state is for compact session facts such as a
+shared objective or round result.
 
 ### Audio and effects
 
@@ -430,8 +450,12 @@ equivalent). Client messages include:
 ```
 
 The server sends session identity, player join/leave, authoritative move
-corrections, `game_message`, retained `game_state`, and structured `error`
-events. Movement is rate-limited and distance-canonicalized server-side.
+corrections, `game_message`, retained `game_state`, live `player_state`, and
+structured `error` events. Movement is rate-limited and distance-canonicalized
+server-side. Live player state is relayed with server-owned identity but is
+currently marked `authoritative: false` because the client runtime is the
+source of the health projection; a future server simulation can keep this
+wire contract while moving authority into the backend.
 `CubaSharedState` should be used for game state rather than reimplementing the
 retained-state protocol in each game.
 

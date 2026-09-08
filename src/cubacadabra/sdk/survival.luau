@@ -6,6 +6,22 @@
 
 local CubaSurvival = {}
 CubaSurvival.__index = CubaSurvival
+local LIVE_STATE_CHANNEL = "__player_state"
+
+local function publish_state(api, survival)
+    if type(api) ~= "table"
+        or type(api.network) ~= "table"
+        or type(api.network.publish) ~= "function" then
+        return
+    end
+    api.network:publish(LIVE_STATE_CHANNEL, {
+        kind = "survival",
+        health = survival.health,
+        maxHealth = survival.max_health,
+        deaths = survival.deaths,
+        alive = survival.state ~= "dead",
+    })
+end
 
 function CubaSurvival.create(config)
     if type(config) ~= "table" then
@@ -37,6 +53,7 @@ function CubaSurvival:handle(api, event)
         if type(self.onSpawn) == "function" then
             self.onSpawn(api, event, self)
         end
+        publish_state(api, self)
         return true
     elseif event.kind == "damage" then
         self.health = event.health or self.health
@@ -46,6 +63,7 @@ function CubaSurvival:handle(api, event)
         if type(self.onDamage) == "function" then
             self.onDamage(api, event, self)
         end
+        publish_state(api, self)
         return true
     elseif event.kind == "death" then
         self.health = event.health or 0
@@ -55,6 +73,7 @@ function CubaSurvival:handle(api, event)
         if type(self.onDeath) == "function" then
             self.onDeath(api, event, self)
         end
+        publish_state(api, self)
         return true
     elseif event.kind == "respawn" then
         self.health = event.health or self.max_health
@@ -65,6 +84,7 @@ function CubaSurvival:handle(api, event)
         if type(self.onRespawn) == "function" then
             self.onRespawn(api, event, self)
         end
+        publish_state(api, self)
         return true
     end
     return false

@@ -6,6 +6,21 @@
 
 local CubaObby = {}
 CubaObby.__index = CubaObby
+local LIVE_STATE_CHANNEL = "__player_state"
+
+local function publish_state(api, obby)
+    if type(api) ~= "table"
+        or type(api.network) ~= "table"
+        or type(api.network.publish) ~= "function" then
+        return
+    end
+    api.network:publish(LIVE_STATE_CHANNEL, {
+        kind = "obby",
+        checkpoint = obby.checkpoint,
+        deaths = obby.deaths,
+        alive = obby.state ~= "dead",
+    })
+end
 
 function CubaObby.create(config)
     if type(config) ~= "table" then
@@ -32,6 +47,7 @@ function CubaObby:handle(api, event)
         if type(self.onSpawn) == "function" then
             self.onSpawn(api, event, self)
         end
+        publish_state(api, self)
         return true
     elseif event.kind == "checkpoint" then
         self.checkpoint = event.id or self.checkpoint
@@ -39,6 +55,7 @@ function CubaObby:handle(api, event)
         if type(self.onCheckpoint) == "function" then
             self.onCheckpoint(api, event, self)
         end
+        publish_state(api, self)
         return true
     elseif event.kind == "death" then
         self.deaths = event.deaths or self.deaths
@@ -46,6 +63,7 @@ function CubaObby:handle(api, event)
         if type(self.onDeath) == "function" then
             self.onDeath(api, event, self)
         end
+        publish_state(api, self)
         return true
     elseif event.kind == "respawn" then
         self.checkpoint = event.checkpoint or self.checkpoint
@@ -54,6 +72,7 @@ function CubaObby:handle(api, event)
         if type(self.onRespawn) == "function" then
             self.onRespawn(api, event, self)
         end
+        publish_state(api, self)
         return true
     end
     return false

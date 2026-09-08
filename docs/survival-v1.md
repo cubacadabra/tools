@@ -21,3 +21,10 @@ the runtime `spawn` event. `status()` returns a named table with `state`,
 `amount`, `health`, and `maxHealth`; death and respawn events carry the same
 authoritative health fields. Shelter timers, healing, inventory, weather,
 crafting, and victory conditions remain specific to the game.
+
+After each lifecycle event it publishes a live `__player_state` snapshot with
+`kind = "survival"`, health, max health, deaths, and alive state. Other players
+receive this through `Game.on_network_message` as `event.type ==
+"player_state"`. The snapshot is ephemeral connection state; use a separate
+retained channel only for shared round state, and a future profile system for
+durable progression.
