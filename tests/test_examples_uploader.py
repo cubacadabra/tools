@@ -13,11 +13,15 @@ from cubacadabra.examples_uploader import upload_examples
 
 
 class ExampleUploadTests(unittest.TestCase):
-    def test_bumps_builds_and_uploads_both_examples_with_one_session(self) -> None:
+    def test_bumps_builds_and_uploads_examples_with_one_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             examples = root / "examples"
-            for game_id, version in (("the-wild-west", "0.3.6"), ("survival-101", "0.3.1")):
+            for game_id, version in (
+                ("the-wild-west", "0.3.6"),
+                ("survival-101", "0.3.1"),
+                ("adventure-101", "0.4.0"),
+            ):
                 project = examples / game_id
                 (project / "src").mkdir(parents=True)
                 (project / "manifest.json").write_text(
@@ -75,12 +79,12 @@ class ExampleUploadTests(unittest.TestCase):
                 thread.join()
                 server.server_close()
 
-            self.assertEqual([plan.version for plan in plans], ["0.3.7", "0.3.2"])
-            self.assertEqual([result.version for result in results], ["0.3.7", "0.3.2"])
-            self.assertEqual(len(requests), 2)
+            self.assertEqual([plan.version for plan in plans], ["0.3.7", "0.3.2", "0.4.1"])
+            self.assertEqual([result.version for result in results], ["0.3.7", "0.3.2", "0.4.1"])
+            self.assertEqual(len(requests), 3)
             self.assertEqual(
                 [request[1] for request in requests],
-                ["cubacadabra_session=test-session"] * 2,
+                ["cubacadabra_session=test-session"] * 3,
             )
             self.assertEqual(
                 json.loads((examples / "the-wild-west/manifest.json").read_text())["version"],
@@ -88,3 +92,4 @@ class ExampleUploadTests(unittest.TestCase):
             )
             self.assertTrue((root / "archives/the-wild-west.zip").exists())
             self.assertTrue((root / "archives/survival-101.zip").exists())
+            self.assertTrue((root / "archives/adventure-101.zip").exists())

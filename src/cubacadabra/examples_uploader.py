@@ -15,7 +15,7 @@ DEFAULT_REVIEW_EMAIL = "play-review@cubacadabra.com"
 DEFAULT_REVIEW_PASSWORD = "testing"
 DEFAULT_BACKEND_URL = "http://127.0.0.1:8787"
 PRODUCTION_BACKEND_URL = "https://api.cubacadabra.com"
-EXAMPLE_NAMES = ("the-wild-west", "survival-101")
+EXAMPLE_NAMES = ("the-wild-west", "survival-101", "adventure-101")
 SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
     r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
@@ -233,7 +233,7 @@ def upload_examples(
     password: str = DEFAULT_REVIEW_PASSWORD,
     bump_versions: bool = True,
 ) -> tuple[list[ExamplePlan], list[ExampleUploadResult]]:
-    """Bump, build, authenticate, and upload both example games."""
+    """Bump, build, authenticate, and upload the example games."""
 
     plans = _plans(
         examples_dir.resolve(),
