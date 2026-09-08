@@ -59,7 +59,7 @@ value `0.3.0`; this prevents a package from silently using an unknown SDK.
 ## 2. Game lifecycle
 
 `src/main.luau` returns a table. Every callback is optional; the capability
-probe shows all six supported callbacks:
+probe shows the supported callbacks:
 
 ```luau
 local Game = {}
@@ -70,6 +70,7 @@ function Game.on_interaction(api, event) end
 function Game.on_network_message(api, event) end
 function Game.on_ui_event(api, event) end
 function Game.on_launch(api, launch) end
+function Game.on_player_event(api, event) end
 
 return Game
 ```
@@ -78,6 +79,8 @@ return Game
 Interaction events contain `id`, `phase` (`"enter"` or `"exit"`), and `players`.
 UI events contain `node_id`, `action`, and `phase`; sliders and toggles also
 contain `value`. Launch events contain `pad_id` and `player_ids`.
+Player events contain `kind` (`"checkpoint"`, `"death"`, or `"respawn"`)
+plus the relevant checkpoint, fall cause, and death-count fields.
 
 ## 3. Game-facing Luau API
 
@@ -218,6 +221,42 @@ conflict rebasing, duplicate-intent removal, and reconnect snapshots. Reducers
 must be deterministic, idempotent, side-effect free, and return a new state.
 The helper is cooperative state synchronization, not cheat-resistant authority.
 Read-only fields are `value`, `sequence`, `ageSeconds`, and `hasSnapshot`.
+
+### Obby v1
+
+The engine provides the reusable obstacle-course primitives used by
+`examples/the-wild-west`: per-world gravity and jump tuning, optional void
+ground, fall thresholds, delayed respawn, ladder volumes, and checkpoint
+respawns. A world opts in with fields like:
+
+```json
+{
+  "world": {
+    "physics": {
+      "gravity": 28,
+      "jumpVelocity": 10.5,
+      "groundCollision": false,
+      "groundY": -14,
+      "deathY": -9,
+      "respawnDelay": 0.65,
+      "climbSpeed": 4.5
+    }
+  },
+  "ladders": [
+    { "id": "tower-ladder", "position": [4, 5, -6],
+      "size": [2.4, 6, 0.9], "climbAxis": "z" }
+  ],
+  "checkpoints": [
+    { "id": "tower", "position": [4, 2.7, -6], "radius": 2.5 }
+  ]
+}
+```
+
+Include `@cubacadabra/obby-v1.luau` for a small game-owned lifecycle helper.
+Inside a ladder volume, movement along its declared horizontal axis becomes
+vertical climbing: move toward the negative axis to climb up and the positive
+axis to climb down. The helper is presentation/state convenience only; an
+important multiplayer reward still needs authoritative server validation.
 
 ### Disclosure v1
 
