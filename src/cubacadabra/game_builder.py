@@ -11,6 +11,7 @@ then copies the manifest and optional assets into a client-ready package.
 from __future__ import annotations
 
 import json
+import math
 import re
 import shutil
 import wave
@@ -51,8 +52,9 @@ SEMVER_RE = re.compile(
 )
 MAX_AUDIO_ASSETS = 64
 MAX_AUDIO_ASSET_BYTES = 4 * 1024 * 1024
-MAX_IMAGE_ASSETS = 1
+MAX_IMAGE_ASSETS = 16
 MAX_IMAGE_ASSET_BYTES = 8 * 1024 * 1024
+MATERIAL_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 PREVIEW_SDK_VERSION = "0.3.0"
 
 
@@ -344,6 +346,57 @@ def _validate_image_assets(manifest: dict[str, object], project_root: Path) -> N
             )
 
 
+def _validate_world_materials(manifest: dict[str, object]) -> None:
+    assets = manifest.get("assets")
+    images = assets.get("images", {}) if isinstance(assets, dict) else {}
+    worlds = manifest.get("worlds", {})
+    world_definitions = [manifest]
+    if isinstance(worlds, dict):
+        world_definitions.extend(world for world in worlds.values() if isinstance(world, dict))
+
+    for world in world_definitions:
+        materials = world.get("materials")
+        if materials is None:
+            continue
+        if not isinstance(materials, dict):
+            raise GameBuildError("world.materials must be an object")
+        for material_id, definition in materials.items():
+            if not isinstance(material_id, str) or not MATERIAL_ID_RE.fullmatch(material_id):
+                raise GameBuildError(
+                    "world.materials ids must be 1–64 ASCII letters, numbers, dots, "
+                    "dashes, or underscores"
+                )
+            if not isinstance(definition, dict):
+                raise GameBuildError(f"world.materials.{material_id} must be an object")
+            image_id = definition.get("image")
+            if not isinstance(image_id, str) or image_id not in images:
+                raise GameBuildError(
+                    f"world.materials.{material_id}.image must reference a declared image asset"
+                )
+            for field in ("tileU", "tileV"):
+                value = definition.get(field, 8)
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    or value <= 0
+                    or value > 4096
+                ):
+                    raise GameBuildError(
+                        f"world.materials.{material_id}.{field} must be between 0 and 4096"
+                    )
+
+        material_ids = set(materials)
+        ground_material = world.get("groundMaterial")
+        if ground_material is not None and ground_material not in material_ids:
+            raise GameBuildError("world.groundMaterial must reference a declared material")
+        blocks = world.get("blocks", [])
+        if isinstance(blocks, list):
+            for block in blocks:
+                if isinstance(block, dict) and block.get("material") not in (None, *material_ids):
+                    raise GameBuildError("world.blocks.material must reference a declared material")
+
+
 def build_game(
     *,
     source_root: Path,
@@ -394,6 +447,7 @@ def build_game(
             )
     _validate_audio_assets(manifest, manifest_path.parent)
     _validate_image_assets(manifest, manifest_path.parent)
+    _validate_world_materials(manifest)
 
     if output.exists():
         if not output.is_dir():

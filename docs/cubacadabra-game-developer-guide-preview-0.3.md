@@ -375,7 +375,7 @@ The manifest owns content, not engine code. At minimum, define `id`, `version`,
 `package`, `scene`, a `world`, and `worlds` when the game has named destinations.
 World content can include palettes, blocks, signs, clouds, generic interaction
 zones, launch pads, and image-backed billboards. A preview package may declare
-one JPG, JPEG, or PNG under `assets.images`, then place it in a world with a
+JPG, JPEG, or PNG files under `assets.images`, then place them in a world with a
 `billboards` entry:
 
 ```json
@@ -404,6 +404,37 @@ The web host decodes the package image and the 3D runtime renders it on a
 framed board with a stand. `launch.destinationWorld` selects the destination
 when the shared lobby is disabled. The `effects` object may contain an inline
 library or `{ "source": "effects.json" }`.
+
+For reusable world surfaces, declare named materials on a world and reference
+one from the ground or a block. `tileU` and `tileV` are world units per image
+tile, so the image repeats instead of stretching across a large floor:
+
+```json
+{
+  "assets": {
+    "images": {
+      "grass": { "path": "assets/images/grass.png" },
+      "wood": { "path": "assets/images/wood.png" }
+    }
+  },
+  "worlds": {
+    "forest": {
+      "materials": {
+        "grass": { "image": "grass", "tileU": 8, "tileV": 8 },
+        "wood": { "image": "wood", "tileU": 2.5, "tileV": 2.5 }
+      },
+      "groundMaterial": "grass",
+      "blocks": [
+        { "position": [0, 1, 0], "size": [4, 2, 4], "material": "wood" }
+      ]
+    }
+  }
+}
+```
+
+Use tileable PNGs for alpha-capable or painted surfaces and JPGs for opaque
+photographic surfaces. Billboards remain the right choice for a single poster
+or sign; materials are for a surface that should repeat across many parts.
 
 Keep state schemas and interaction IDs stable within a package version. Use
 small, semantic IDs such as `node-1`, `objective`, and `round-state`; they are
