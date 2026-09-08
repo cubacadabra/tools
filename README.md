@@ -31,6 +31,7 @@ cubacadabra [--version] COMMAND
 Commands:
   create-game Create a new starter game.
   build-game  Build a portable game package from a game project.
+  upload-examples Bump, build, and upload both example games.
 ```
 
 Create a new game from a title and a parent directory. The command creates a
@@ -111,6 +112,19 @@ portable package manifest. Runtime clients still receive one self-contained
 manifest and do not need filesystem or include behavior.
 
 Run `cubacadabra build-game --help` for all options.
+
+Upload both example games after a change to the engine, web client, or example
+projects. The default target is the local backend at `127.0.0.1:8787`:
+
+```sh
+PYTHONPATH=src python3 -m cubacadabra upload-examples
+PYTHONPATH=src python3 -m cubacadabra upload-examples --target production
+```
+
+The command increments each example's patch version, rebuilds the ZIPs in the
+parent directory, and uploads them with the review account. Set
+`CUBACADABRA_REVIEW_PASSWORD` to override the default testing password. Use
+`--no-bump` when retrying an upload for versions that were already built.
 
 ## Development
 

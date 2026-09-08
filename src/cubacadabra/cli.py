@@ -8,6 +8,14 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from . import __version__
+from .examples_uploader import (
+    DEFAULT_BACKEND_URL,
+    DEFAULT_REVIEW_EMAIL,
+    PRODUCTION_BACKEND_URL,
+    ExampleUploadError,
+    default_password,
+    upload_examples,
+)
 from .game_builder import GameBuildError, build_game
 from .game_creator import GameCreateError, create_game
 
@@ -98,6 +106,75 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also write a distributable ZIP archive.",
     )
     build_parser.set_defaults(handler=_run_build_game)
+
+    upload_parser = commands.add_parser(
+        "upload-examples",
+        help="Bump, build, and upload both example games.",
+        description=(
+            "Bump the patch version in both example manifests, build their "
+            "portable ZIP packages, sign in with the review account, and "
+            "upload them to the cube backend."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  cubacadabra upload-examples\n"
+            "  cubacadabra upload-examples --target production\n"
+            "  cubacadabra upload-examples --no-bump  # retry an existing build"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    upload_parser.add_argument(
+        "--examples-dir",
+        type=Path,
+        default=Path("../examples"),
+        metavar="DIR",
+        help="Examples repository directory (default: ../examples).",
+    )
+    upload_parser.add_argument(
+        "--build-dir",
+        type=Path,
+        default=Path("/tmp/cubacadabra-examples"),
+        metavar="DIR",
+        help="Package build directory (default: /tmp/cubacadabra-examples).",
+    )
+    upload_parser.add_argument(
+        "--zip-dir",
+        type=Path,
+        default=Path(".."),
+        metavar="DIR",
+        help="Directory for the two ZIP archives (default: ..).",
+    )
+    upload_parser.add_argument(
+        "--target",
+        choices=("local", "production"),
+        default="local",
+        help=(
+            "Backend target: local uses http://127.0.0.1:8787; production "
+            "uses https://api.cubacadabra.com (default: local)."
+        ),
+    )
+    upload_parser.add_argument(
+        "--backend-url",
+        default=None,
+        metavar="URL",
+        help="Override the backend URL selected by --target.",
+    )
+    upload_parser.add_argument(
+        "--email",
+        default=DEFAULT_REVIEW_EMAIL,
+        help=f"Review account email (default: {DEFAULT_REVIEW_EMAIL}).",
+    )
+    upload_parser.add_argument(
+        "--password",
+        default=None,
+        help="Review account password (default: CUBACADABRA_REVIEW_PASSWORD or testing).",
+    )
+    upload_parser.add_argument(
+        "--no-bump",
+        action="store_true",
+        help="Keep current manifest versions; useful for retrying an upload.",
+    )
+    upload_parser.set_defaults(handler=_run_upload_examples)
 
     create_parser = commands.add_parser(
         "create-game",
@@ -193,6 +270,32 @@ def _run_create_game(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Created {result.display_name} ({result.game_id}) -> {result.project}")
+    return 0
+
+
+def _run_upload_examples(args: argparse.Namespace) -> int:
+    backend_url = args.backend_url or (
+        PRODUCTION_BACKEND_URL if args.target == "production" else DEFAULT_BACKEND_URL
+    )
+    try:
+        plans, results = upload_examples(
+            examples_dir=args.examples_dir,
+            build_dir=args.build_dir,
+            zip_dir=args.zip_dir,
+            backend_url=backend_url,
+            email=args.email,
+            password=args.password if args.password is not None else default_password(),
+            bump_versions=not args.no_bump,
+        )
+    except (ExampleUploadError, OSError) as error:
+        print(f"cubacadabra upload-examples failed: {error}", file=sys.stderr)
+        return 1
+
+    for plan, result in zip(plans, results):
+        if plan.previous_version != plan.version:
+            print(f"Bumped {plan.game_id}: {plan.previous_version} -> {plan.version}")
+        state = "already uploaded" if result.already_exists else "uploaded"
+        print(f"{state} {result.game_id} v{result.version} -> {result.zip_path}")
     return 0
 
 
