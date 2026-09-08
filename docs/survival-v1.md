@@ -18,9 +18,14 @@ end
 The helper begins in `waiting` state and becomes authoritative when it receives
 the runtime `spawn` event. `status()` returns a named table with `state`,
 `health`, `maxHealth`, `deaths`, and `source`. `damage` events expose `source`,
-`amount`, `health`, and `maxHealth`; death and respawn events carry the same
-authoritative health fields. Shelter timers, healing, inventory, weather,
+`amount`, `health`, and `maxHealth`; death, heal, and respawn events carry the
+same authoritative health fields. Shelter timers, inventory, weather,
 crafting, and victory conditions remain specific to the game.
+
+World manifests may also declare `safeZones` with an optional
+`healPerSecond`. A safe zone suppresses damage hazards while the player is
+inside and emits `heal` lifecycle events. This is useful for campfires,
+shelters, med-bays, and other reusable survival anchors.
 
 After each lifecycle event it publishes a live `__player_state` snapshot with
 `kind = "survival"`, health, max health, deaths, and alive state. Other players

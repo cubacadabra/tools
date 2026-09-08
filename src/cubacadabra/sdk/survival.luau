@@ -35,6 +35,7 @@ function CubaSurvival.create(config)
         source = nil,
         onSpawn = config.onSpawn,
         onDamage = config.onDamage,
+        onHeal = config.onHeal,
         onDeath = config.onDeath,
         onRespawn = config.onRespawn,
     }, CubaSurvival)
@@ -62,6 +63,16 @@ function CubaSurvival:handle(api, event)
         self.state = "running"
         if type(self.onDamage) == "function" then
             self.onDamage(api, event, self)
+        end
+        publish_state(api, self)
+        return true
+    elseif event.kind == "heal" then
+        self.health = event.health or self.health
+        self.max_health = event.maxHealth or self.max_health
+        self.source = event.source or self.source
+        self.state = "running"
+        if type(self.onHeal) == "function" then
+            self.onHeal(api, event, self)
         end
         publish_state(api, self)
         return true

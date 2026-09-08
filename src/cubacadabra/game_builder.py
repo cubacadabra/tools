@@ -26,6 +26,7 @@ SDK_INCLUDES = {
     "@cubacadabra/disclosure-v1.luau": "disclosure.luau",
     "@cubacadabra/obby-v1.luau": "obby.luau",
     "@cubacadabra/survival-v1.luau": "survival.luau",
+    "@cubacadabra/cycle-v1.luau": "cycle.luau",
     "@cubacadabra/shared-state-v1.luau": "shared-state.luau",
 }
 AUDIO_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")

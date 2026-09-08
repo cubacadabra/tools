@@ -80,12 +80,12 @@ Interaction events contain `id`, `phase` (`"enter"` or `"exit"`), and `players`.
 UI events contain `node_id`, `action`, and `phase`; sliders and toggles also
 contain `value`. Launch events contain `pad_id` and `player_ids`.
 Player events contain `type: "player"` and `kind` (`"spawn"`,
-`"checkpoint"`, `"damage"`, `"death"`, or `"respawn"`). Spawn, damage, death,
-and respawn events include authoritative `health`, `maxHealth`, and `deaths`;
-damage also identifies its `source` and accumulated `amount`. Death includes
-the `cause` (`"fall"` or a hazard id). Player lifecycle events are broadcast
-to every interested SDK helper; handling one must not prevent another helper
-from observing it.
+`"checkpoint"`, `"damage"`, `"heal"`, `"death"`, or `"respawn"`). Spawn,
+damage, heal, death, and respawn events include authoritative `health`,
+`maxHealth`, and `deaths`; damage and healing identify their `source` and
+accumulated `amount`. Death includes the `cause` (`"fall"` or a hazard id).
+Player lifecycle events are broadcast to every interested SDK helper; handling
+one must not prevent another helper from observing it.
 
 ## 3. Game-facing Luau API
 
@@ -300,8 +300,12 @@ more authored damage volumes:
       "respawnDelay": 1.1
     },
     "health": { "max": 100, "start": 100 },
-    "respawn": { "mode": "spawn", "delay": 1.1 }
-  },
+  "respawn": { "mode": "spawn", "delay": 1.1 }
+},
+  "safeZones": [
+    { "id": "campfire", "position": [0, 1, 4],
+      "radius": 7, "healPerSecond": 18 }
+  ],
   "hazards": [
     { "id": "deep-water", "kind": "damage",
       "position": [0, 0.25, -8], "size": [18, 0.5, 10],
@@ -312,13 +316,31 @@ more authored damage volumes:
 }
 ```
 
+`safeZones` are protected healing areas: damage hazards are suppressed while a
+player is inside, and the runtime emits `heal` events at a bounded cadence.
 `respawn.mode` defaults to `"checkpoint"` for compatibility with existing
 obby packages. `"spawn"` keeps route/checkpoint events useful without moving a
 survival player’s respawn point. Include `@cubacadabra/survival-v1.luau` when
 the game wants a reusable health/death/respawn state tracker. The helper starts
 in `waiting` state and mirrors the runtime’s `spawn` event; its `status()` call
-returns a named table. Mission rules, healing, shelter timers, inventory, and
-HUD presentation remain game-owned.
+returns a named table. Mission rules, shelter timers, inventory, and HUD
+presentation remain game-owned.
+
+For repeating pressure such as day/night or calm/storm, include
+`@cubacadabra/cycle-v1.luau`:
+
+```luau
+local cycle = CubaCycle.create({ daySeconds = 42, nightSeconds = 28 })
+
+function Game.on_tick(api, delta)
+    cycle:update(api, delta)
+    local state = cycle:status()
+end
+```
+
+The cycle is a local deterministic clock. Use shared state when all players
+must agree on the current phase; the cycle helper can be synchronized with
+`cycle:sync(phase, day)` after the shared snapshot arrives.
 
 ### Disclosure v1
 

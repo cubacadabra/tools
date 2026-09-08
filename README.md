@@ -71,6 +71,7 @@ Portable SDK helpers use the same explicit syntax with a reserved namespace:
 -- @include "@cubacadabra/shared-state-v1.luau"
 -- @include "@cubacadabra/disclosure-v1.luau"
 -- @include "@cubacadabra/survival-v1.luau"
+-- @include "@cubacadabra/cycle-v1.luau"
 ```
 
 `CubaSharedState` v1 owns bounded intent queuing, compare-and-set retries,
@@ -79,14 +80,16 @@ state, validator, reducer, and optional change callback, so neither the SDK nor
 the backend needs to know game-specific rules.
 
 `CubaSurvival` v1 is a small lifecycle helper for runtime health, damage, death,
-and respawn events. World physics and hazards stay in the manifest; objectives,
-healing, inventory, and presentation stay in the game script.
+and respawn events. World physics, hazards, and safe zones stay in the manifest;
+objectives, inventory, and presentation stay in the game script. `CubaCycle`
+v1 provides a small reusable day/night or calm/storm clock for games that need
+repeating pressure.
 
 See [Shared state SDK v1](docs/shared-state-v1.md) for the reducer contract and
 lifecycle API. [Disclosure SDK v1](docs/disclosure-v1.md) provides a generic
 tap-to-reveal controller, and [Survival SDK v1](docs/survival-v1.md) provides a
 reusable health/death/respawn lifecycle while each game continues to own its
-HUD composition.
+HUD composition. See the game guide for the cycle and safe-zone contracts.
 
 The complete preview contract is in the
 [Cubacadabra Game Developer Guide](docs/cubacadabra-game-developer-guide-preview-0.3.md).
