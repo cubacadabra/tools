@@ -132,3 +132,9 @@ parent directory, and uploads them with the review account. Set
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m cubacadabra --help
 ```
+### Licensing
+
+Copyright (C) 2026 Andrew Arrow
+
+Licensed under the GNU General Public License v3.0 or later.
+See [LICENSE](LICENSE).
