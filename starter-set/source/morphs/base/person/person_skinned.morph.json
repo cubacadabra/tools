@@ -3,7 +3,7 @@
   "asset": {
     "id": "cuba:base/person.v1",
     "kind": "base",
-    "displayName": "Person Authored",
+    "displayName": "Person 1",
     "rigProfile": "cuba:rig/biped15.v1",
     "fitProfiles": [
       "cuba:fit/person-standard.v1"
@@ -32,7 +32,7 @@
       "geometry": "person_skinned.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated Blender-compatible Phase 5 fixture",
+      "source": "Cubacadabra generated skinned person-01 source",
       "license": "Cubacadabra official"
     }
   },

@@ -9,7 +9,8 @@
       "cuba:fit/person-standard.v1"
     ],
     "supportedBases": [
-      "cuba:base/person.v1"
+      "cuba:base/person.v1",
+      "cuba:base/person-02.v1"
     ],
     "occupiedSlots": [
       "pants"

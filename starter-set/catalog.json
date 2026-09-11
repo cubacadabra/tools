@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "assets": [
     { "id": "cuba:base/person.v1", "source": "source/morphs/base/person/person_skinned.morph.json" },
+    { "id": "cuba:base/person-02.v1", "source": "source/morphs/base/person-02/person_02.morph.json" },
     { "id": "cuba:bottom/person-bottom.v1", "source": "source/morphs/bottom/person-bottom/person_bottom.morph.json" },
     { "id": "cuba:bottom/slacks.v1", "source": "source/morphs/bottom/slacks/person_slacks.morph.json" },
     { "id": "cuba:footwear/person-shoes.v1", "source": "source/morphs/footwear/person-shoes/person_shoes.morph.json" },

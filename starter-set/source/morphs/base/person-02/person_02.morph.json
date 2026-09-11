@@ -1,51 +1,47 @@
 {
   "schemaVersion": 2,
   "asset": {
-    "id": "cuba:bottom/slacks.v1",
-    "kind": "bottom",
-    "displayName": "Slacks",
+    "id": "cuba:base/person-02.v1",
+    "kind": "base",
+    "displayName": "Person 2",
     "rigProfile": "cuba:rig/biped15.v1",
     "fitProfiles": [
       "cuba:fit/person-standard.v1"
     ],
-    "supportedBases": [
-      "cuba:base/person.v1",
-      "cuba:base/person-02.v1"
-    ],
     "occupiedSlots": [
-      "pants"
+      "base"
     ],
     "coverage": [
-      "legs"
+      "body"
     ],
     "conflicts": [],
     "materials": [
-      "slacks",
-      "seams"
+      "skin",
+      "face"
     ],
     "lod": {
-      "near": 2016,
-      "mid": 864,
-      "far": 352
+      "near": 7500,
+      "mid": 2900,
+      "far": 820
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
       "material.cuba-pbr.v1"
     ],
     "source": {
-      "geometry": "person_slacks.glb"
+      "geometry": "person_02.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated Blender-compatible Phase 5 clothing fixture",
+      "source": "Cubacadabra generated skinned person-02 source",
       "license": "Cubacadabra official"
     }
   },
   "geometry": {
-    "file": "person_slacks.glb",
+    "file": "person_02.glb",
     "lodNodes": {
-      "near": "PersonBottom_Near",
-      "mid": "PersonBottom_Mid",
-      "far": "PersonBottom_Far"
+      "near": "Person_Near",
+      "mid": "Person_Mid",
+      "far": "Person_Far"
     }
   },
   "attachment": {
