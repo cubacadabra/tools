@@ -1,0 +1,21 @@
+{
+  "id": "cuba:preset/person-18.v1",
+  "displayName": "Person 18",
+  "thumbnail": "thumbnails/person-18.png",
+  "base": "cuba:base/person.v1",
+  "parts": [
+    "cuba:hair/bob.v1",
+    "cuba:top/person-top.v1",
+    "cuba:bottom/person-bottom.v1",
+    "cuba:footwear/person-shoes.v1",
+    "cuba:headwear/test-top-hat.v1",
+    "cuba:headwear/headphones.v1"
+  ],
+  "face": "cuba:face/neutral.v1",
+  "parameters": {
+    "skin": "#e4b798",
+    "primary": "#b85d72",
+    "secondary": "#334666",
+    "sole": "#f2e8d5"
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "asset": {
+    "id": "cuba:facewear/round-glasses.v1",
+    "kind": "facewear",
+    "displayName": "Round Glasses",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "supportedBases": [
+      "cuba:base/person.v1",
+      "cuba:base/person-02.v1"
+    ],
+    "occupiedSlots": [
+      "facewear"
+    ],
+    "coverage": [
+      "eyes"
+    ],
+    "conflicts": [],
+    "materials": [
+      "round-glasses"
+    ],
+    "lod": {
+      "near": 21440,
+      "mid": 5160,
+      "far": 1296
+    },
+    "requiredCapabilities": [
+      "mesh.rigid.v1"
+    ],
+    "source": {
+      "geometry": "round-glasses.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra starter-set/generate_parts.py",
+      "license": "Cubacadabra official"
+    }
+  },
+  "geometry": {
+    "file": "round-glasses.glb",
+    "lodNodes": {
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
+    }
+  },
+  "attachment": {
+    "mode": "rigid",
+    "joint": "head",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  }
+}

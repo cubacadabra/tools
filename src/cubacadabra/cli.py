@@ -429,7 +429,8 @@ def _run_morph_publish(args: argparse.Namespace) -> int:
         sql_path = write_release_sql(release.lock_path)
         backend = args.starter_set.resolve().parents[1] / "backend"
         packs = sorted(release.runtime_root.rglob("*.morphpack"))
-        for pack in packs:
+        thumbnails = sorted((release.runtime_root / "morphs/thumbnails").rglob("*.png"))
+        for pack in [*packs, *thumbnails]:
             key = pack.relative_to(release.runtime_root.parent).as_posix()
             command = [
                 "npx", "wrangler", "r2", "object", "put", f"{args.bucket}/{key}",

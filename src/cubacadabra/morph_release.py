@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -75,6 +76,8 @@ def build_morph_release(
         if not isinstance(asset, dict) or not isinstance(asset.get("id"), str):
             raise MorphReleaseError(f"{sidecar} has no valid asset definition")
         asset_id = str(asset["id"])
+        if asset_id in entries:
+            raise MorphReleaseError(f"duplicate catalog asset: {asset_id}")
         if spec.get("id") is not None and spec.get("id") != asset_id:
             raise MorphReleaseError(f"catalog ID {spec.get('id')} does not match {asset_id}")
         geometry = asset.get("source", {}).get("geometry") if isinstance(asset.get("source"), dict) else None
@@ -104,12 +107,36 @@ def build_morph_release(
     builtin_catalog = (root / builtin_ref).resolve() if isinstance(builtin_ref, str) else root.parents[1] / "rust/assets/characters/morph_catalog.json"
     if builtin_catalog.is_file():
         builtins = _read_json(builtin_catalog)
+        excluded_kinds = set(source_catalog.get("excludeBuiltinKinds", []) if source_catalog else [])
         for asset in builtins.get("assets", []):
             if not isinstance(asset, dict) or not isinstance(asset.get("id"), str):
                 continue
             asset_id = str(asset["id"])
-            if asset_id not in entries:
+            if asset_id not in entries and asset.get("kind") not in excluded_kinds:
                 entries[asset_id] = _entry(asset) | {"delivery": "builtin", "artifact": None}
+
+    # Starter recipes are authored alongside parts and travel in the same
+    # immutable release. Their order is the curated character-select order.
+    presets = []
+    for spec in source_catalog.get("presets", []) if source_catalog else []:
+        if not isinstance(spec, dict) or not isinstance(spec.get("source"), str):
+            raise MorphReleaseError("catalog presets must contain source paths")
+        path = (root / spec["source"]).resolve()
+        if not path.is_file() or not path.is_relative_to(root):
+            raise MorphReleaseError(f"catalog references missing preset: {path}")
+        preset = _read_json(path)
+        thumbnail = preset.get("thumbnail")
+        if thumbnail:
+            image = (path.parent / thumbnail).resolve()
+            if not image.is_file() or not image.is_relative_to(root) or image.suffix != ".png":
+                raise MorphReleaseError(f"invalid preset thumbnail: {image}")
+            image_bytes = image.read_bytes()
+            digest = hashlib.sha256(image_bytes).hexdigest()
+            target = runtime_root / f"morphs/thumbnails/sha256/{digest[:2]}/{digest}.png"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(image_bytes)
+            preset["thumbnail"] = f"/morphs/thumbnails/sha256/{digest[:2]}/{digest}.png"
+        presets.append(preset)
 
     commit = source_commit or os.environ.get("CUBACADABRA_SOURCE_COMMIT") or _git_commit(root)
     body = {
@@ -117,12 +144,24 @@ def build_morph_release(
         "sourceCommit": commit,
         "compiler": "cubacadabra-morph-authoring@0.1.0",
         "assets": [entries[key] for key in sorted(entries)],
+        "presets": presets,
     }
     lock_sha = _canonical_hash(body)
     release_id = f"{commit[:12]}-{lock_sha[:12]}"
     lock = {"release": release_id, "lockSha256": lock_sha, **body}
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(_canonical_json(lock) + "\n", encoding="utf-8")
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", dir=generated, delete=False, encoding="utf-8") as pending:
+        pending.write(_canonical_json(lock) + "\n")
+        pending_path = Path(pending.name)
+    command = ["cargo", "run", "--quiet", "--manifest-path", str(compiler_manifest),
+               "--bin", "morph_catalog_validate", "--", str(pending_path)]
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        pending_path.replace(manifest_path)
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise MorphReleaseError(f"Invalid Morph release: {getattr(error, 'stderr', '') or error}") from error
+    finally:
+        pending_path.unlink(missing_ok=True)
     return MorphReleaseResult(release_id, manifest_path, runtime_root, len(entries), packs)
 
 

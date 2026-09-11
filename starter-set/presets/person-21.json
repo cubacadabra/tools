@@ -1,0 +1,20 @@
+{
+  "id": "cuba:preset/person-21.v1",
+  "displayName": "Person 21",
+  "thumbnail": "thumbnails/person-21.png",
+  "base": "cuba:base/person-02.v1",
+  "parts": [
+    "cuba:hair/buzz.v1",
+    "cuba:top/short-sleeve-collared.v1",
+    "cuba:bottom/person-bottom.v1",
+    "cuba:footwear/person-shoes.v1",
+    "cuba:facewear/square-glasses.v1"
+  ],
+  "face": "cuba:face/neutral.v1",
+  "parameters": {
+    "skin": "#3d251f",
+    "primary": "#66518c",
+    "secondary": "#334666",
+    "sole": "#f2e8d5"
+  }
+}

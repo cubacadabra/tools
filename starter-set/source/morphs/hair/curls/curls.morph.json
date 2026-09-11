@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "asset": {
+    "id": "cuba:hair/curls.v1",
+    "kind": "hair",
+    "displayName": "Loose Curls",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "supportedBases": [
+      "cuba:base/person.v1",
+      "cuba:base/person-02.v1"
+    ],
+    "occupiedSlots": [
+      "hair"
+    ],
+    "coverage": [
+      "scalp"
+    ],
+    "conflicts": [],
+    "materials": [
+      "curls"
+    ],
+    "lod": {
+      "near": 11840,
+      "mid": 4440,
+      "far": 1776
+    },
+    "requiredCapabilities": [
+      "mesh.rigid.v1",
+      "hair.authored.v1"
+    ],
+    "source": {
+      "geometry": "curls.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra starter-set/generate_parts.py",
+      "license": "Cubacadabra official"
+    }
+  },
+  "geometry": {
+    "file": "curls.glb",
+    "lodNodes": {
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
+    }
+  },
+  "attachment": {
+    "mode": "rigid",
+    "joint": "head",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  }
+}

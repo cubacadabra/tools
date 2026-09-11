@@ -1,16 +1,163 @@
 {
   "schemaVersion": 1,
   "assets": [
-    { "id": "cuba:base/person.v1", "source": "source/morphs/base/person/person_skinned.morph.json" },
-    { "id": "cuba:base/person-02.v1", "source": "source/morphs/base/person-02/person_02.morph.json" },
-    { "id": "cuba:bottom/person-bottom.v1", "source": "source/morphs/bottom/person-bottom/person_bottom.morph.json" },
-    { "id": "cuba:bottom/slacks.v1", "source": "source/morphs/bottom/slacks/person_slacks.morph.json" },
-    { "id": "cuba:footwear/person-shoes.v1", "source": "source/morphs/footwear/person-shoes/person_shoes.morph.json" },
-    { "id": "cuba:footwear/sparkles.v1", "source": "source/morphs/footwear/sparkles/person_sparkles.morph.json" },
-    { "id": "cuba:headwear/headphones.v1", "source": "source/morphs/headwear/headphones/headphones.morph.json" },
-    { "id": "cuba:headwear/test-top-hat.v1", "source": "source/morphs/headwear/test-top-hat/test_top_hat.morph.json" },
-    { "id": "cuba:top/person-top.v1", "source": "source/morphs/top/person-top/person_top.morph.json" },
-    { "id": "cuba:top/short-sleeve-collared.v1", "source": "source/morphs/top/short-sleeve-collared/person_short_sleeve_collared.morph.json" }
+    {
+      "id": "cuba:base/person.v1",
+      "source": "source/morphs/base/person/person_skinned.morph.json"
+    },
+    {
+      "id": "cuba:base/person-02.v1",
+      "source": "source/morphs/base/person-02/person_02.morph.json"
+    },
+    {
+      "id": "cuba:bottom/person-bottom.v1",
+      "source": "source/morphs/bottom/person-bottom/person_bottom.morph.json"
+    },
+    {
+      "id": "cuba:bottom/slacks.v1",
+      "source": "source/morphs/bottom/slacks/person_slacks.morph.json"
+    },
+    {
+      "id": "cuba:footwear/person-shoes.v1",
+      "source": "source/morphs/footwear/person-shoes/person_shoes.morph.json"
+    },
+    {
+      "id": "cuba:footwear/sparkles.v1",
+      "source": "source/morphs/footwear/sparkles/person_sparkles.morph.json"
+    },
+    {
+      "id": "cuba:headwear/headphones.v1",
+      "source": "source/morphs/headwear/headphones/headphones.morph.json"
+    },
+    {
+      "id": "cuba:headwear/test-top-hat.v1",
+      "source": "source/morphs/headwear/test-top-hat/test_top_hat.morph.json"
+    },
+    {
+      "id": "cuba:top/person-top.v1",
+      "source": "source/morphs/top/person-top/person_top.morph.json"
+    },
+    {
+      "id": "cuba:top/short-sleeve-collared.v1",
+      "source": "source/morphs/top/short-sleeve-collared/person_short_sleeve_collared.morph.json"
+    },
+    {
+      "id": "cuba:hair/floppy.v1",
+      "source": "source/morphs/hair/floppy/floppy.morph.json"
+    },
+    {
+      "id": "cuba:hair/curls.v1",
+      "source": "source/morphs/hair/curls/curls.morph.json"
+    },
+    {
+      "id": "cuba:hair/coils.v1",
+      "source": "source/morphs/hair/coils/coils.morph.json"
+    },
+    {
+      "id": "cuba:hair/braids.v1",
+      "source": "source/morphs/hair/braids/braids.morph.json"
+    },
+    {
+      "id": "cuba:hair/buzz.v1",
+      "source": "source/morphs/hair/buzz/buzz.morph.json"
+    },
+    {
+      "id": "cuba:hair/bob.v1",
+      "source": "source/morphs/hair/bob/bob.morph.json"
+    },
+    {
+      "id": "cuba:hair/buns.v1",
+      "source": "source/morphs/hair/buns/buns.morph.json"
+    },
+    {
+      "id": "cuba:facewear/round-glasses.v1",
+      "source": "source/morphs/facewear/round-glasses/round-glasses.morph.json"
+    },
+    {
+      "id": "cuba:facewear/square-glasses.v1",
+      "source": "source/morphs/facewear/square-glasses/square-glasses.morph.json"
+    },
+    {
+      "id": "cuba:accessory/hearing-aids.v1",
+      "source": "source/morphs/accessory/hearing-aids/hearing-aids.morph.json"
+    }
   ],
-  "builtins": "../../rust/assets/characters/morph_catalog.json"
+  "builtins": "../../rust/assets/characters/morph_catalog.json",
+  "excludeBuiltinKinds": [
+    "outfit"
+  ],
+  "presets": [
+    {
+      "source": "presets/person-01.json"
+    },
+    {
+      "source": "presets/person-02.json"
+    },
+    {
+      "source": "presets/person-03.json"
+    },
+    {
+      "source": "presets/person-04.json"
+    },
+    {
+      "source": "presets/person-05.json"
+    },
+    {
+      "source": "presets/person-06.json"
+    },
+    {
+      "source": "presets/person-07.json"
+    },
+    {
+      "source": "presets/person-08.json"
+    },
+    {
+      "source": "presets/person-09.json"
+    },
+    {
+      "source": "presets/person-10.json"
+    },
+    {
+      "source": "presets/person-11.json"
+    },
+    {
+      "source": "presets/person-12.json"
+    },
+    {
+      "source": "presets/person-13.json"
+    },
+    {
+      "source": "presets/person-14.json"
+    },
+    {
+      "source": "presets/person-15.json"
+    },
+    {
+      "source": "presets/person-16.json"
+    },
+    {
+      "source": "presets/person-17.json"
+    },
+    {
+      "source": "presets/person-18.json"
+    },
+    {
+      "source": "presets/person-19.json"
+    },
+    {
+      "source": "presets/person-20.json"
+    },
+    {
+      "source": "presets/person-21.json"
+    },
+    {
+      "source": "presets/person-22.json"
+    },
+    {
+      "source": "presets/person-23.json"
+    },
+    {
+      "source": "presets/person-24.json"
+    }
+  ]
 }

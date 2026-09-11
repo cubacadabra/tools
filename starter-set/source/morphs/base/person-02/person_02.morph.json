@@ -3,7 +3,7 @@
   "asset": {
     "id": "cuba:base/person-02.v1",
     "kind": "base",
-    "displayName": "Person 2",
+    "displayName": "Broad Jaw",
     "rigProfile": "cuba:rig/biped15.v1",
     "fitProfiles": [
       "cuba:fit/person-standard.v1"

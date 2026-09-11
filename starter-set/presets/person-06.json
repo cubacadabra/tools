@@ -1,0 +1,19 @@
+{
+  "id": "cuba:preset/person-06.v1",
+  "displayName": "Person 06",
+  "thumbnail": "thumbnails/person-06.png",
+  "base": "cuba:base/person.v1",
+  "parts": [
+    "cuba:hair/buzz.v1",
+    "cuba:top/person-top.v1",
+    "cuba:bottom/person-bottom.v1",
+    "cuba:footwear/person-shoes.v1"
+  ],
+  "face": "cuba:face/neutral.v1",
+  "parameters": {
+    "skin": "#69412f",
+    "primary": "#438aa0",
+    "secondary": "#334666",
+    "sole": "#f2e8d5"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "asset": {
+    "id": "cuba:accessory/hearing-aids.v1",
+    "kind": "accessory",
+    "displayName": "Hearing Aids",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "supportedBases": [
+      "cuba:base/person.v1",
+      "cuba:base/person-02.v1"
+    ],
+    "occupiedSlots": [
+      "ear-device"
+    ],
+    "coverage": [
+      "ears"
+    ],
+    "conflicts": [],
+    "materials": [
+      "hearing-aids"
+    ],
+    "lod": {
+      "near": 1920,
+      "mid": 720,
+      "far": 288
+    },
+    "requiredCapabilities": [
+      "mesh.rigid.v1",
+      "accessory.ear-device.v1"
+    ],
+    "source": {
+      "geometry": "hearing-aids.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra starter-set/generate_parts.py",
+      "license": "Cubacadabra official"
+    }
+  },
+  "geometry": {
+    "file": "hearing-aids.glb",
+    "lodNodes": {
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
+    }
+  },
+  "attachment": {
+    "mode": "rigid",
+    "joint": "head",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  }
+}

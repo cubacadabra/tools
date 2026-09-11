@@ -1,0 +1,20 @@
+{
+  "id": "cuba:preset/person-13.v1",
+  "displayName": "Person 13",
+  "thumbnail": "thumbnails/person-13.png",
+  "base": "cuba:base/person-02.v1",
+  "parts": [
+    "cuba:hair/side-ponytail.v1",
+    "cuba:top/short-sleeve-collared.v1",
+    "cuba:bottom/person-bottom.v1",
+    "cuba:footwear/sparkles.v1",
+    "cuba:facewear/square-glasses.v1"
+  ],
+  "face": "cuba:face/neutral.v1",
+  "parameters": {
+    "skin": "#805039",
+    "primary": "#66518c",
+    "secondary": "#334666",
+    "sole": "#f2e8d5"
+  }
+}

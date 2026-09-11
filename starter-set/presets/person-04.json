@@ -1,0 +1,20 @@
+{
+  "id": "cuba:preset/person-04.v1",
+  "displayName": "Person 04",
+  "thumbnail": "thumbnails/person-04.png",
+  "base": "cuba:base/person-02.v1",
+  "parts": [
+    "cuba:hair/buns.v1",
+    "cuba:top/person-top.v1",
+    "cuba:bottom/person-bottom.v1",
+    "cuba:footwear/sparkles.v1",
+    "cuba:accessory/hearing-aids.v1"
+  ],
+  "face": "cuba:face/neutral.v1",
+  "parameters": {
+    "skin": "#3d251f",
+    "primary": "#cc8e42",
+    "secondary": "#334666",
+    "sole": "#f2e8d5"
+  }
+}

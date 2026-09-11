@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "asset": {
+    "id": "cuba:hair/floppy.v1",
+    "kind": "hair",
+    "displayName": "Floppy Hair",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "supportedBases": [
+      "cuba:base/person.v1",
+      "cuba:base/person-02.v1"
+    ],
+    "occupiedSlots": [
+      "hair"
+    ],
+    "coverage": [
+      "scalp"
+    ],
+    "conflicts": [],
+    "materials": [
+      "floppy"
+    ],
+    "lod": {
+      "near": 2240,
+      "mid": 840,
+      "far": 336
+    },
+    "requiredCapabilities": [
+      "mesh.rigid.v1",
+      "hair.authored.v1"
+    ],
+    "source": {
+      "geometry": "floppy.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra starter-set/generate_parts.py",
+      "license": "Cubacadabra official"
+    }
+  },
+  "geometry": {
+    "file": "floppy.glb",
+    "lodNodes": {
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
+    }
+  },
+  "attachment": {
+    "mode": "rigid",
+    "joint": "head",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  }
+}

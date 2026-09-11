@@ -1,0 +1,19 @@
+{
+  "id": "cuba:preset/person-16.v1",
+  "displayName": "Person 16",
+  "thumbnail": "thumbnails/person-16.png",
+  "base": "cuba:base/person.v1",
+  "parts": [
+    "cuba:hair/braids.v1",
+    "cuba:top/short-sleeve-collared.v1",
+    "cuba:bottom/slacks.v1",
+    "cuba:footwear/sparkles.v1"
+  ],
+  "face": "cuba:face/neutral.v1",
+  "parameters": {
+    "skin": "#c59270",
+    "primary": "#799452",
+    "secondary": "#334666",
+    "sole": "#f2e8d5"
+  }
+}

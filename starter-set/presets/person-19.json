@@ -1,0 +1,21 @@
+{
+  "id": "cuba:preset/person-19.v1",
+  "displayName": "Person 19",
+  "thumbnail": "thumbnails/person-19.png",
+  "base": "cuba:base/person-02.v1",
+  "parts": [
+    "cuba:hair/swept.v1",
+    "cuba:top/short-sleeve-collared.v1",
+    "cuba:bottom/person-bottom.v1",
+    "cuba:footwear/person-shoes.v1",
+    "cuba:facewear/round-glasses.v1",
+    "cuba:accessory/hearing-aids.v1"
+  ],
+  "face": "cuba:face/neutral.v1",
+  "parameters": {
+    "skin": "#69412f",
+    "primary": "#6f86bb",
+    "secondary": "#334666",
+    "sole": "#f2e8d5"
+  }
+}
