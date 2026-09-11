@@ -32,6 +32,7 @@ Commands:
   create-game Create a new starter game.
   build-game  Build a portable game package from a game project.
   upload-examples Bump, build, and upload both example games.
+  setup-local  Seed Wrangler local R2 from the morph starter set.
 ```
 
 Create a new game from a title and a parent directory. The command creates a
@@ -112,6 +113,18 @@ portable package manifest. Runtime clients still receive one self-contained
 manifest and do not need filesystem or include behavior.
 
 Run `cubacadabra build-game --help` for all options.
+
+Seed a fresh Wrangler local R2 bucket with the checked-in morph fixtures after
+starting the backend with `npm run dev`:
+
+```sh
+cubacadabra setup-local
+```
+
+The command uploads both `starter-set/runtime` and `starter-set/source` to the
+local `prod` bucket through the Local Explorer API. It is safe to rerun, checks
+content-addressed runtime pack hashes, and does not apply D1 migrations. Use
+`--starter-set DIR`, `--endpoint URL`, or `--dry-run` when needed.
 
 Upload both example games after a change to the engine, web client, or example
 projects. The default target is the local backend at `127.0.0.1:8787`:

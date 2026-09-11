@@ -18,6 +18,13 @@ from .examples_uploader import (
 )
 from .game_builder import GameBuildError, build_game
 from .game_creator import GameCreateError, create_game
+from .local_r2_setup import (
+    DEFAULT_BUCKET,
+    DEFAULT_ENDPOINT,
+    LocalR2SetupError,
+    default_starter_set,
+    setup_local_r2,
+)
 
 
 DESCRIPTION = "Tools for building and maintaining Cubacadabra projects."
@@ -176,6 +183,38 @@ def build_parser() -> argparse.ArgumentParser:
     )
     upload_parser.set_defaults(handler=_run_upload_examples)
 
+    setup_parser = commands.add_parser(
+        "setup-local",
+        help="Seed Wrangler local R2 from the checked-in morph starter set.",
+        description=(
+            "Upload the starter-set runtime and source morph objects to a "
+            "Wrangler Local Explorer R2 bucket. This does not apply D1 migrations."
+        ),
+    )
+    setup_parser.add_argument(
+        "--starter-set",
+        type=Path,
+        default=default_starter_set(),
+        metavar="DIR",
+        help="Starter set directory (default: the tools checkout's starter-set).",
+    )
+    setup_parser.add_argument(
+        "--endpoint",
+        default=DEFAULT_ENDPOINT,
+        help=f"Wrangler dev endpoint (default: {DEFAULT_ENDPOINT}).",
+    )
+    setup_parser.add_argument(
+        "--bucket",
+        default=DEFAULT_BUCKET,
+        help=f"Local R2 bucket name (default: {DEFAULT_BUCKET}).",
+    )
+    setup_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate and show uploads without writing R2 objects.",
+    )
+    setup_parser.set_defaults(handler=_run_setup_local)
+
     create_parser = commands.add_parser(
         "create-game",
         help="Create a new starter game.",
@@ -296,6 +335,27 @@ def _run_upload_examples(args: argparse.Namespace) -> int:
             print(f"Bumped {plan.game_id}: {plan.previous_version} -> {plan.version}")
         state = "already uploaded" if result.already_exists else "uploaded"
         print(f"{state} {result.game_id} v{result.version} -> {result.zip_path}")
+    return 0
+
+
+def _run_setup_local(args: argparse.Namespace) -> int:
+    try:
+        result = setup_local_r2(
+            args.starter_set,
+            endpoint=args.endpoint,
+            bucket=args.bucket,
+            dry_run=args.dry_run,
+        )
+    except (LocalR2SetupError, OSError) as error:
+        print(f"cubacadabra setup-local failed: {error}", file=sys.stderr)
+        return 1
+
+    action = "would seed" if args.dry_run else "seeded"
+    print(
+        f"{action} {args.bucket}: files={result.files} "
+        f"uploaded={result.uploaded} skipped={result.skipped} "
+        f"bytes_uploaded={result.bytes_uploaded}"
+    )
     return 0
 
 
