@@ -9,8 +9,9 @@ editable afterward. Changing one recipe never changes another recipe.
 
 - `catalog.json`: component manifests, starter ordering, and builtin exclusions.
 - `presets/person-01.json` through `person-24.json`: complete appearance recipes.
-- `source/morphs/`: editable GLB geometry and `.morph.json` manifests.
-- `.blend` files beside all 20 GLBs: editable meshes, materials, and three LODs.
+- `source/morphs/`: editable GLB geometry and `.morph.json` manifests. The GLB
+  files contain the geometry, materials, and three LODs needed by the build and
+  runtime; Blender `.blend` authoring files are intentionally not committed.
 - `artwork/`: authored curves, wearable construction, and curly-hair sculpting.
 - `presets/thumbnails/`: full-character previews rendered by the engine.
 
@@ -79,10 +80,10 @@ Run from `tools/`:
 python3 starter-set/generate_parts.py --wardrobe --blend
 ```
 
-This rebuilds all 20 GLBs and their editable Blender files without changing the
-24 recipes. It requires Blender for sculpted curls and `.blend` output; Blender
-is an authoring dependency only, not a game/runtime dependency. Other hair and
-accessories can be regenerated without it, for example:
+This rebuilds all 20 GLBs without changing the 24 recipes. It requires Blender
+for sculpted curls and optional local `.blend` output; Blender is an authoring
+dependency only, not a game/runtime dependency. Other hair and accessories can
+be regenerated without it, for example:
 
 ```sh
 python3 starter-set/generate_parts.py --only floppy
@@ -90,11 +91,12 @@ python3 starter-set/generate_parts.py --only floppy
 
 `--wardrobe` also refreshes bodies and clothing via the canonical rig tools in
 `studio/tools/`; omit it to work only on hair/accessories. **Regeneration replaces
-the selected source files**, including manual edits. Open the adjacent `.blend`
-instead when hand-editing the model. Keep all three LOD node names, the head-local
-origin (for rigid wearables), and the existing rig (for skinned clothing).
-Export GLB with hidden LODs included and Custom Properties enabled so material
-avatar-tint flags survive. Update sidecar triangle counts when geometry changes.
+the selected source files**, including manual edits. Generate local `.blend` files
+with `--blend` when hand-editing the model. Keep all three LOD node names, the
+head-local origin (for rigid wearables), and the existing rig (for skinned
+clothing). Export GLB with hidden LODs included and Custom Properties enabled so
+material avatar-tint flags survive. Update sidecar triangle counts when geometry
+changes. The checked-in GLBs remain the source assets.
 
 After changing geometry or a recipe, build, render the actual composed people,
 then build/publish locally again so the new preview hashes enter the release:
