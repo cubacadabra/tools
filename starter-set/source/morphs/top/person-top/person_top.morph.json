@@ -26,9 +26,9 @@
       "pocket-opening"
     ],
     "lod": {
-      "near": 3280,
-      "mid": 1680,
-      "far": 884
+      "near": 6392,
+      "mid": 2184,
+      "far": 964
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

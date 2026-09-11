@@ -20,12 +20,12 @@
     ],
     "conflicts": [],
     "materials": [
-      "buzz"
+      "umber"
     ],
     "lod": {
-      "near": 320,
-      "mid": 120,
-      "far": 48
+      "near": 3072,
+      "mid": 1280,
+      "far": 480
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -35,7 +35,7 @@
       "geometry": "buzz.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/generate_parts.py",
+      "source": "Cubacadabra starter-set/artwork",
       "license": "Cubacadabra official"
     }
   },

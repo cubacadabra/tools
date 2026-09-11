@@ -3,7 +3,7 @@
   "asset": {
     "id": "cuba:headwear/test-top-hat.v1",
     "kind": "headwear",
-    "displayName": "Test Top Hat",
+    "displayName": "Top Hat",
     "rigProfile": "cuba:rig/biped15.v1",
     "fitProfiles": [
       "cuba:fit/person-standard.v1"
@@ -20,12 +20,14 @@
     ],
     "conflicts": [],
     "materials": [
-      "default"
+      "indigo-felt",
+      "ochre-ribbon",
+      "brass-buckle"
     ],
     "lod": {
-      "near": 248,
-      "mid": 124,
-      "far": 48
+      "near": 3328,
+      "mid": 1920,
+      "far": 1056
     },
     "requiredCapabilities": [
       "mesh.rigid.v1"
@@ -34,36 +36,36 @@
       "geometry": "test_top_hat.glb"
     },
     "provenance": {
-      "source": "Studio GLB import",
-      "license": "Unreviewed"
+      "source": "Cubacadabra starter-set/artwork",
+      "license": "Cubacadabra official"
     }
   },
   "geometry": {
     "file": "test_top_hat.glb",
     "lodNodes": {
-      "far": "TopHat_Far",
-      "mid": "TopHat_Mid",
-      "near": "TopHat_Near"
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
     }
   },
   "attachment": {
     "mode": "rigid",
     "joint": "head",
     "translation": [
-      0.0,
-      0.657,
-      0.0
+      0,
+      0,
+      0
     ],
     "rotation": [
-      0.0,
-      0.0,
-      0.0,
-      1.0
+      0,
+      0,
+      0,
+      1
     ],
     "scale": [
-      0.451,
-      0.451,
-      0.451
+      1,
+      1,
+      1
     ]
   }
 }

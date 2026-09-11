@@ -20,12 +20,12 @@
     ],
     "conflicts": [],
     "materials": [
-      "buns"
+      "espresso"
     ],
     "lod": {
-      "near": 960,
-      "mid": 360,
-      "far": 144
+      "near": 5952,
+      "mid": 2544,
+      "far": 936
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -35,7 +35,7 @@
       "geometry": "buns.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/generate_parts.py",
+      "source": "Cubacadabra starter-set/artwork",
       "license": "Cubacadabra official"
     }
   },

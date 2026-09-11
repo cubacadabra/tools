@@ -20,12 +20,12 @@
     ],
     "conflicts": [],
     "materials": [
-      "curls"
+      "warm-brown"
     ],
     "lod": {
-      "near": 11840,
-      "mid": 4440,
-      "far": 1776
+      "near": 9000,
+      "mid": 3000,
+      "far": 900
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -35,7 +35,7 @@
       "geometry": "curls.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/generate_parts.py",
+      "source": "Cubacadabra artwork/sculpt_curls.py \u00b7 voxel-unioned sculpt",
       "license": "Cubacadabra official"
     }
   },

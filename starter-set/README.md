@@ -10,6 +10,8 @@ editable afterward. Changing one recipe never changes another recipe.
 - `catalog.json`: component manifests, starter ordering, and builtin exclusions.
 - `presets/person-01.json` through `person-24.json`: complete appearance recipes.
 - `source/morphs/`: editable GLB geometry and `.morph.json` manifests.
+- `.blend` files beside all 20 GLBs: editable meshes, materials, and three LODs.
+- `artwork/`: authored curves, wearable construction, and curly-hair sculpting.
 - `presets/thumbnails/`: full-character previews rendered by the engine.
 
 For example, `presets/person-17.json` combines the Broad Jaw base, Floppy Hair,
@@ -65,10 +67,34 @@ when a production release is intended.
 
 ## Regenerating source and previews
 
-`python3 starter-set/generate_parts.py` regenerates the initial hair, glasses,
-and hearing-device GLBs/manifests and the two tintable base GLBs. It does not
-rewrite the curated recipes. Do not run it over hand-edited generated parts
-unless replacing those edits is intended.
+The artwork is real source geometry, not painted thumbnails. Floppy hair uses
+layered tapered curves; curls/coils are voxel-unioned, relaxed sculpted meshes;
+glasses have continuous rims; headphones have a padded arch and fitted cups.
+Bodies and clothing have welded shading seams and separate delivery LODs.
+Polo fabric follows the preset's `primary` color while keeping its logo/trim.
+
+Run from `tools/`:
+
+```sh
+python3 starter-set/generate_parts.py --wardrobe --blend
+```
+
+This rebuilds all 20 GLBs and their editable Blender files without changing the
+24 recipes. It requires Blender for sculpted curls and `.blend` output; Blender
+is an authoring dependency only, not a game/runtime dependency. Other hair and
+accessories can be regenerated without it, for example:
+
+```sh
+python3 starter-set/generate_parts.py --only floppy
+```
+
+`--wardrobe` also refreshes bodies and clothing via the canonical rig tools in
+`studio/tools/`; omit it to work only on hair/accessories. **Regeneration replaces
+the selected source files**, including manual edits. Open the adjacent `.blend`
+instead when hand-editing the model. Keep all three LOD node names, the head-local
+origin (for rigid wearables), and the existing rig (for skinned clothing).
+Export GLB with hidden LODs included and Custom Properties enabled so material
+avatar-tint flags survive. Update sidecar triangle counts when geometry changes.
 
 After changing geometry or a recipe, build, render the actual composed people,
 then build/publish locally again so the new preview hashes enter the release:
@@ -88,12 +114,26 @@ has a GPU-backed library layout/interaction smoke test:
 cargo test --manifest-path ../studio/Cargo.toml morph_library_layout_and_interactions -- --ignored
 ```
 
+For close-up artwork review, set `CUBA_STARTER_PORTRAIT=1` and use a temporary
+output directory. `CUBA_STARTER_YAW=1.2` gives a side view; `3.14159` gives the
+back. These use the actual game geometry/material pipelines, not a separate
+Blender beauty render. Leave those variables unset when regenerating thumbnails.
+
+Geometry/fit checks run without Blender:
+
+```sh
+PYTHONPATH=src python3 -m unittest discover -s tests
+```
+
 ## Content coverage and limits
 
 The first release has 20 authored components plus 24 builtin hair/expression
 components and 24 recipes. It includes 12 skin tones, seven new hair meshes,
-two glasses styles, and hearing aids. These are initial stylized assets, not
-a claim to represent every child or an art-complete diversity roster.
+two glasses styles, and hearing aids. The artwork uses a consistent rounded toy
+style; it is not a claim to represent every child or an art-complete diversity
+roster. Hair/accessory LOD budgets stay below 15,000/6,000/2,000 triangles;
+the skinned body is below 19,000/5,000/1,400. Hair's softer Studio material is
+feature-gated so it doesn't change other clients' default shading.
 
 The two bodies currently share a build. More body shapes, culturally varied
 hair/clothing, mobility devices, prostheses, and seated rigs still need proper

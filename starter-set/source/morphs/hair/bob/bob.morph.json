@@ -20,12 +20,12 @@
     ],
     "conflicts": [],
     "materials": [
-      "bob"
+      "chocolate"
     ],
     "lod": {
-      "near": 3200,
-      "mid": 1200,
-      "far": 480
+      "near": 5472,
+      "mid": 2368,
+      "far": 912
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -35,7 +35,7 @@
       "geometry": "bob.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/generate_parts.py",
+      "source": "Cubacadabra starter-set/artwork",
       "license": "Cubacadabra official"
     }
   },

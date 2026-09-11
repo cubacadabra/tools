@@ -20,12 +20,13 @@
     ],
     "conflicts": [],
     "materials": [
-      "square-glasses"
+      "tortoise-acetate",
+      "brass-hinges"
     ],
     "lod": {
-      "near": 21440,
-      "mid": 5160,
-      "far": 1296
+      "near": 6040,
+      "mid": 2816,
+      "far": 1140
     },
     "requiredCapabilities": [
       "mesh.rigid.v1"
@@ -34,7 +35,7 @@
       "geometry": "square-glasses.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/generate_parts.py",
+      "source": "Cubacadabra starter-set/artwork",
       "license": "Cubacadabra official"
     }
   },

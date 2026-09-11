@@ -20,12 +20,13 @@
     ],
     "conflicts": [],
     "materials": [
-      "hearing-aids"
+      "blue-shell",
+      "receiver"
     ],
     "lod": {
-      "near": 1920,
-      "mid": 720,
-      "far": 288
+      "near": 4560,
+      "mid": 1984,
+      "far": 696
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -35,7 +36,7 @@
       "geometry": "hearing-aids.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/generate_parts.py",
+      "source": "Cubacadabra starter-set/artwork",
       "license": "Cubacadabra official"
     }
   },

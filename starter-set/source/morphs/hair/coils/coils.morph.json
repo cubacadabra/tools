@@ -20,12 +20,12 @@
     ],
     "conflicts": [],
     "materials": [
-      "coils"
+      "espresso"
     ],
     "lod": {
-      "near": 17600,
-      "mid": 6600,
-      "far": 2640
+      "near": 9000,
+      "mid": 2998,
+      "far": 900
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -35,7 +35,7 @@
       "geometry": "coils.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/generate_parts.py",
+      "source": "Cubacadabra artwork/sculpt_curls.py \u00b7 voxel-unioned sculpt",
       "license": "Cubacadabra official"
     }
   },

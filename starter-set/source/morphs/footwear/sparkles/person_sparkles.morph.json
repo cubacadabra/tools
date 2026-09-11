@@ -26,9 +26,9 @@
       "sequins"
     ],
     "lod": {
-      "near": 3632,
-      "mid": 1440,
-      "far": 672
+      "near": 7520,
+      "mid": 2432,
+      "far": 1120
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

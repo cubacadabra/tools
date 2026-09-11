@@ -20,12 +20,12 @@
     ],
     "conflicts": [],
     "materials": [
-      "floppy"
+      "chestnut"
     ],
     "lod": {
-      "near": 2240,
-      "mid": 840,
-      "far": 336
+      "near": 6072,
+      "mid": 2640,
+      "far": 1020
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -35,7 +35,7 @@
       "geometry": "floppy.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/generate_parts.py",
+      "source": "Cubacadabra starter-set/artwork",
       "license": "Cubacadabra official"
     }
   },

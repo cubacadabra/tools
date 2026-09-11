@@ -20,9 +20,9 @@
       "face"
     ],
     "lod": {
-      "near": 7500,
-      "mid": 2900,
-      "far": 820
+      "near": 18496,
+      "mid": 4896,
+      "far": 1360
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

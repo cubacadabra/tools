@@ -24,9 +24,9 @@
       "seams"
     ],
     "lod": {
-      "near": 2016,
-      "mid": 864,
-      "far": 352
+      "near": 4480,
+      "mid": 1248,
+      "far": 400
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

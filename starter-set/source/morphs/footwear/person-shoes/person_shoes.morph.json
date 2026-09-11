@@ -25,9 +25,9 @@
       "laces"
     ],
     "lod": {
-      "near": 2768,
-      "mid": 960,
-      "far": 480
+      "near": 6080,
+      "mid": 1632,
+      "far": 800
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

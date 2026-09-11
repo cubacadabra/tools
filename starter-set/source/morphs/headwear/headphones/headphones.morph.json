@@ -5,42 +5,67 @@
     "kind": "headwear",
     "displayName": "Headphones",
     "rigProfile": "cuba:rig/biped15.v1",
-    "fitProfiles": ["cuba:fit/person-standard.v1"],
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
     "supportedBases": [
       "cuba:base/person.v1",
       "cuba:base/person-02.v1"
     ],
-    "occupiedSlots": ["ear-accessory"],
-    "coverage": ["ears"],
+    "occupiedSlots": [
+      "ear-accessory"
+    ],
+    "coverage": [
+      "ears"
+    ],
     "conflicts": [],
-    "materials": ["headphones-slate"],
+    "materials": [
+      "slate-shell",
+      "soft-padding",
+      "blue-trim"
+    ],
     "lod": {
-      "near": 84,
-      "mid": 60,
-      "far": 36
+      "near": 7440,
+      "mid": 3248,
+      "far": 1152
     },
-    "requiredCapabilities": ["mesh.rigid.v1"],
+    "requiredCapabilities": [
+      "mesh.rigid.v1"
+    ],
     "source": {
       "geometry": "headphones.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated proof asset",
-      "license": "Unreviewed"
+      "source": "Cubacadabra starter-set/artwork",
+      "license": "Cubacadabra official"
     }
   },
   "geometry": {
     "file": "headphones.glb",
     "lodNodes": {
-      "far": "Headphones_Far",
-      "mid": "Headphones_Mid",
-      "near": "Headphones_Near"
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
     }
   },
   "attachment": {
     "mode": "rigid",
     "joint": "head",
-    "translation": [0.0, 0.2346575, 0.0],
-    "rotation": [0.0, 0.0, 0.0, 1.0],
-    "scale": [0.4633562, 0.4633562, 0.4633562]
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
   }
 }

@@ -23,9 +23,9 @@
       "bottom"
     ],
     "lod": {
-      "near": 880,
-      "mid": 336,
-      "far": 96
+      "near": 2176,
+      "mid": 576,
+      "far": 160
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
