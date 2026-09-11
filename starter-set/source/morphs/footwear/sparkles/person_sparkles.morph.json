@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 2,
+  "asset": {
+    "id": "cuba:footwear/sparkles.v1",
+    "kind": "footwear",
+    "displayName": "Sparkles",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "supportedBases": [
+      "cuba:base/person.v1"
+    ],
+    "occupiedSlots": [
+      "shoes"
+    ],
+    "coverage": [
+      "feet"
+    ],
+    "conflicts": [],
+    "materials": [
+      "sparkle-satin",
+      "gold-sole",
+      "gold-laces",
+      "sequins"
+    ],
+    "lod": {
+      "near": 3632,
+      "mid": 1440,
+      "far": 672
+    },
+    "requiredCapabilities": [
+      "skin.biped15-linear.v1",
+      "material.cuba-pbr.v1"
+    ],
+    "source": {
+      "geometry": "person_sparkles.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra generated Blender-compatible Phase 5 clothing fixture",
+      "license": "Cubacadabra official"
+    }
+  },
+  "geometry": {
+    "file": "person_sparkles.glb",
+    "lodNodes": {
+      "near": "PersonFootwear_Near",
+      "mid": "PersonFootwear_Mid",
+      "far": "PersonFootwear_Far"
+    }
+  },
+  "attachment": {
+    "mode": "skinned",
+    "joint": "root",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "skin": {
+    "skeleton": "Person_Skin",
+    "jointOrder": [
+      "root",
+      "torso",
+      "head",
+      "left-upper-arm",
+      "left-lower-arm",
+      "left-hand",
+      "right-upper-arm",
+      "right-lower-arm",
+      "right-hand",
+      "left-upper-leg",
+      "left-lower-leg",
+      "left-foot",
+      "right-upper-leg",
+      "right-lower-leg",
+      "right-foot"
+    ],
+    "maxInfluences": 4
+  }
+}

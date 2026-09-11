@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 2,
+  "asset": {
+    "id": "cuba:bottom/person-bottom.v1",
+    "kind": "bottom",
+    "displayName": "Jeans",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "supportedBases": [
+      "cuba:base/person.v1"
+    ],
+    "occupiedSlots": [
+      "pants"
+    ],
+    "coverage": [
+      "legs"
+    ],
+    "conflicts": [],
+    "materials": [
+      "bottom"
+    ],
+    "lod": {
+      "near": 880,
+      "mid": 336,
+      "far": 96
+    },
+    "requiredCapabilities": [
+      "skin.biped15-linear.v1",
+      "material.cuba-pbr.v1"
+    ],
+    "source": {
+      "geometry": "person_bottom.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra generated Blender-compatible Phase 5 clothing fixture",
+      "license": "Cubacadabra official"
+    }
+  },
+  "geometry": {
+    "file": "person_bottom.glb",
+    "lodNodes": {
+      "near": "PersonBottom_Near",
+      "mid": "PersonBottom_Mid",
+      "far": "PersonBottom_Far"
+    }
+  },
+  "attachment": {
+    "mode": "skinned",
+    "joint": "root",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "skin": {
+    "skeleton": "Person_Skin",
+    "jointOrder": [
+      "root",
+      "torso",
+      "head",
+      "left-upper-arm",
+      "left-lower-arm",
+      "left-hand",
+      "right-upper-arm",
+      "right-lower-arm",
+      "right-hand",
+      "left-upper-leg",
+      "left-lower-leg",
+      "left-foot",
+      "right-upper-leg",
+      "right-lower-leg",
+      "right-foot"
+    ],
+    "maxInfluences": 4
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "asset": {
+    "id": "cuba:headwear/headphones.v1",
+    "kind": "headwear",
+    "displayName": "Headphones",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": ["cuba:fit/person-standard.v1"],
+    "supportedBases": ["cuba:base/person.v1"],
+    "occupiedSlots": ["ear-accessory"],
+    "coverage": ["ears"],
+    "conflicts": [],
+    "materials": ["headphones-slate"],
+    "lod": {
+      "near": 84,
+      "mid": 60,
+      "far": 36
+    },
+    "requiredCapabilities": ["mesh.rigid.v1"],
+    "source": {
+      "geometry": "headphones.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra generated proof asset",
+      "license": "Unreviewed"
+    }
+  },
+  "geometry": {
+    "file": "headphones.glb",
+    "lodNodes": {
+      "far": "Headphones_Far",
+      "mid": "Headphones_Mid",
+      "near": "Headphones_Near"
+    }
+  },
+  "attachment": {
+    "mode": "rigid",
+    "joint": "head",
+    "translation": [0.0, 0.2346575, 0.0],
+    "rotation": [0.0, 0.0, 0.0, 1.0],
+    "scale": [0.4633562, 0.4633562, 0.4633562]
+  }
+}
