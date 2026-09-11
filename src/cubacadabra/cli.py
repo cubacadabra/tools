@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -25,6 +26,7 @@ from .local_r2_setup import (
     default_starter_set,
     setup_local_r2,
 )
+from .morph_release import MorphReleaseError, build_morph_release, write_release_sql
 
 
 DESCRIPTION = "Tools for building and maintaining Cubacadabra projects."
@@ -185,10 +187,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     setup_parser = commands.add_parser(
         "setup-local",
-        help="Seed Wrangler local R2 from the checked-in morph starter set.",
+        help="Build and install the Morph release into local R2 and D1.",
         description=(
-            "Upload the starter-set runtime and source morph objects to a "
-            "Wrangler Local Explorer R2 bucket. This does not apply D1 migrations."
+            "Compile the starter-set source, upload immutable Morph packs to a "
+            "Wrangler Local Explorer R2 bucket, and install the release catalog in D1."
         ),
     )
     setup_parser.add_argument(
@@ -214,6 +216,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate and show uploads without writing R2 objects.",
     )
     setup_parser.set_defaults(handler=_run_setup_local)
+
+    morph_parser = commands.add_parser(
+        "morph",
+        help="Build and verify deterministic Morph releases.",
+    )
+    morph_commands = morph_parser.add_subparsers(dest="morph_command", required=True)
+    morph_build_parser = morph_commands.add_parser(
+        "build", help="Compile source Morph assets and write a catalog lock file."
+    )
+    morph_build_parser.add_argument(
+        "--starter-set", type=Path, default=default_starter_set(), metavar="DIR"
+    )
+    morph_build_parser.add_argument(
+        "--output", type=Path, default=None, metavar="DIR",
+        help="Generated release directory (default: .cubacadabra/generated/morphs).",
+    )
+    morph_build_parser.set_defaults(handler=_run_morph_build)
+    morph_publish_parser = morph_commands.add_parser(
+        "publish", help="Upload compiled packs, then atomically update production D1."
+    )
+    morph_publish_parser.add_argument(
+        "--starter-set", type=Path, default=default_starter_set(), metavar="DIR"
+    )
+    morph_publish_parser.add_argument("--bucket", default="prod")
+    morph_publish_parser.add_argument("--dry-run", action="store_true")
+    morph_publish_parser.set_defaults(handler=_run_morph_publish)
+    morph_rollback_parser = morph_commands.add_parser(
+        "rollback", help="Make a previously generated catalog lock active."
+    )
+    morph_rollback_parser.add_argument("catalog", type=Path, metavar="CATALOG_LOCK_JSON")
+    morph_rollback_parser.add_argument(
+        "--target", choices=("local", "production"), default="local"
+    )
+    morph_rollback_parser.add_argument(
+        "--backend-dir", type=Path, default=Path("../backend"), metavar="DIR"
+    )
+    morph_rollback_parser.set_defaults(handler=_run_morph_rollback)
 
     create_parser = commands.add_parser(
         "create-game",
@@ -340,13 +379,25 @@ def _run_upload_examples(args: argparse.Namespace) -> int:
 
 def _run_setup_local(args: argparse.Namespace) -> int:
     try:
+        release = build_morph_release(args.starter_set)
         result = setup_local_r2(
-            args.starter_set,
+            release.runtime_root.parent,
             endpoint=args.endpoint,
             bucket=args.bucket,
             dry_run=args.dry_run,
         )
-    except (LocalR2SetupError, OSError) as error:
+        sql_path = write_release_sql(release.lock_path)
+        if not args.dry_run:
+            backend = args.starter_set.resolve().parents[1] / "backend"
+            subprocess.run(
+                ["npx", "wrangler", "d1", "migrations", "apply", "prod", "--local"],
+                cwd=backend, check=True,
+            )
+            subprocess.run(
+                ["npx", "wrangler", "d1", "execute", "prod", "--local", "--file", str(sql_path)],
+                cwd=backend, check=True,
+            )
+    except (LocalR2SetupError, MorphReleaseError, OSError, subprocess.CalledProcessError) as error:
         print(f"cubacadabra setup-local failed: {error}", file=sys.stderr)
         return 1
 
@@ -354,8 +405,77 @@ def _run_setup_local(args: argparse.Namespace) -> int:
     print(
         f"{action} {args.bucket}: files={result.files} "
         f"uploaded={result.uploaded} skipped={result.skipped} "
-        f"bytes_uploaded={result.bytes_uploaded}"
+        f"bytes_uploaded={result.bytes_uploaded} release={release.release_id}"
     )
+    return 0
+
+
+def _run_morph_build(args: argparse.Namespace) -> int:
+    try:
+        result = build_morph_release(args.starter_set, output=args.output)
+    except (MorphReleaseError, OSError) as error:
+        print(f"cubacadabra morph build failed: {error}", file=sys.stderr)
+        return 1
+    print(
+        f"Built Morph release {result.release_id}: assets={result.assets} "
+        f"packs={result.packs} lock={result.lock_path}"
+    )
+    return 0
+
+
+def _run_morph_publish(args: argparse.Namespace) -> int:
+    try:
+        release = build_morph_release(args.starter_set)
+        sql_path = write_release_sql(release.lock_path)
+        backend = args.starter_set.resolve().parents[1] / "backend"
+        packs = sorted(release.runtime_root.rglob("*.morphpack"))
+        for pack in packs:
+            key = pack.relative_to(release.runtime_root.parent).as_posix()
+            command = [
+                "npx", "wrangler", "r2", "object", "put", f"{args.bucket}/{key}",
+                "--file", str(pack), "--remote",
+            ]
+            if args.dry_run:
+                print("would run:", " ".join(command))
+            else:
+                subprocess.run(command, cwd=backend, check=True)
+        catalog_key = f"runtime/morphs/catalogs/{release.release_id}.json"
+        catalog_command = [
+            "npx", "wrangler", "r2", "object", "put", f"{args.bucket}/{catalog_key}",
+            "--file", str(release.lock_path), "--remote",
+        ]
+        if args.dry_run:
+            print("would run:", " ".join(catalog_command))
+        else:
+            subprocess.run(catalog_command, cwd=backend, check=True)
+        if args.dry_run:
+            print(f"would update production catalog with {release.release_id} ({sql_path})")
+        else:
+            subprocess.run(
+                ["npx", "wrangler", "d1", "execute", "prod", "--remote", "--file", str(sql_path)],
+                cwd=backend, check=True,
+            )
+    except (MorphReleaseError, OSError, subprocess.CalledProcessError) as error:
+        print(f"cubacadabra morph publish failed: {error}", file=sys.stderr)
+        return 1
+    action = "Would publish" if args.dry_run else "Published"
+    print(f"{action} Morph catalog {release.release_id}: packs={release.packs}")
+    return 0
+
+
+def _run_morph_rollback(args: argparse.Namespace) -> int:
+    try:
+        sql_path = write_release_sql(args.catalog)
+        backend = args.backend_dir.resolve()
+        flag = "--remote" if args.target == "production" else "--local"
+        subprocess.run(
+            ["npx", "wrangler", "d1", "execute", "prod", flag, "--file", str(sql_path)],
+            cwd=backend, check=True,
+        )
+    except (MorphReleaseError, OSError, subprocess.CalledProcessError) as error:
+        print(f"cubacadabra morph rollback failed: {error}", file=sys.stderr)
+        return 1
+    print(f"Activated Morph catalog from {args.catalog}")
     return 0
 
 

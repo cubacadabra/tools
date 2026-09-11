@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    { "id": "cuba:base/person.v1", "source": "source/morphs/base/person/person_skinned.morph.json" },
+    { "id": "cuba:bottom/person-bottom.v1", "source": "source/morphs/bottom/person-bottom/person_bottom.morph.json" },
+    { "id": "cuba:bottom/slacks.v1", "source": "source/morphs/bottom/slacks/person_slacks.morph.json" },
+    { "id": "cuba:footwear/person-shoes.v1", "source": "source/morphs/footwear/person-shoes/person_shoes.morph.json" },
+    { "id": "cuba:footwear/sparkles.v1", "source": "source/morphs/footwear/sparkles/person_sparkles.morph.json" },
+    { "id": "cuba:headwear/headphones.v1", "source": "source/morphs/headwear/headphones/headphones.morph.json" },
+    { "id": "cuba:headwear/test-top-hat.v1", "source": "source/morphs/headwear/test-top-hat/test_top_hat.morph.json" },
+    { "id": "cuba:top/person-top.v1", "source": "source/morphs/top/person-top/person_top.morph.json" },
+    { "id": "cuba:top/short-sleeve-collared.v1", "source": "source/morphs/top/short-sleeve-collared/person_short_sleeve_collared.morph.json" }
+  ],
+  "builtins": "../../rust/assets/characters/morph_catalog.json"
+}

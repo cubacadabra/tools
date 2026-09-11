@@ -32,7 +32,9 @@ Commands:
   create-game Create a new starter game.
   build-game  Build a portable game package from a game project.
   upload-examples Bump, build, and upload both example games.
-  setup-local  Seed Wrangler local R2 from the morph starter set.
+  setup-local  Build and install the Morph catalog in local R2/D1.
+  morph build  Compile authored Morph source into an ignored release directory.
+  morph publish Upload immutable Morph packs, then update the production catalog.
 ```
 
 Create a new game from a title and a parent directory. The command creates a
@@ -114,17 +116,18 @@ manifest and do not need filesystem or include behavior.
 
 Run `cubacadabra build-game --help` for all options.
 
-Seed a fresh Wrangler local R2 bucket with the checked-in morph fixtures after
-starting the backend with `npm run dev`:
+Build and install the Morph release into local R2 and D1 after starting the
+backend with `npm run dev`:
 
 ```sh
 cubacadabra setup-local
 ```
 
-The command uploads both `starter-set/runtime` and `starter-set/source` to the
-local `prod` bucket through the Local Explorer API. It is safe to rerun, checks
-content-addressed runtime pack hashes, and does not apply D1 migrations. Use
-`--starter-set DIR`, `--endpoint URL`, or `--dry-run` when needed.
+The command compiles every source manifest with the pinned authoring compiler,
+uploads immutable content-addressed packs, applies local D1 migrations, and
+installs an idempotent catalog release. Use `cubacadabra morph build` to only
+generate the ignored release directory. `--starter-set DIR`, `--endpoint URL`,
+and `--dry-run` remain available.
 
 Upload both example games after a change to the engine, web client, or example
 projects. The default target is the local backend at `127.0.0.1:8787`:
