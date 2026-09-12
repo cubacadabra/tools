@@ -33,6 +33,35 @@ tool. Use the shared-engine capture path for this Mac; do not make RenderDoc a
 prerequisite for art work. Raster generation is not a substitute for geometry
 or evidence of runtime rendering quality.
 
+## Mac GPU debugging
+
+This repository's macOS renderer is `wgpu` over Metal. Use Xcode's Metal GPU
+frame capture and shader debugger, not RenderDoc. The recommended setup is an
+Xcode **External Build System** project that runs `cargo`, with the Studio
+executable selected as the run target. Reproduce the fixed runtime capture,
+then inspect the hair/hoodie draw calls, vertex buffers, authored normals, atlas
+textures, bind groups, pipeline state and render target in Xcode.
+
+For this checkout, use `build --manifest-path ../../studio/Cargo.toml --bin
+studio` as the external build arguments and select
+`../../studio/target/debug/studio` as the executable. Use a debug build so
+Metal validation and GPU capture are available.
+
+For a development-only “capture next GPU frame” command, wgpu 29 provides:
+
+```rust
+unsafe { device.start_graphics_debugger_capture(); }
+// record commands, submit the queue, then wait for the frame to complete
+unsafe { device.stop_graphics_debugger_capture(); }
+```
+
+The calls must enclose both command recording and queue submission. Do not
+enable them in release rendering. For Metal API validation, launch from Xcode
+or set `METAL_DEVICE_WRAPPER_TYPE=1` in a debug environment. Apple's optional
+`gpudebug` utility can inspect a `.gputrace` when installed; verify with
+`xcrun --find gpudebug` rather than assuming it exists. Links and the exact
+platform matrix are in [README.md](README.md#mac-gpu-debugging).
+
 ## Art iteration contract
 
 1. Inspect existing sources, the supplied reference, and any study README and

@@ -154,7 +154,7 @@ capabilities it actually supports before selecting these complete presets.
 The isolated study additionally requires the shared canonical-rest and static
 face semantics described in the v5 contract.
 
-## Blender character-art workflow notes
+## Character-art skills
 
 For Blender work on the isolated study or starter artwork, these are
 recommended workflows from [Blender Agent Studio](https://github.com/ifBars/blender-agent-studio).
@@ -163,20 +163,20 @@ Blender/Python setup is sufficient. Do not auto-install a plugin, MCP server,
 or dependency. The recommendation names use a `blender-` prefix; the links
 point to the upstream skill files:
 
-- [blender-iterative-refinement](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/iterative-refinement/SKILL.md): freeze a baseline and review ledger, make one causal edit, and compare with the same settings.
-- [blender-modeling-workflow](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/modeling-workflow/SKILL.md): solve silhouette, secondary forms, and fit; treat budgets as ceilings, not targets.
-- [blender-character-workflow](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/character-workflow/SKILL.md): check garment fit and skinning/joint stress, including motion.
-- [blender-rendering-workflow](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/rendering-workflow/SKILL.md): diagnose camera, light, material, and scale before changing geometry.
-- [blender-asset-validation](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/asset-validation/SKILL.md): review hero plus front/back/left/right/top views, perform a fresh GLB import, and accept the actual runtime result.
+- [blender-iterative-refinement](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/blender-iterative-refinement/SKILL.md): freeze a baseline and review ledger, make one causal edit, and compare with the same settings.
+- [blender-modeling-workflow](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/blender-modeling-workflow/SKILL.md): solve silhouette, secondary forms, and fit; treat budgets as ceilings, not targets.
+- [blender-character-workflow](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/blender-character-workflow/SKILL.md): check garment fit and skinning/joint stress, including motion.
+- [blender-rendering-workflow](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/blender-rendering-workflow/SKILL.md): diagnose camera, light, material, and scale before changing geometry.
+- [blender-asset-validation](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/blender-asset-validation/SKILL.md): review hero plus front/back/left/right/top views, perform a fresh GLB import, and accept the actual runtime result.
 
-See the repository [AGENTS.md](../../../AGENTS.md), the [mockup-person study
+See this directory's [AGENTS.md](AGENTS.md), the [mockup-person study
 README](studies/mockup-person/README.md), and its [iteration review
 ledger](studies/mockup-person/review/iteration_review.json). From this
 directory, useful checkpoints are:
 
 ```sh
-python3 review_study.py --beauty-only --label baseline-<unique-name>
-python3 review_study.py --generate --motion --label <unique-pass>
+python3 review_study.py --beauty-only --label baseline-review
+python3 review_study.py --generate --motion --label hair-pass-01
 Blender --background --factory-startup --python-exit-code 1 \
   --python artwork/validate_study_export.py
 ```
@@ -190,3 +190,45 @@ support](https://github.com/baldurk/renderdoc#api-support).
 
 Prefer shared-engine runtime captures over Blender beauty renders when judging
 whether an asset is ready.
+
+## Mac GPU debugging
+
+This engine uses `wgpu` with the Metal backend on macOS. RenderDoc is not the
+Mac debugger: its capture/replay backends do not support Metal. Use Xcode's
+Metal GPU capture and shader debugger instead. The [wgpu debugging guide](https://wgpu.rs/doc/wgpu/documentation/debugging/debugging_applications/index.html)
+recommends launching Rust programs from an Xcode **External Build System**
+project and selecting the built executable as the run target.
+
+For this repository, configure the external build tool with `cargo`, use
+`build --manifest-path ../../studio/Cargo.toml --bin studio` as its arguments,
+and select the resulting `../../studio/target/debug/studio` executable. Run a
+debug build from Xcode so Metal validation and GPU capture are available.
+
+For a useful frame, run the Studio executable from Xcode, select **Debug >
+Capture GPU Frame** (or the Metal capture button), and reproduce the fixed
+mockup-person view. Inspect the hoodie/hair draw calls, vertex buffers,
+authored normals, atlas texture, bind groups, pipeline state and final render
+target. Xcode can debug the translated WGSL/Metal shader and individual pixels.
+
+For validation without the full Xcode UI, wgpu 29 exposes the native capture
+hook on `wgpu::Device`:
+
+```rust
+unsafe { device.start_graphics_debugger_capture(); }
+// Record commands, submit the queue, and wait for completion for the frame.
+unsafe { device.stop_graphics_debugger_capture(); }
+```
+
+The capture must surround command recording **and** submission. Put this behind
+a development-only command such as “Capture next GPU frame”; never enable it in
+normal release rendering. If Metal validation diagnostics are needed, launch
+from Xcode or set `METAL_DEVICE_WRAPPER_TYPE=1` for a debug run. An optional
+Apple `gpudebug` command-line tool may be useful for text inspection of a
+`.gputrace`, but check `xcrun --find gpudebug` first—this local Xcode install
+does not currently provide that utility. See Apple's [Metal debugger](https://developer.apple.com/documentation/xcode/metal-debugger)
+and [programmatic Metal capture](https://developer.apple.com/documentation/xcode/capturing-a-metal-workload-programmatically)
+documentation.
+
+Use RenderDoc only for a Linux/Windows Vulkan/OpenGL/D3D capture, or a separate
+Android Vulkan investigation. A MoltenVK portability layer does not make
+RenderDoc a supported macOS/Metal debugger.
