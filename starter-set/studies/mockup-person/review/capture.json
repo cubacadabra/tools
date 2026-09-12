@@ -1,0 +1,148 @@
+{
+  "preset": {
+    "base": "cuba:base/study-person.v1",
+    "displayName": "Mockup art study",
+    "id": "cuba:preset/mockup-person.v1",
+    "parameters": {
+      "primary": "#8354b5",
+      "secondary": "#24384e",
+      "skin": "#b87b4e",
+      "sole": "#f1ebdf"
+    },
+    "parts": [
+      "cuba:hair/study-swept.v1",
+      "cuba:top/study-hoodie.v1",
+      "cuba:bottom/study-denim.v1",
+      "cuba:footwear/study-sneakers.v1"
+    ]
+  },
+  "capture": "production CharacterRenderer; no Studio UI",
+  "referenceCamera": {
+    "yaw": 0.26,
+    "pitch": 0.12,
+    "centerY": 1.62,
+    "orthoHalfHeight": 2.28,
+    "size": [
+      768,
+      960
+    ]
+  },
+  "cases": [
+    {
+      "name": "beauty",
+      "yaw": 0.26,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "front",
+      "yaw": 0.0,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "three-quarter",
+      "yaw": 0.6,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "back",
+      "yaw": 3.14159,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "left",
+      "yaw": 1.570796,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "right",
+      "yaw": -1.570796,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "top",
+      "yaw": 0.0,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "walk",
+      "yaw": 0.6,
+      "pose": "walk",
+      "lod": "near"
+    },
+    {
+      "name": "walk-side",
+      "yaw": 1.57,
+      "pose": "walk",
+      "lod": "near"
+    },
+    {
+      "name": "bend",
+      "yaw": 1.1,
+      "pose": "bend",
+      "lod": "near"
+    },
+    {
+      "name": "jump-stress",
+      "yaw": 0.6,
+      "pose": "jump",
+      "lod": "near"
+    },
+    {
+      "name": "mid",
+      "yaw": 0.6,
+      "pose": "rest",
+      "lod": "mid"
+    },
+    {
+      "name": "far",
+      "yaw": 0.6,
+      "pose": "rest",
+      "lod": "far"
+    }
+  ],
+  "sources": {
+    "artwork/accessories.py": "b6077f60716f4e1bfd16b286907ece372b726f288e833c8a9ab501f7596de6f6",
+    "artwork/build_study.py": "96cc96f096f5895b51c29e7f68f59b39f8b64469aee192b57bc1aac4309ac689",
+    "artwork/clothing.py": "59abdef5aab3ec50876bd346c7558ccc9be7f9fe09aa974f76c5e7ee1a47fab3",
+    "artwork/geometry.py": "a5c53536b1e0e29f044766861eccb262af69298b6fb0cc7631c3ccc555dd514b",
+    "artwork/hair.py": "b39fdd080dcc3349f085b616b780d85528ec0b41857bfab37ec77e91433d2533",
+    "artwork/save_blender.py": "04ac5fb7e96aff4b5793fb01b8c853b401554172823c97e48c55789a84dd1f3e",
+    "artwork/sculpt_curls.py": "4a8a79e2fc6ccda71258bfd7ec2a471dd2ebb0fe2e5df8b5c56093646f021815",
+    "artwork/study_geometry.py": "e57a75a56a6b566efbacb7b57ed3dea9d8a6dd78af8a1d92c749f53d4f7739af",
+    "artwork/study_materials.py": "08f9d5e21ddde2f4d0ec617eea2b9a1bdf32b038ebdc1388fb457e4a1f0679a4",
+    "artwork/validate_study_export.py": "a3bf9f3c339525bd46f6d689d2a3d5dc5fe81d3bcb0dabb891018e62fa48cbd5"
+  },
+  "captureSources": {
+    "src/renderer/character_starter_review.rs": "c3f7305f06ddad2383a8e3a70b19e8c3e3bb446fdfb04420bc46031b7ab806ca",
+    "src/renderer/character_reference_stage.rs": "703cac4e109dc1e44d069649bdc18a19f3f17db7a204714da4933653ea5ed6e4"
+  },
+  "packs": {
+    "cuba:base/study-person.v1": {
+      "bytes": 1381939,
+      "sha256": "466981aefac7b67a39249ed607032709a0f8f77f7a7bf08926bd9f97fe432adb"
+    },
+    "cuba:bottom/study-denim.v1": {
+      "bytes": 919965,
+      "sha256": "6cf901b433343c8475bfefc6bf2a7922a53b8510b8b76c2b14a38396b5fdc284"
+    },
+    "cuba:footwear/study-sneakers.v1": {
+      "bytes": 1927000,
+      "sha256": "bcf3c34f37ab0473c6a1d34a8a3103fe42dfc657d6464d59689ffa271cb19282"
+    },
+    "cuba:hair/study-swept.v1": {
+      "bytes": 1837930,
+      "sha256": "bb974a7eda67749d13c699b31b68ad5bc38e465219a2ea2bc13349bbe99ca605"
+    },
+    "cuba:top/study-hoodie.v1": {
+      "bytes": 1686071,
+      "sha256": "ef7d4b56b631aefd5cbc03b935ad5fea9677e52e893d003c9273f13e0a3e1486"
+    }
+  }
+}

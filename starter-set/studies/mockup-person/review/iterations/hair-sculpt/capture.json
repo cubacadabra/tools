@@ -1,0 +1,100 @@
+{
+  "preset": {
+    "base": "cuba:base/study-person.v1",
+    "displayName": "Mockup art study",
+    "id": "cuba:preset/mockup-person.v1",
+    "parameters": {
+      "primary": "#8354b5",
+      "secondary": "#24384e",
+      "skin": "#b87b4e",
+      "sole": "#f1ebdf"
+    },
+    "parts": [
+      "cuba:hair/study-swept.v1",
+      "cuba:top/study-hoodie.v1",
+      "cuba:bottom/study-denim.v1",
+      "cuba:footwear/study-sneakers.v1"
+    ]
+  },
+  "capture": "production CharacterRenderer; no Studio UI",
+  "referenceCamera": {
+    "yaw": 0.26,
+    "pitch": 0.12,
+    "centerY": 1.62,
+    "orthoHalfHeight": 2.28,
+    "size": [
+      768,
+      960
+    ]
+  },
+  "cases": [
+    {
+      "name": "beauty",
+      "yaw": 0.26,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "front",
+      "yaw": 0.0,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "three-quarter",
+      "yaw": 0.6,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "back",
+      "yaw": 3.14159,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "left",
+      "yaw": 1.570796,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "right",
+      "yaw": -1.570796,
+      "pose": "rest",
+      "lod": "near"
+    },
+    {
+      "name": "top",
+      "yaw": 0.0,
+      "pose": "rest",
+      "lod": "near"
+    }
+  ],
+  "sources": {
+    "artwork/study_geometry.py": "fc80c7cf19ef03a7da1293897a2731404bc08f2550b586ae7897b22337aa4f8c",
+    "artwork/study_materials.py": "cee031304933546691e1e3648f6b14d1d1fff2b3ec312933532c5347652638e3"
+  },
+  "packs": {
+    "cuba:base/study-person.v1": {
+      "bytes": 1381939,
+      "sha256": "593396b16af18e6bbafc8d7a7955e6a10b064246017a2b3825afe320ea0dae5c"
+    },
+    "cuba:bottom/study-denim.v1": {
+      "bytes": 919965,
+      "sha256": "d822eb9c395d0a764ee66cd7c17077b306c5438bda199de78ab42984d40912c5"
+    },
+    "cuba:footwear/study-sneakers.v1": {
+      "bytes": 1897544,
+      "sha256": "37debcd4f76b46cc6579a7e93bc32cec78cb183e0728762cea1976df68c01329"
+    },
+    "cuba:hair/study-swept.v1": {
+      "bytes": 1837930,
+      "sha256": "f23079b0dc059d817bcf49a0e5dce5dabd5d88536d1a521ebbec37f233980037"
+    },
+    "cuba:top/study-hoodie.v1": {
+      "bytes": 1679879,
+      "sha256": "6df8b3132d87661d660c5ba71418f02b6ca32740ad5a0d0fde0812421ce79f48"
+    }
+  }
+}

@@ -39,6 +39,47 @@ def sculpted_mesh(slug, detail):
 
 
 class StarterArtworkTests(unittest.TestCase):
+    def test_study_is_isolated_and_stays_within_existing_delivery_budgets(self):
+        study=ROOT/'studies/mockup-person'
+        preset=json.loads((study/'presets/mockup-person.json').read_text())
+        expected={'base':('study-person',16000),'hair':('study-swept',18000),
+                  'top':('study-hoodie',20000),'bottom':('study-denim',9000),
+                  'footwear':('study-sneakers',20000)}
+        self.assertEqual(preset['id'],'cuba:preset/mockup-person.v1')
+        self.assertEqual(preset['base'],'cuba:base/study-person.v1')
+        self.assertEqual(set(preset['parts']),{f'cuba:{k}/{slug}.v1' for k,(slug,_) in expected.items() if k!='base'})
+        self.assertEqual(preset['parameters'],{'skin':'#b87b4e','primary':'#8354b5',
+                                             'secondary':'#24384e','sole':'#f1ebdf'})
+        for kind,(slug,budget) in expected.items():
+            path=study/f'source/morphs/{kind}/{slug}/{slug}.glb'
+            raw=path.read_bytes(); length=struct.unpack_from('<I',raw,12)[0]
+            doc=json.loads(raw[20:20+length])
+            manifest=json.loads(path.with_suffix('.morph.json').read_text())
+            counts={m['name']:sum(doc['accessors'][p['indices']]['count']//3 for p in m['primitives'])
+                    for m in doc['meshes']}
+            with self.subTest(asset=slug):
+                self.assertEqual(counts,manifest['asset']['lod'])
+                self.assertLessEqual(counts['near'],budget)
+                self.assertLessEqual(counts['mid'],int(budget*.32))
+                self.assertLessEqual(counts['far'],int(budget*.07))
+                self.assertGreater(counts['near'],counts['mid'])
+                self.assertGreater(counts['mid'],counts['far'])
+                if kind!='base':
+                    self.assertEqual(manifest['asset']['supportedBases'],[preset['base']])
+
+    def test_standalone_study_tints_are_linear_gltf_factors(self):
+        for kind,slug,srgb in [('base','study-person',(184,123,78)),('top','study-hoodie',(131,84,181))]:
+            path=ROOT/f'studies/mockup-person/source/morphs/{kind}/{slug}/{slug}.glb'
+            raw=path.read_bytes(); length=struct.unpack_from('<I',raw,12)[0]
+            doc=json.loads(raw[20:20+length]); found=0
+            for mat in doc['materials']:
+                if not mat.get('extras',{}).get('cubaUseAvatarTint'): continue
+                found+=1
+                for actual,channel in zip(mat['pbrMetallicRoughness']['baseColorFactor'],srgb):
+                    c=channel/255
+                    self.assertAlmostEqual(actual,c/12.92 if c<=.04045 else ((c+.055)/1.055)**2.4)
+            self.assertGreater(found,0)
+
     def test_every_source_lod_exports_authored_unit_normals(self):
         paths=list((ROOT/'source/morphs').rglob('*.glb'))
         paths+=list((ROOT/'studies/mockup-person/source/morphs').rglob('*.glb'))

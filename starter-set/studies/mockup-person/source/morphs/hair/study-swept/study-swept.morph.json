@@ -19,9 +19,9 @@
       "chestnut-swept-hair-001"
     ],
     "lod": {
-      "near": 18000,
-      "mid": 5760,
-      "far": 1260
+      "near": 17924,
+      "mid": 5734,
+      "far": 1254
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

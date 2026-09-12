@@ -1,0 +1,116 @@
+{
+  "blender": "5.2.1 LTS",
+  "assets": [
+    {
+      "file": "source/morphs/base/study-person/study-person.glb",
+      "sha256": "fd8e2c994f103a9c575cd8c49a96956c83136dbf46db47f0272fad75124b8199",
+      "triangles": 16000,
+      "vertices": 10155,
+      "boundsZUp": [
+        [
+          -0.8163641691207886,
+          -0.4019140601158142,
+          0.05036050081253052
+        ],
+        [
+          0.8155876398086548,
+          0.4284648299217224,
+          3.153982639312744
+        ]
+      ],
+      "authoredNormals": true,
+      "uvs": true,
+      "embeddedTextures": true
+    },
+    {
+      "file": "source/morphs/bottom/study-denim/study-denim.glb",
+      "sha256": "24d3ae27c4621d9790fc5d8f8e6094e276fb058d76eed1fec7d41f69b7a5eb25",
+      "triangles": 9000,
+      "vertices": 6047,
+      "boundsZUp": [
+        [
+          -0.4705307185649872,
+          -0.25527775287628174,
+          0.5680009126663208
+        ],
+        [
+          0.47282037138938904,
+          0.25985854864120483,
+          1.209997534751892
+        ]
+      ],
+      "authoredNormals": true,
+      "uvs": true,
+      "embeddedTextures": true
+    },
+    {
+      "file": "source/morphs/footwear/study-sneakers/study-sneakers.glb",
+      "sha256": "75f45f17148db8bbf98ce8232f86b81ee7b0fc23192f2fa3e4c8db6c8249ba35",
+      "triangles": 20000,
+      "vertices": 15732,
+      "boundsZUp": [
+        [
+          -0.4647025763988495,
+          -0.2368859201669693,
+          0.02862340770661831
+        ],
+        [
+          0.4648709297180176,
+          0.5149152874946594,
+          0.4400644898414612
+        ]
+      ],
+      "authoredNormals": true,
+      "uvs": true,
+      "embeddedTextures": true
+    },
+    {
+      "file": "source/morphs/hair/study-swept/study-swept.glb",
+      "sha256": "a59cc6520105c3ab609c08f019d0f41fc28c8f0caab7fcff62f4737c22a34d45",
+      "triangles": 17924,
+      "vertices": 15266,
+      "boundsZUp": [
+        [
+          -0.5563939809799194,
+          -0.4814917743206024,
+          2.519914150238037
+        ],
+        [
+          0.5721701383590698,
+          0.4815201759338379,
+          3.3275251388549805
+        ]
+      ],
+      "authoredNormals": true,
+      "uvs": true,
+      "embeddedTextures": true
+    },
+    {
+      "file": "source/morphs/top/study-hoodie/study-hoodie.glb",
+      "sha256": "208693ab5a4aab4b167d623b8935fcf051693bc98da51154484196301d09e4cb",
+      "triangles": 20000,
+      "vertices": 13098,
+      "boundsZUp": [
+        [
+          -0.8103659152984619,
+          -0.4093080461025238,
+          1.0269999504089355
+        ],
+        [
+          0.8103659152984619,
+          0.390246719121933,
+          2.2759783267974854
+        ]
+      ],
+      "authoredNormals": true,
+      "uvs": true,
+      "embeddedTextures": true
+    }
+  ],
+  "portableGlb": {
+    "file": "mockup-person.glb",
+    "sha256": "946cf3334a64de5b79933f20684f30ca1748b2c6f65338fb6da61d2bbb481d56",
+    "freshReimport": "five parts, triangle counts, evaluated bounds, normals and UVs match"
+  },
+  "status": "geometry, materials, skin and normals imported; visual inspection required"
+}

@@ -37,6 +37,20 @@ def join(objects,name):
     bpy.context.view_layer.objects.active=objects[0]
     bpy.ops.object.join()
     obj=bpy.context.object; obj.name=name
+    if name=='study-swept':
+        # Sculpt the intersecting foundation/lock roots into one hair volume.
+        # The same Near/Mid/Far delivery ceilings still apply below. A union
+        # removes internal contact seams; it does not add painted shadows.
+        union=obj.modifiers.new('Continuous sculpted hair roots','REMESH')
+        union.mode='VOXEL'; union.voxel_size=.006
+        union.use_smooth_shade=True
+        bpy.ops.object.modifier_apply(modifier=union.name)
+        soften=obj.modifiers.new('Relax voxel surface','SMOOTH')
+        soften.factor=.65; soften.iterations=3
+        bpy.ops.object.modifier_apply(modifier=soften.name)
+        group=obj.vertex_groups.get('2') or obj.vertex_groups.new(name='2')
+        group.add(list(range(len(obj.data.vertices))),1.,'REPLACE')
+        for polygon in obj.data.polygons: polygon.use_smooth=True
     # Recalculate consistent winding before UVs and delivery reduction.
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
@@ -82,6 +96,10 @@ def write_glb(path,lods,image):
     for mat in lods['near'].data.materials:
         tint=bool(mat.get('cubaUseAvatarTint',False))
         default=([184/255,123/255,78/255,1] if mat.name.startswith('Warm skin') else [131/255,84/255,181/255,1]) if tint else [1,1,1,1]
+        # glTF factors are linear, whereas the editor palette is display sRGB.
+        # The runtime substitutes its live palette for these tintable surfaces;
+        # standalone GLB viewers need the correctly encoded default factor.
+        default=[c/12.92 if c<=.04045 else ((c+.055)/1.055)**2.4 for c in default[:3]]+[default[3]]
         materials.append({'name':mat.name,'extras':{'cubaUseAvatarTint':bool(mat.get('cubaUseAvatarTint',False))},
                           'pbrMetallicRoughness':{'baseColorFactor':default, 'baseColorTexture':{'index':0},
                                                    'roughnessFactor':mat.get('roughness',.86),'metallicFactor':0}})
@@ -183,6 +201,7 @@ def main():
         reduction=obj.modifiers.new('Near delivery budget','DECIMATE')
         reduction.ratio=min(1.,targets[kind]/len(obj.data.loop_triangles))
         bpy.ops.object.modifier_apply(modifier=reduction.name)
+        remove_collapsed_details(obj)
         lods={'near':obj}
         for level,ratio in [('mid',.32),('far',.07)]:
             low=obj.copy(); low.data=obj.data.copy(); bpy.context.collection.objects.link(low)

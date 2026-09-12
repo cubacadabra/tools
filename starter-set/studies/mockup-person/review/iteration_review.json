@@ -1,0 +1,51 @@
+{
+  "contract": {
+    "reference": "User-supplied web.png, character in the center viewport; unseen back/top are inferred",
+    "preset": "cuba:preset/mockup-person.v1",
+    "scope": "One isolated study; no other starter replacement, upload, renderer architecture or format changes",
+    "budgets": {"base": 16000, "hair": 18000, "top": 20000, "bottom": 9000, "footwear": 20000},
+    "invariants": ["Exact palette and four parts; no glasses", "Authored corner normals", "Shared production GPU draw path", "Fixed hero camera, rest pose and stage", "Multiview and joint-stress review", "Fresh exported-GLB import"]
+  },
+  "baseline": {
+    "toolsCommit": "087db67",
+    "capture": "iterations/baseline/beauty/mockup-person.png",
+    "manifest": "iterations/baseline/capture.json"
+  },
+  "requirements": [
+    {"id": "presentation", "status": "pass", "evidence": "Fixed exact-preset capture; complete shoes and platform visible. Existing opaque pipeline only; no real-time shadows added."},
+    {"id": "hair", "status": "fail", "evidence": "Foundation now covers the beveled head and intersecting roots are united. Front silhouette improved, but side/back locks remain too regular and fused; top has deep root creases. Not yet reference fidelity."},
+    {"id": "hoodie", "status": "pass", "evidence": "Static silhouette has slimmer tapered sleeves, tucked shoulders, a pulled-in waistband and smaller hood. Surface-fitted pocket no longer floats; slight edge aliasing remains. Animation is a separate failed gate."},
+    {"id": "fabric", "status": "pass", "evidence": "Broad fleece/dye variation now reads at the fixed runtime scale. Denim is deeper indigo with lower-contrast seams. No claim that individual fibers survive the 256px runtime atlas."},
+    {"id": "footwear", "status": "pass", "evidence": "All four lace rows sit on the leather upper; corrected socks cover the calves without hiding the laces. Visible in hero, side and walk views."},
+    {"id": "deformation", "status": "fail", "evidence": "Existing elbow/jump stress views show rigid sleeves and hand fit defects. Not a topology-budget problem."},
+    {"id": "export", "status": "pass", "evidence": "Five source GLBs fresh-imported; assembled portable GLB exported and fresh-imported again. Triangle counts, evaluated rest bounds, UVs and custom normals match. See fresh-import/report.json and its six rendered views."}
+  ],
+  "iterations": [
+    {"id": "hair-fit", "defect": "Helmet volume and side locks cutting into scalp", "repair": "Reduce head width/depth 5%/3%, narrow front locks and orient side ribbons tangentially", "decision": "reject alone", "evidence": "iterations/hair-fit: exposed head corners revealed the ellipsoidal foundation mismatch"},
+    {"id": "hair-foundation", "defect": "Head upper corners exposed", "repair": "Rounded-box crown envelope instead of spherical radius falloff", "decision": "retain fit but refine", "evidence": "iterations/hair-foundation: no exposed skin, but overly visible flat crown"},
+    {"id": "hair-crown", "defect": "Side/back roots buried in new foundation", "repair": "Raise curved roots over the crown and lift the front foundation edge", "decision": "retain paths but refine", "evidence": "iterations/hair-crown: covered crown, intersecting roots remain"},
+    {"id": "hair-sculpt", "defect": "Interpenetrating root seams", "repair": "Voxel union and modest surface relaxation before UV bake; unchanged delivery ceilings", "decision": "keep as intermediate art candidate", "evidence": "iterations/hair-sculpt: cleaner joined front/side roots, residual top creasing recorded"},
+    {"id": "hoodie-fit", "defect": "Inflated sleeves and floating pocket", "repair": "Measured loft changes and ray-fitted subdivided pocket panel", "decision": "keep", "evidence": "iterations/hoodie-fit: improved front/side/back static fit"},
+    {"id": "fabric-scale", "defect": "Fine-only fleece and uniform navy denim", "repair": "Two-scale material variation, indigo dye and chestnut color tuning", "decision": "keep", "evidence": "iterations/fabric-scale: cloth variation visible at identical camera and runtime resolution"},
+    {"id": "sneaker-fit", "defect": "Three lace rows occluded by socks", "repair": "Surface-fit laces and narrow sock envelope", "decision": "reject sock offset, retain fitted laces", "evidence": "iterations/sneaker-fit: laces improved but front calves exposed through socks"},
+    {"id": "final-fit", "defect": "Calf/sock overlap and shoulder gap in walk", "repair": "Recenter socks around calves, move lace rows onto vamp, bury shoulder tips farther inside torso; correct standalone glTF tint factors", "decision": "keep as review candidate, not production replacement", "evidence": "beauty, walk-side, six fresh-import views; bend and jump-stress still fail"}
+  ],
+  "result": {
+    "runtimeCapture": "beauty/mockup-person.png",
+    "runtimeManifest": "capture.json",
+    "portableGlb": "../mockup-person.glb",
+    "triangles": {"near": 82924, "mid": 26534, "far": 5653},
+    "packBytes": 7752905,
+    "overall": "Improved static art candidate. Reference hair fidelity and articulated garment/limb deformation remain failed gates. No publishing or starter replacement."
+  },
+  "verification": {
+    "toolsTests": "36 passed, including source normals, unchanged LOD ceilings and linear standalone tint factors",
+    "rustWorkspaceTests": "190 passed; two opt-in GPU tests ignored by the normal suite",
+    "explicitGpuCaptures": "13 current reference/multiview/motion/LOD cases passed admission and authored-normal assertions",
+    "studioParity": "repro-studio/mockup-person.png is byte-identical to beauty/mockup-person.png despite conflicting external portrait/scale/yaw/pitch/pose/LOD controls",
+    "buildChecks": ["wasm32-unknown-unknown with web-renderer", "host with studio-ui and android-backends"],
+    "mobileRuntime": "not measured on devices",
+    "freshImport": "Five source parts and portable combined GLB validated; six views visually inspected",
+    "diffCheck": "tools and rust passed; studio repository unchanged"
+  }
+}

@@ -5,6 +5,7 @@ The study intentionally has its own assets so it cannot change other starters.
 """
 import math
 import bpy
+from mathutils import Vector
 from .geometry import Mesh, bezier, sweep, lock, power, profile as taper_profile, ellipsoid, TAU
 
 
@@ -97,6 +98,12 @@ def body(m):
         object_from_mesh('Graphic oval eye',eye,m['ink'],2,objects)
     tube('Sculpted smile',((-.16,2.613,-.423),(-.083,2.453,-.432),
                             (.083,2.453,-.432),(.16,2.613,-.423)),.012,m['ink'],2,objects)
+    # Reduce the head envelope together with its face, keeping the fitted hair
+    # clearance below. Do not shrink the eye/mouth depths independently.
+    for obj in objects:
+        for vertex in obj.data.vertices:
+            vertex.co.x *= .95
+            vertex.co.y *= .97
     volume('Neck', (0, 2.23, 0), (.33, .35, .32), .10, m['skin'], 1, objects)
     volume('Covered torso', (0, 1.60, 0), (.72, .80, .44), .15, m['skin'], 1, objects)
     for side, upper, lower, hand, thigh, calf in [(-1,3,4,5,9,10),(1,6,7,8,12,13)]:
@@ -116,27 +123,27 @@ def body(m):
 
 def hoodie(m):
     objects=[]
-    shell('Fleece body', [(-.55,.47,.315),(-.43,.50,.34),(-.18,.505,.355),
-                         (.17,.51,.335),(.35,.43,.27),(.49,.235,.185)],
-          (0,1.72,0), .48, m['fleece'], 1, objects, folds=.015)
-    shell('Rib knit waistband', [(-.065,.470,.330),(-.045,.490,.348),(.038,.511,.365),(.060,.505,.362)],
+    torso=shell('Fleece body', [(-.55,.443,.297),(-.43,.469,.318),(-.18,.489,.335),
+                         (.17,.512,.318),(.35,.431,.254),(.49,.235,.180)],
+          (0,1.72,0), .48, m['fleece'], 1, objects, folds=.012)
+    shell('Rib knit waistband', [(-.065,.440,.296),(-.045,.454,.313),(.038,.475,.332),(.060,.470,.327)],
           (0,1.185,0), .48, m['rib'], 1, objects, rib=1)
     for side, joint in [(-1,3),(1,6)]:
-        sleeve = shell('Relaxed sleeve', [(-.56,.16,.18),(-.46,.185,.205),(-.20,.22,.24),
-                                        (.24,.224,.24),(.35,.16,.18),(.43,.09,.11),(.48,.008,.008)],
-                       (side*.585,1.62,0), .75, m['fleece'], joint, objects, folds=.009)
+        sleeve = shell('Relaxed sleeve', [(-.56,.153,.171),(-.46,.169,.188),(-.20,.190,.213),
+                                        (.20,.202,.215),(.31,.152,.180),(.38,.09,.11),(.44,.008,.008)],
+                       (side*.55,1.62,0), .75, m['fleece'], joint, objects, folds=.008)
         # A gently flared relaxed arm, no spherical shoulder pad.
         for vertex in sleeve.data.vertices:
-            vertex.co.x += side*(.075*max(0,(1.90-vertex.co.z)/.9)-.065*max(0,(vertex.co.z-1.8)/.30))
-        shell('Rib knit cuff',[(-.048,.163,.18),(-.03,.177,.196),(.04,.179,.197),(.06,.165,.184)],
-              (side*.65,1.075,0), .7, m['rib'], joint, objects, rib=1)
+            vertex.co.x += side*(.095*max(0,(1.90-vertex.co.z)/.9)-.20*max(0,(vertex.co.z-1.82)/.26))
+        shell('Rib knit cuff',[(-.048,.153,.171),(-.03,.167,.187),(.04,.169,.188),(.06,.155,.175)],
+              (side*.638,1.075,0), .7, m['rib'], joint, objects, rib=1)
     # A hollow fabric hood draped behind the neck, with a rolled open edge.
     mesh=Mesh()
     def hood_surface(u,v):
         a=u*TAU
-        rx=.22+.15*math.sin(v*math.pi*.80)
-        rz=.19+.15*math.sin(v*math.pi*.85)
-        return (rx*math.sin(a), 2.18-.38*v+.055*math.cos(a), .105-rz*math.cos(a)+.19*v)
+        rx=.22+.10*math.sin(v*math.pi*.80)
+        rz=.18+.09*math.sin(v*math.pi*.85)
+        return (rx*math.sin(a), 2.18-.29*v+.055*math.cos(a), .065-rz*math.cos(a)+.11*v)
     rings=mesh.grid(hood_surface,72,30)
     mesh.cap(rings[-1])
     object_from_mesh('Lowered hollow hood',mesh,m['fleece'],1,objects)
@@ -145,30 +152,43 @@ def hoodie(m):
     loop(rim, lambda t:(.235*math.sin(t*TAU),2.188+.052*math.cos(t*TAU),.105-.20*math.cos(t*TAU)),
          .036,3,outward=(0,1,0))
     object_from_mesh('Rolled hood opening',rim,m['rib'],1,objects)
-    # The kangaroo pocket is a thin fitted panel with shaped entry corners.
-    outline=[(-.32,1.28),(-.35,1.34),(-.23,1.55),(.23,1.55),(.35,1.34),(.32,1.28)]
+    # Fit a subdivided cloth panel to the actual torso surface. The previous
+    # six-point plane hovered above the curved body and left a dark jagged gap.
+    def pocket_point(x,y,offset=.011):
+        hit,location,_,_=torso.ray_cast(Vector((x,2.,y)),Vector((0,-1,0)))
+        assert hit, ('pocket misses torso',x,y)
+        return (x,y,-location.y-offset)
     mesh=Mesh()
-    front=[mesh.vertex((x,y,-.37-.009*math.cos(x*4))) for x,y in outline]
-    back=[mesh.vertex((x,y,-.329)) for x,y in outline]
-    mesh.cap(front,reverse=True)
-    mesh.cap(back)
-    for i in range(6):
-        j=(i+1)%6
-        mesh.face(front[i],front[j],back[i]); mesh.face(front[j],back[j],back[i])
-    pocket=object_from_mesh('Kangaroo pocket',mesh,m['fleece'],1,objects)
-    bpy.context.view_layer.objects.active=pocket
-    bevel=pocket.modifiers.new('Soft pocket edge','BEVEL'); bevel.width=.014; bevel.segments=3
-    bpy.ops.object.modifier_apply(modifier=bevel.name)
+    layers=[]; rows=18; columns=28
+    for back in (False,True):
+        grid=[]
+        for j in range(rows+1):
+            v=j/rows; y=1.275+.275*v
+            width=.323+.025*min(1.,v/.20)-.115*max(0.,(v-.20)/.80)
+            grid.append([mesh.vertex(pocket_point((2*i/columns-1)*width,y,
+                          -.003 if back else .008+.006*math.sin(math.pi*v)*math.sin(math.pi*i/columns)))
+                         for i in range(columns+1)])
+        for j in range(rows):
+            for i in range(columns):
+                a,b,c,d=grid[j][i],grid[j][i+1],grid[j+1][i],grid[j+1][i+1]
+                mesh.face(a,c,b) if back else mesh.face(a,b,c)
+                mesh.face(b,c,d) if back else mesh.face(b,d,c)
+        border=grid[0]+[r[-1] for r in grid[1:]]+list(reversed(grid[-1][:-1]))+[r[0] for r in reversed(grid[1:-1])]
+        layers.append(border)
+    for i,a in enumerate(layers[0]):
+        j=(i+1)%len(layers[0]); b=layers[0][j]; c=layers[1][i]; d=layers[1][j]
+        mesh.face(a,c,b); mesh.face(b,c,d)
+    object_from_mesh('Fitted kangaroo pocket',mesh,m['fleece'],1,objects)
     for side in (-1,1):
-        tube('Pocket hand opening',((side*.23,1.535,-.380),(side*.265,1.49,-.393),
-                                   (side*.31,1.39,-.387),(side*.34,1.345,-.378)), .009,m['seam'],1,objects)
-        tube('Double pocket topstitch',((side*.215,1.519,-.386),(side*.249,1.476,-.394),
-                                        (side*.30,1.375,-.389),(side*.323,1.344,-.383)), .0035,m['stitch'],1,objects)
+        tube('Pocket hand opening',tuple(pocket_point(side*x,y,.013) for x,y in
+             ((.232,1.539),(.262,1.480),(.308,1.388),(.343,1.334))),.006,m['seam'],1,objects)
+        tube('Double pocket topstitch',tuple(pocket_point(side*x,y,.017) for x,y in
+             ((.219,1.535),(.249,1.476),(.295,1.386),(.329,1.333))),.003,m['stitch'],1,objects)
         tube('Cotton drawcord',((side*.135,2.195,-.129),(side*.158,2.08,-.307),
                                (side*.15,1.94,-.378),(side*.15,1.775,-.376)), .012,m['cotton'],1,objects)
         volume('Drawcord aglet',(side*.15,1.765,-.377),(.031,.068,.027),.008,m['cotton'],1,objects,1)
-    tube('Pocket hem stitch',((-.285,1.293,-.383),(-.1,1.282,-.388),
-                              (.1,1.282,-.388),(.285,1.293,-.383)),.0035,m['stitch'],1,objects)
+    tube('Pocket hem stitch',tuple(pocket_point(x,y,.012) for x,y in
+         ((-.307,1.286),(-.1,1.282),(.1,1.282),(.307,1.286))),.003,m['stitch'],1,objects)
     return objects
 
 
@@ -211,16 +231,22 @@ def sneakers(m):
             return (x+rx*power(math.sin(a),.60),y,z)
         rings=upper.grid(leather,64,32,reverse=True)
         upper.cap(rings[0]); upper.cap(rings[-1],reverse=True)
-        object_from_mesh('Shaped leather upper',upper,m['leather'],joint,objects)
+        upper_obj=object_from_mesh('Shaped leather upper',upper,m['leather'],joint,objects)
         volume('Padded tongue',(x,.365,-.02),(.225,.115,.225),.040,m['leather'],joint,objects,2)
-        shell('Ribbed white sock',[(-.10,.195,.215),(.04,.20,.218),(.07,.193,.211)],
-              (x,.35,.005),.50,m['sock'],calf,objects,rib=1)
+        shell('Ribbed white sock',[(-.09,.177,.182),(.055,.182,.187),(.08,.178,.183)],
+              (x,.35,-.010),.50,m['sock'],calf,objects,rib=1)
+        def lace_point(px,pz,offset=.013):
+            hit,location,_,_=upper_obj.ray_cast(Vector((px,-pz,1.)),Vector((0,0,-1)))
+            assert hit, ('lace misses leather',px,pz)
+            return (px,location.z+offset,pz)
         for k in range(4):
-            z=-.255+k*.064; y=.31+k*.021
-            tube('Flat woven laces',((x-.122,y,z),(x-.066,y+.022,z-.012),
-                                     (x+.061,y+.022,z+.012),(x+.122,y,z)),.009,m['cotton'],joint,objects, .014)
+            z=-.380+k*.054
+            tube('Flat woven laces',tuple(lace_point(px,pz) for px,pz in
+                 ((x-.122,z),(x-.061,z-.009),(x+.061,z+.009),(x+.122,z))),
+                 .010,m['cotton'],joint,objects,.007)
             for sign in (-1,1):
-                volume('Reinforced eyelet',(x+sign*.13,y-.012,z),(.040,.019,.04),.008,m['rubber'],joint,objects,1)
+                volume('Reinforced eyelet',lace_point(x+sign*.129,z,.004),
+                       (.032,.015,.030),.006,m['rubber'],joint,objects,1)
         for sign in (-1,1):
             tube('Leather panel stitching',((x+sign*.171,.18,-.34),(x+sign*.212,.19,-.18),
                                              (x+sign*.207,.28,.04),(x+sign*.135,.315,.10)),.0035,m['shoe-thread'],joint,objects)
@@ -228,15 +254,30 @@ def sneakers(m):
             z=-.43+k*.036
             for sign in (-1,1):
                 volume('Outsole siping',(x+sign*.217,.086,z),(.006,.053,.009),.002,m['shoe-thread'],joint,objects,0)
+        for k in range(7):
+            volume('Toe outsole siping',(x-.126+k*.042,.086,-.508),
+                   (.007,.047,.006),.002,m['shoe-thread'],joint,objects,0)
     return objects
 
 
 def hair(m):
-    from .hair import scalp
     objects=[]
     cap=Mesh()
-    scalp(cap,3,rx=.51,rz=.435,top=.51,back=-.22,front=.36)
-    cap.vertices=[(x,y+2.70,z) for x,y,z in cap.vertices]
+    # The base is a beveled box, not an ellipsoid. A spherical crown shrinks
+    # too quickly near the top and exposes the head's flat upper corners.
+    from .geometry import smooth
+    def foundation(u,v):
+        angle=u*TAU
+        facing=smooth((math.cos(angle)-.15)/.7)
+        bottom=-.18*(1-facing)+.415*facing+.13*abs(math.sin(angle))**8
+        y=.505-(.505-bottom)*v
+        roundness=math.sqrt(max(0.,1-(max(0.,y-.315)/.190)**2))
+        rx=.302+.190*roundness
+        rz=.232+.190*roundness
+        return (rx*power(math.sin(angle),.55),y+2.70,-rz*power(math.cos(angle),.55))
+    rings=cap.grid(foundation,72,28)
+    cap.cap(rings[0],reverse=True)
+    cap.cap(rings[-1])
     object_from_mesh('Fitted swept foundation',cap,m['hair'],2,objects)
     # The crown parts off-centre. Locks flow away from that part in two fans;
     # each fan layers pointed tips down to the temple instead of crossing as
@@ -250,29 +291,41 @@ def hair(m):
         ((.12,.52,.04),(.42,.64,.02),(.54,.29,-.23),(.53,-.06,-.105),.12,.06),
         ((.15,.46,-.21),(.28,.49,-.41),(.345,.24,-.485),(.35,.075,-.403),.108,.053),
     ]
-    # Back layers matter when turning the character in the editor.
+    # Side ribbons must be tangential to the head, not front-facing ribbons
+    # cutting through the cap. Their bowed paths clear the fitted foundation.
     for side in (-1,1):
         for k in range(5):
-            z=.10+k*.073
-            paths.append(((side*.05,.51,z*.65),(side*.32,.64,z),
-                          (side*.53,.21,z*.82),(side*.47,-.22,z*.75),.105,.052))
+            z=-.075+k*.086
+            paths.append(((.12+side*.025,.55,z*.55),(side*.64,.72,z),
+                          (side*.61,.06,z*.96),(side*.477,-.17+.022*(k%3),z*.84),
+                          .078+.006*(k%3),.046))
     for k in range(9):
         x=-.40+k*.10
-        paths.append(((x*.55,.49,.20),(x*.92,.42,.50),
-                      (x,.02,.47),(x*.96,-.25,.405),.085,.045))
+        paths.append(((x*.55,.55,.16),(x*.92,.65,.54),
+                      (x,.02,.49),(x*.94,-.22+.018*(k%3),.417),.072+.004*(k%2),.039))
     for index,(*p,width,depth) in enumerate(paths):
         mesh=Mesh()
-        points=[(x,y+2.70,z) for x,y,z in p]
-        shape=(.32,.85,1.,.78,.38,.007)
+        points=[(x*.96,y*.96+2.70,z*.97) for x,y,z in p]
+        if index<7:
+            width *= .84
+            depth *= .87
+        shape=(.24,.80,1.,.71,.25,.004)
+        if index<7:
+            guide=(0,0,-1)
+        elif index<17:
+            side=-1 if index<12 else 1
+            guide=(side, .12, p[-1][2]*1.4)
+        else:
+            guide=(p[-1][0]*.5,0,1)
         sweep(mesh,lambda t:bezier(points,t),lambda t:width*taper_profile(shape,t),
               lambda t:depth*taper_profile(shape,t),3,
-              outward=(0,0,-1) if index<7 else (0,0,1),grooves=.16)
+              outward=guide,grooves=.08)
         object_from_mesh(f'Sculpted swept lock {index:02}',mesh,m['hair'],2,objects)
         if index<7:
             strand=Mesh()
             # A raised, finer ridge follows the full clump, tucked into its
             # volume. It adds a second highlight without outlining each hair.
-            smaller=[(px+.028,py+.012,pz-.029) for px,py,pz in points]
-            lock(strand,smaller,width*.40,depth*.32,3)
+            smaller=[(px+.016,py+.008,pz-.019) for px,py,pz in points]
+            lock(strand,smaller,width*.30,depth*.23,3)
             object_from_mesh(f'Fine swept ridge {index:02}',strand,m['hair'],2,objects)
     return objects
