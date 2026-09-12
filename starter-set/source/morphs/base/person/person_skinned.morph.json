@@ -20,13 +20,14 @@
       "face"
     ],
     "lod": {
-      "near": 28560,
-      "mid": 7480,
+      "near": 40800,
+      "mid": 10608,
       "far": 1360
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
-      "material.cuba-pbr.v1"
+      "material.cuba-pbr.v1",
+      "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "person_skinned.glb"

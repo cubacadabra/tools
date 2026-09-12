@@ -30,7 +30,8 @@
       "far": 1152
     },
     "requiredCapabilities": [
-      "mesh.rigid.v1"
+      "mesh.rigid.v1",
+      "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "headphones.glb"

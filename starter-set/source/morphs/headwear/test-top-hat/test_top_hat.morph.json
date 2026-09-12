@@ -30,7 +30,8 @@
       "far": 1056
     },
     "requiredCapabilities": [
-      "mesh.rigid.v1"
+      "mesh.rigid.v1",
+      "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "test_top_hat.glb"

@@ -23,13 +23,14 @@
       "bottom"
     ],
     "lod": {
-      "near": 4632,
-      "mid": 1664,
+      "near": 6316,
+      "mid": 2032,
       "far": 578
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
-      "material.cuba-pbr.v1"
+      "material.cuba-pbr.v1",
+      "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "person_bottom.glb"

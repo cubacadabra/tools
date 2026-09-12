@@ -66,7 +66,10 @@ platform matrix are in [README.md](README.md#mac-gpu-debugging).
 
 1. Inspect existing sources, the supplied reference, and any study README and
    review ledger before editing. Label assumptions about unseen views.
-2. Keep procedural changes in the durable `artwork/` Python source. Editing
+2. Keep procedural changes in the durable `artwork/` Python source. The shared
+   `artwork/material_textures.py` generator owns the small deterministic color
+   atlases used by every starter GLB; do not hand-edit generated atlas PNGs.
+   Editing
    only a generated GLB or local `.blend` loses the change on regeneration.
    Preserve unrelated user work and check the generator's overwrite scope.
 3. Freeze an actual runtime baseline: exact preset, equipment, palette, pose,

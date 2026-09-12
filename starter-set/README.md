@@ -1,9 +1,11 @@
 # Cubacadabra starter morphs
 
 The runtime now requires [morph pack v5](../../rust/docs/morph-pack-v5.md)
-with authored normals; rebuild old local releases before use. A separate
-[single-character mockup study](studies/mockup-person/README.md) explores higher
-art detail without replacing the existing recipes.
+with authored normals; rebuild old local releases before use. The reusable
+starter parts now use the same presentation-oriented export contract as the
+mockup study: authored normals and UVs, embedded color atlases, and explicit
+Near/Mid/Far delivery meshes. The [single-character mockup study](studies/mockup-person/README.md)
+remains the visual reference for future art passes.
 
 This is the editable source of truth for Studio's 24 starter people and their
 reusable parts. A starter is an appearance recipe, not a new mesh or a kind of
@@ -15,8 +17,9 @@ editable afterward. Changing one recipe never changes another recipe.
 - `catalog.json`: component manifests, starter ordering, and builtin exclusions.
 - `presets/person-01.json` through `person-24.json`: complete appearance recipes.
 - `source/morphs/`: editable GLB geometry and `.morph.json` manifests. The GLB
-  files contain the geometry, materials, and three LODs needed by the build and
-  runtime; Blender `.blend` authoring files are intentionally not committed.
+  files contain geometry, authored normals, UVs, embedded materials/textures,
+  and three LODs needed by the build and runtime; Blender `.blend` authoring
+  files are intentionally not committed.
 - `artwork/`: authored curves, wearable construction, and curly-hair sculpting.
 - `presets/thumbnails/`: full-character previews rendered by the engine.
 
@@ -76,8 +79,9 @@ when a production release is intended.
 The artwork is real source geometry, not painted thumbnails. Floppy hair uses
 layered tapered curves; curls/coils are voxel-unioned, relaxed sculpted meshes;
 glasses have continuous rims; headphones have a padded arch and fitted cups.
-Bodies and clothing have welded shading seams and separate delivery LODs.
-Polo fabric follows the preset's `primary` color while keeping its logo/trim.
+Bodies and clothing have welded shading seams, modeled secondary construction,
+embedded color atlases, and separate delivery LODs. Polo fabric follows the
+preset's `primary` color while keeping its logo/trim.
 
 Run from `tools/`:
 
@@ -100,8 +104,10 @@ the selected source files**, including manual edits. Generate local `.blend` fil
 with `--blend` when hand-editing the model. Keep all three LOD node names, the
 head-local origin (for rigid wearables), and the existing rig (for skinned
 clothing). Export GLB with hidden LODs included and Custom Properties enabled so
-material avatar-tint flags survive. Update sidecar triangle counts when geometry
-changes. The checked-in GLBs remain the source assets.
+material avatar-tint flags survive. The generator also refreshes the deterministic
+atlases in `assets/` and embeds them in each GLB; do not edit those generated PNGs
+by hand. Update sidecar triangle counts when geometry changes. The checked-in
+GLBs remain the source assets.
 
 After changing geometry or a recipe, build, render the actual composed people,
 then build/publish locally again so the new preview hashes enter the release:
@@ -140,8 +146,9 @@ two glasses styles, and hearing aids. The artwork uses a consistent rounded toy
 style; it is not a claim to represent every child or an art-complete diversity
 roster. Presentation-detail hair/accessory LOD budgets stay below
 17,000/7,000/2,000 triangles; the skinned body remains bounded below
-30,000/8,000/1,400. Authored normals and material interpretation are shared
-across renderer targets.
+41,000/11,000/1,400 and the reusable wardrobe below 16,000/5,000/1,400 per
+part. Authored normals, UVs, embedded color atlases, and material
+interpretation are shared across renderer targets.
 
 The two bodies currently share a build. More body shapes, culturally varied
 hair/clothing, mobility devices, prostheses, and seated rigs still need proper

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from artwork import hair, accessories
 from artwork.geometry import add, cross, sub, unit
+from artwork.material_textures import ensure as ensure_material_textures
 
 ROOT = Path(__file__).resolve().parent
 
@@ -33,14 +34,22 @@ ASSETS = [
 ]
 
 
-def write_glb(path, lods, materials):
+def write_glb(path, lods, materials, texture_kind="cotton"):
+    texture_names = ensure_material_textures()
     binary, views, accessors, meshes, nodes = bytearray(), [], [], [], []
-    def accessor(values, fmt, component, kind, target):
-        while len(binary) % 4: binary.append(0)
+    def add_blob(data, target=None):
+        while len(binary) % 4:
+            binary.append(0)
         offset = len(binary)
-        binary.extend(b"".join(struct.pack(fmt, *v) for v in values))
-        views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(binary)-offset, "target": target})
-        item = {"bufferView": len(views)-1, "componentType": component, "count": len(values), "type": kind}
+        binary.extend(data)
+        view = {"buffer": 0, "byteOffset": offset, "byteLength": len(data)}
+        if target is not None:
+            view["target"] = target
+        views.append(view)
+        return len(views) - 1
+    def accessor(values, fmt, component, kind, target):
+        view = add_blob(b"".join(struct.pack(fmt, *v) for v in values), target)
+        item = {"bufferView": view, "componentType": component, "count": len(values), "type": kind}
         if kind == "VEC3":
             item["min"] = [min(v[i] for v in values) for i in range(3)]
             item["max"] = [max(v[i] for v in values) for i in range(3)]
@@ -61,16 +70,50 @@ def write_glb(path, lods, materials):
             remap = {old:new for new,old in enumerate(used)}
             position = accessor([mesh.vertices[i] for i in used], "<3f", 5126, "VEC3", 34962)
             normal = accessor([normals[i] for i in used], "<3f", 5126, "VEC3", 34962)
-            uv = accessor([mesh.uvs[i] for i in used], "<2f", 5126, "VEC2", 34962)
+            # Sweeps and sculpted accessories do not all have a dedicated UV
+            # unwrap.  A stable object-space projection keeps the new color
+            # atlases readable on every authored surface and repeats naturally
+            # at the quiet fabric/hair scale.
+            authored_uvs = [mesh.uvs[i] for i in used]
+            if len({tuple(round(value, 6) for value in uv) for uv in authored_uvs}) < 2:
+                authored_uvs = [((mesh.vertices[i][0] * 1.7 + mesh.vertices[i][2] * .65) % 1.0,
+                                 (mesh.vertices[i][1] * 1.35 + mesh.vertices[i][2] * .35) % 1.0)
+                                for i in used]
+            uv = accessor(authored_uvs, "<2f", 5126, "VEC2", 34962)
             indices = accessor([(remap[i],) for f in faces for i in f], "<I", 5125, "SCALAR", 34963)
             primitives.append({"attributes": {"POSITION":position,"NORMAL":normal,"TEXCOORD_0":uv},
                                "indices":indices, "material":material, "mode":4})
         meshes.append({"name":level,"primitives":primitives})
         nodes.append({"name":level,"mesh":len(meshes)-1})
+    images, textures, texture_indices = [], [], {}
+    for material_index, (name, _color, _roughness) in enumerate(materials):
+        lower = name.lower()
+        kind = texture_kind
+        if any(token in lower for token in ("hinge", "buckle", "receiver")):
+            kind = "metal"
+        elif "shell" in lower:
+            kind = "rubber"
+        filename = texture_names[kind]
+        if filename not in texture_indices:
+            image_view = add_blob((ROOT / "assets" / filename).read_bytes())
+            image_index = len(images)
+            images.append({"name": filename, "bufferView": image_view, "mimeType": "image/png"})
+            texture_indices[filename] = len(textures)
+            textures.append({"name": filename, "source": image_index})
+    gltf_materials = []
+    for material_index, (name, color, roughness) in enumerate(materials):
+        lower = name.lower()
+        kind = texture_kind
+        if any(token in lower for token in ("hinge", "buckle", "receiver")):
+            kind = "metal"
+        elif "shell" in lower:
+            kind = "rubber"
+        gltf_materials.append({"name": name, "pbrMetallicRoughness": {"baseColorFactor": color,
+            "baseColorTexture": {"index": texture_indices[texture_names[kind]]},
+            "roughnessFactor": roughness, "metallicFactor": 0}})
     document = {"asset":{"version":"2.0","generator":"Cubacadabra sculpted starter artwork"},
                 "scene":0,"scenes":[{"nodes":[0,1,2]}],"nodes":nodes,"meshes":meshes,
-                "materials":[{"name":name,"pbrMetallicRoughness":{"baseColorFactor":color,"roughnessFactor":roughness,"metallicFactor":0}}
-                             for name,color,roughness in materials],
+                "materials":gltf_materials, "images": images, "textures": textures,
                 "accessors":accessors,"bufferViews":views,"buffers":[{"byteLength":len(binary)}]}
     data=json.dumps(document,separators=(",",":")).encode()
     data += b" " * (-len(data)%4)
@@ -87,10 +130,11 @@ def build_asset(spec):
     path=directory/f"{filename}.glb"
     builder=hair.build if kind=="hair" else accessories.build
     lods={level:builder(slug,detail) for level,detail in [("near",3),("mid",2),("far",1)]}
-    write_glb(path,lods,materials)
+    texture_kind = "hair" if kind == "hair" else "metal" if kind in ("facewear", "accessory") else "fleece"
+    write_glb(path,lods,materials,texture_kind)
     manifest_path=directory/f"{filename}.morph.json"
     manifest=json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
-    capabilities=["mesh.rigid.v1"]
+    capabilities=["mesh.rigid.v1", "material.base-color-texture.v1"]
     if kind=="hair": capabilities.append("hair.authored.v1")
     if slug=="hearing-aids": capabilities.append("accessory.ear-device.v1")
     manifest.update({"schemaVersion":1,"asset":{

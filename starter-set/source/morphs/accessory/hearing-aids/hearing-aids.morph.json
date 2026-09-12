@@ -30,6 +30,7 @@
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
+      "material.base-color-texture.v1",
       "accessory.ear-device.v1"
     ],
     "source": {

@@ -25,13 +25,14 @@
       "laces"
     ],
     "lod": {
-      "near": 9360,
-      "mid": 2240,
+      "near": 13344,
+      "mid": 2976,
       "far": 800
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
-      "material.cuba-pbr.v1"
+      "material.cuba-pbr.v1",
+      "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "person_shoes.glb"

@@ -26,13 +26,14 @@
       "sequins"
     ],
     "lod": {
-      "near": 10800,
-      "mid": 3040,
+      "near": 14784,
+      "mid": 3776,
       "far": 1120
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
-      "material.cuba-pbr.v1"
+      "material.cuba-pbr.v1",
+      "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "person_sparkles.glb"

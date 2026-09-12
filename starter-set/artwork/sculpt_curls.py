@@ -73,10 +73,13 @@ def build(slug):
         bpy.data.objects.remove(copy,do_unlink=True)
     path=ROOT/"source/morphs/hair"/slug/f"{slug}.glb"
     materials=next(spec[-1] for spec in ASSETS if spec[0]==slug)
-    write_glb(path,lods,materials)
+    write_glb(path,lods,materials,"hair")
     sidecar=path.with_suffix(".morph.json")
     document=json.loads(sidecar.read_text())
     document["asset"]["lod"]={level:len(mesh.faces) for level,mesh in lods.items()}
+    capabilities=document["asset"].setdefault("requiredCapabilities",[])
+    if "material.base-color-texture.v1" not in capabilities:
+        capabilities.append("material.base-color-texture.v1")
     document["asset"]["provenance"]["source"]="Cubacadabra artwork/sculpt_curls.py · voxel-unioned sculpt"
     sidecar.write_text(json.dumps(document,indent=2)+"\n")
     print(slug,document["asset"]["lod"])

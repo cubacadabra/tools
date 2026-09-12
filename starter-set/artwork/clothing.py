@@ -40,5 +40,8 @@ def update(path,counts,provenance):
     document=json.loads(sidecar.read_text())
     document["asset"]["lod"]=counts
     document["asset"]["provenance"]["source"]=provenance
+    capabilities=document["asset"].setdefault("requiredCapabilities",[])
+    if "material.base-color-texture.v1" not in capabilities:
+        capabilities.append("material.base-color-texture.v1")
     sidecar.write_text(json.dumps(document,indent=2)+"\n")
     print(f"{path.stem}: {counts}")
