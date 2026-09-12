@@ -84,7 +84,8 @@
   ],
   "builtins": "../../rust/assets/characters/morph_catalog.json",
   "excludeBuiltinKinds": [
-    "outfit"
+    "outfit",
+    "hair"
   ],
   "presets": [
     {

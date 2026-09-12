@@ -53,10 +53,10 @@ with its slots. The starter set uses independent `hair`, `headwear`,
 headphones + glasses + hearing aids. Two pairs of glasses replace each other.
 Actual geometry still needs to be checked for clipping when adding new parts.
 
-Legacy builtin `outfit` assets are excluded from this release and hidden from
-the Studio library. A preset is not an outfit asset. The engine's old bundled
-catalog is retained for other clients, but is not merged into a published
-Studio catalog.
+Legacy builtin `outfit` and `hair` assets are excluded from this release and
+hidden from the Morph library. A preset is not an outfit asset. Analytic face
+definitions remain builtin metadata; all selected geometry is delivered as a
+schema-5 MorphPack.
 
 ## Build and local publication
 
@@ -169,11 +169,12 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 
 ## Content coverage and limits
 
-The first release has 20 authored components plus 24 builtin hair/expression
-components and 24 recipes. It includes 12 skin tones, seven new hair meshes,
-two glasses styles, and hearing aids. The artwork uses a consistent rounded toy
-style; it is not a claim to represent every child or an art-complete diversity
-roster. Near ceilings are 17,000 triangles for hair, 16,000 for bodies, 20,000
+The first release has 20 authored components plus 21 builtin expression
+definitions and 24 recipes. It includes 12 skin tones, seven authored hair
+meshes, two glasses styles, and hearing aids. The artwork uses a consistent
+rounded toy style; it is not a claim to represent every child or an art-complete
+diversity roster. Near ceilings are 17,000 triangles for hair, 16,000 for
+bodies, 20,000
 for tops/footwear, and 9,000 for bottoms. Mid/Far reductions are 32%/7%; small
 accessories stay below their separate 8,000–13,000 Near ceilings. The shared
 renderer registry has a 64 MiB residency ceiling so the entire baked wardrobe

@@ -16,6 +16,20 @@ from cubacadabra.morph_release import (
 
 
 class MorphReleaseTests(unittest.TestCase):
+    def test_mockup_person_recipe_uses_only_authored_morphpack_sources(self):
+        starter_set = Path(__file__).resolve().parents[1] / "starter-set/studies/mockup-person"
+        catalog = json.loads((starter_set / "catalog.json").read_text())
+        authored_ids = {entry["id"] for entry in catalog["assets"]}
+        preset_path = starter_set / catalog["presets"][0]["source"]
+        preset = json.loads(preset_path.read_text())
+
+        self.assertEqual(preset["id"], "cuba:preset/mockup-person.v1")
+        self.assertEqual(
+            {preset["base"], *preset["parts"]},
+            authored_ids,
+            "mockup-person must not resolve geometry from the builtin catalog",
+        )
+
     def fixture(self, root: Path) -> dict:
         source = root / "source/morphs/base/person"
         source.mkdir(parents=True)

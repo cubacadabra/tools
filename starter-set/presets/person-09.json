@@ -4,7 +4,7 @@
   "thumbnail": "thumbnails/person-09.png",
   "base": "cuba:base/person-02.v1",
   "parts": [
-    "cuba:hair/shag.v1",
+    "cuba:hair/curls.v1",
     "cuba:top/person-top.v1",
     "cuba:bottom/person-bottom.v1",
     "cuba:footwear/person-shoes.v1",
