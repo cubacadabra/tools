@@ -15,6 +15,12 @@ local function require_function(config, key)
     end
 end
 
+local function require_listener(listener)
+    if type(listener) ~= "function" then
+        error("CubaSharedState listener must be a function")
+    end
+end
+
 function CubaSharedState.create(config)
     if type(config) ~= "table" then
         error("CubaSharedState.create requires a config table")
@@ -40,6 +46,7 @@ function CubaSharedState.create(config)
         validate = config.validate,
         reduce = config.reduce,
         onChange = config.onChange,
+        listeners = {},
         retrySeconds = retry_seconds,
         value = nil,
         sequence = 0,
@@ -52,6 +59,32 @@ function CubaSharedState.create(config)
         inflight = nil,
         inflightSeconds = 0,
     }, CubaSharedState)
+end
+
+-- Add a consumer to the ordered state-change feed. Consumers receive the same
+-- snapshot that onChange receives, after it has passed validation and after
+-- the local model has advanced. This keeps presentation and other sinks from
+-- having to poll or be called by the game lifecycle.
+function CubaSharedState:subscribe(listener)
+    require_listener(listener)
+    self.listeners[#self.listeners + 1] = listener
+    return listener
+end
+
+function CubaSharedState:_publish(api, state, previous, event, context)
+    if self.onChange ~= nil then
+        self.onChange(api, state, previous, event, context)
+    end
+
+    -- Snapshot the listener list so a consumer can subscribe while handling a
+    -- change without changing the current publication's ordering.
+    local listeners = {}
+    for index, listener in ipairs(self.listeners) do
+        listeners[index] = listener
+    end
+    for _, listener in ipairs(listeners) do
+        listener(api, state, previous, event, context)
+    end
 end
 
 function CubaSharedState:_drop_head()
@@ -99,6 +132,20 @@ function CubaSharedState:start(api)
     self.started = true
     self.bootstrapValue = initial_value
     self.bootstrapSeconds = 0
+    -- Prime every projection from the model's initial proposal. This is
+    -- local presentation only; the retained network snapshot remains the
+    -- authority and will be published through the same feed when it arrives.
+    self:_publish(api, initial_value, nil, {
+        type = "game_state",
+        channel = self.channel,
+        sequence = 0,
+        payload = initial_value,
+        bootstrap = true,
+    }, {
+        initialized = false,
+        completedIntent = nil,
+        source = "initial",
+    })
     api.network:compare_set_state(self.channel, 0, initial_value)
 end
 
@@ -161,12 +208,11 @@ function CubaSharedState:receive(api, event)
         self.inflightSeconds = 0
     end
 
-    if self.onChange ~= nil then
-        self.onChange(api, self.value, previous_value, event, {
-            initialized = was_initialized,
-            completedIntent = completed_intent,
-        })
-    end
+    self:_publish(api, self.value, previous_value, event, {
+        initialized = was_initialized,
+        completedIntent = completed_intent,
+        source = "network",
+    })
     self:_submit_next(api)
     return true
 end

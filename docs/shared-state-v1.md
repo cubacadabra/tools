@@ -45,6 +45,10 @@ local store = CubaSharedState.create({
         -- Update world effects, audio, and UI from accepted state here.
     end,
 })
+
+store:subscribe(function(api, state, previous, event, context)
+    -- Any other consumer can react to the same accepted snapshot.
+end)
 ```
 
 Configuration:
@@ -59,11 +63,23 @@ Configuration:
   snapshot. `context.initialized` distinguishes that first snapshot and
   `context.completedIntent` contains a queued intent satisfied by the new
   state.
+- `store:subscribe(listener)`: adds another consumer to the ordered change
+ feed. Subscribers receive the same arguments as `onChange`, after the store
+ has validated and installed an authoritative snapshot, or primed the initial
+ local projection. Use this for HUD, effects, audio,
+  or other projections so the game does not refresh them from every lifecycle
+ callback or tick.
+  `context.source` is `initial` for the local bootstrap projection and
+  `network` for an ordered retained snapshot.
 - `retrySeconds`: optional positive retry interval; the default is 0.75.
 
 Reducers must be deterministic, idempotent, and side-effect free. Construct a
 new state instead of mutating `state`. Trigger audio, effects, and UI changes
-from `onChange`, after the server has ordered the snapshot.
+from `onChange` or subscribers, after the server has ordered the snapshot.
+The initial proposal is also published once so projections can render a
+complete local view while the first retained snapshot is in flight. A state
+transition should be published once and consumed by each interested system;
+consumers should not poll the store to discover changes.
 
 ## Lifecycle
 
