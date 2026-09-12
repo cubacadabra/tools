@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 2,
+  "asset": {
+    "id": "cuba:hair/study-swept.v1",
+    "kind": "hair",
+    "displayName": "Sculpted chestnut sweep",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "occupiedSlots": [
+      "hair"
+    ],
+    "coverage": [
+      "scalp"
+    ],
+    "conflicts": [],
+    "materials": [
+      "chestnut-swept-hair-001"
+    ],
+    "lod": {
+      "near": 18000,
+      "mid": 5760,
+      "far": 1260
+    },
+    "requiredCapabilities": [
+      "skin.biped15-linear.v1",
+      "material.base-color-texture.v1",
+      "hair.authored.v1"
+    ],
+    "source": {
+      "geometry": "study-swept.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra starter-set/artwork/build_study.py",
+      "license": "Cubacadabra official"
+    },
+    "supportedBases": [
+      "cuba:base/study-person.v1"
+    ]
+  },
+  "geometry": {
+    "file": "study-swept.glb",
+    "lodNodes": {
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
+    }
+  },
+  "attachment": {
+    "mode": "skinned",
+    "joint": "root",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "skin": {
+    "skeleton": "Person_Skin",
+    "jointOrder": [
+      "root",
+      "torso",
+      "head",
+      "left-upper-arm",
+      "left-lower-arm",
+      "left-hand",
+      "right-upper-arm",
+      "right-lower-arm",
+      "right-hand",
+      "left-upper-leg",
+      "left-lower-leg",
+      "left-foot",
+      "right-upper-leg",
+      "right-lower-leg",
+      "right-foot"
+    ],
+    "maxInfluences": 4
+  }
+}

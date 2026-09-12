@@ -1,0 +1,17 @@
+{
+  "id": "cuba:preset/mockup-person.v1",
+  "displayName": "Mockup art study",
+  "base": "cuba:base/study-person.v1",
+  "parts": [
+    "cuba:hair/study-swept.v1",
+    "cuba:top/study-hoodie.v1",
+    "cuba:bottom/study-denim.v1",
+    "cuba:footwear/study-sneakers.v1"
+  ],
+  "parameters": {
+    "skin": "#b87b4e",
+    "primary": "#8354b5",
+    "secondary": "#24384e",
+    "sole": "#f1ebdf"
+  }
+}

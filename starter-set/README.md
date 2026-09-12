@@ -1,5 +1,10 @@
 # Cubacadabra starter morphs
 
+The runtime now requires [morph pack v5](../../rust/docs/morph-pack-v5.md)
+with authored normals; rebuild old local releases before use. A separate
+[single-character mockup study](studies/mockup-person/README.md) explores higher
+art detail without replacing the existing recipes.
+
 This is the editable source of truth for Studio's 24 starter people and their
 reusable parts. A starter is an appearance recipe, not a new mesh or a kind of
 person. Choosing it replaces the complete appearance; every part remains
@@ -135,8 +140,8 @@ two glasses styles, and hearing aids. The artwork uses a consistent rounded toy
 style; it is not a claim to represent every child or an art-complete diversity
 roster. Presentation-detail hair/accessory LOD budgets stay below
 17,000/7,000/2,000 triangles; the skinned body remains bounded below
-30,000/8,000/1,400. Hair's softer Studio material is feature-gated so it
-doesn't change other clients' default shading.
+30,000/8,000/1,400. Authored normals and material interpretation are shared
+across renderer targets.
 
 The two bodies currently share a build. More body shapes, culturally varied
 hair/clothing, mobility devices, prostheses, and seated rigs still need proper
@@ -144,7 +149,7 @@ art and animation work. Do not represent wheelchair support as a cosmetic hat
 slot: it needs its own fit, pose, locomotion, and interaction support.
 
 Authored hair and hearing devices advertise `hair.authored.v1` and
-`accessory.ear-device.v1`. Their rendering support is currently Studio-gated;
-mobile and web clients must implement and advertise those capabilities before
-using these complete presets. Their existing default renderer paths are
-unchanged.
+`accessory.ear-device.v1`. Client catalog integration must advertise the
+capabilities it actually supports before selecting these complete presets.
+The isolated study additionally requires the shared canonical-rest and static
+face semantics described in the v5 contract.

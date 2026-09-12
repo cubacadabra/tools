@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "id": "cuba:base/study-person.v1",
+      "source": "source/morphs/base/study-person/study-person.morph.json"
+    },
+    {
+      "id": "cuba:hair/study-swept.v1",
+      "source": "source/morphs/hair/study-swept/study-swept.morph.json"
+    },
+    {
+      "id": "cuba:top/study-hoodie.v1",
+      "source": "source/morphs/top/study-hoodie/study-hoodie.morph.json"
+    },
+    {
+      "id": "cuba:bottom/study-denim.v1",
+      "source": "source/morphs/bottom/study-denim/study-denim.morph.json"
+    },
+    {
+      "id": "cuba:footwear/study-sneakers.v1",
+      "source": "source/morphs/footwear/study-sneakers/study-sneakers.morph.json"
+    }
+  ],
+  "builtins": "../../../../rust/assets/characters/morph_catalog.json",
+  "excludeBuiltinKinds": [
+    "outfit"
+  ],
+  "presets": [
+    {
+      "source": "presets/mockup-person.json"
+    }
+  ]
+}

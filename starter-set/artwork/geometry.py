@@ -1,7 +1,7 @@
 """Small, deterministic surface modelling tools. Cubacadabra coordinates: Y up.
 
-Surfaces share their seam vertices so the runtime's generated normals remain
-smooth. Curves are modelled as tapered sweeps, not chains of intersecting balls.
+Surfaces share their seam vertices for smooth authored normals. Curves are
+modelled as tapered sweeps, not chains of intersecting balls.
 """
 import math
 

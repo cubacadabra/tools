@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 2,
+  "asset": {
+    "id": "cuba:footwear/study-sneakers.v1",
+    "kind": "footwear",
+    "displayName": "White leather sneakers",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "occupiedSlots": [
+      "shoes"
+    ],
+    "coverage": [
+      "feet"
+    ],
+    "conflicts": [],
+    "materials": [
+      "warm-white-cupsole-001",
+      "soft-white-leather-001",
+      "white-ribbed-sock-001",
+      "ivory-woven-cotton-002",
+      "sole-grooves-and-stitches-001"
+    ],
+    "lod": {
+      "near": 20000,
+      "mid": 6400,
+      "far": 1280
+    },
+    "requiredCapabilities": [
+      "skin.biped15-linear.v1",
+      "material.base-color-texture.v1"
+    ],
+    "source": {
+      "geometry": "study-sneakers.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra starter-set/artwork/build_study.py",
+      "license": "Cubacadabra official"
+    },
+    "supportedBases": [
+      "cuba:base/study-person.v1"
+    ]
+  },
+  "geometry": {
+    "file": "study-sneakers.glb",
+    "lodNodes": {
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
+    }
+  },
+  "attachment": {
+    "mode": "skinned",
+    "joint": "root",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "skin": {
+    "skeleton": "Person_Skin",
+    "jointOrder": [
+      "root",
+      "torso",
+      "head",
+      "left-upper-arm",
+      "left-lower-arm",
+      "left-hand",
+      "right-upper-arm",
+      "right-lower-arm",
+      "right-hand",
+      "left-upper-leg",
+      "left-lower-leg",
+      "left-foot",
+      "right-upper-leg",
+      "right-lower-leg",
+      "right-foot"
+    ],
+    "maxInfluences": 4
+  }
+}

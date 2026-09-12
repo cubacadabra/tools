@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "asset": {
+    "id": "cuba:top/study-hoodie.v1",
+    "kind": "top",
+    "displayName": "Purple fleece hoodie",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "occupiedSlots": [
+      "shirt"
+    ],
+    "coverage": [
+      "torso",
+      "arms"
+    ],
+    "conflicts": [],
+    "materials": [
+      "brushed-purple-fleece-001",
+      "dense-rib-knit-001",
+      "deep-purple-seam-001",
+      "purple-topstitch-001",
+      "ivory-woven-cotton-001"
+    ],
+    "lod": {
+      "near": 20000,
+      "mid": 6399,
+      "far": 1400
+    },
+    "requiredCapabilities": [
+      "skin.biped15-linear.v1",
+      "material.base-color-texture.v1"
+    ],
+    "source": {
+      "geometry": "study-hoodie.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra starter-set/artwork/build_study.py",
+      "license": "Cubacadabra official"
+    },
+    "supportedBases": [
+      "cuba:base/study-person.v1"
+    ]
+  },
+  "geometry": {
+    "file": "study-hoodie.glb",
+    "lodNodes": {
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
+    }
+  },
+  "attachment": {
+    "mode": "skinned",
+    "joint": "root",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  },
+  "skin": {
+    "skeleton": "Person_Skin",
+    "jointOrder": [
+      "root",
+      "torso",
+      "head",
+      "left-upper-arm",
+      "left-lower-arm",
+      "left-hand",
+      "right-upper-arm",
+      "right-lower-arm",
+      "right-hand",
+      "left-upper-leg",
+      "left-lower-leg",
+      "left-foot",
+      "right-upper-leg",
+      "right-lower-leg",
+      "right-foot"
+    ],
+    "maxInfluences": 4
+  }
+}

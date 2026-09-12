@@ -39,6 +39,27 @@ def sculpted_mesh(slug, detail):
 
 
 class StarterArtworkTests(unittest.TestCase):
+    def test_every_source_lod_exports_authored_unit_normals(self):
+        paths=list((ROOT/'source/morphs').rglob('*.glb'))
+        paths+=list((ROOT/'studies/mockup-person/source/morphs').rglob('*.glb'))
+        for path in paths:
+            data=path.read_bytes(); length=struct.unpack_from('<I',data,12)[0]
+            doc=json.loads(data[20:20+length]); binary=data[28+length:]
+            for mesh in doc['meshes']:
+                for primitive in mesh['primitives']:
+                    with self.subTest(asset=path.name,lod=mesh.get('name')):
+                        attributes=primitive['attributes']
+                        self.assertIn('NORMAL',attributes)
+                        normal=doc['accessors'][attributes['NORMAL']]
+                        self.assertEqual(normal['count'],doc['accessors'][attributes['POSITION']]['count'])
+                        self.assertEqual((normal['componentType'],normal['type']),(5126,'VEC3'))
+                        view=doc['bufferViews'][normal['bufferView']]
+                        offset=view.get('byteOffset',0)+normal.get('byteOffset',0)
+                        for i in range(normal['count']):
+                            n=struct.unpack_from('<3f',binary,offset+i*view.get('byteStride',12))
+                            self.assertTrue(all(math.isfinite(v) for v in n))
+                            self.assertAlmostEqual(sum(v*v for v in n),1.,delta=.02)
+
     def test_all_lods_are_finite_closed_outward_and_bounded(self):
         for slug,kind,*_ in ASSETS:
             counts=[]
