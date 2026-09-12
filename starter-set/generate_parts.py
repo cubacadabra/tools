@@ -155,7 +155,11 @@ def build_asset(spec):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--only",nargs="+",choices=[spec[0] for spec in ASSETS])
+    parser.add_argument("--only",nargs="+",choices=[spec[0] for spec in ASSETS] + [
+        "neutral", "happy", "surprised", "determined", "sad", "laughing", "smile", "grin",
+        "curious", "amazed", "angry", "crying", "worried", "embarrassed", "sleepy",
+        "squinting", "wink", "smirk", "confused", "excited", "unimpressed",
+    ])
     parser.add_argument("--blend",action="store_true",help="Save editable Blender sources as well")
     parser.add_argument("--wardrobe",action="store_true",help="Also rebuild the two bodies and six skinned clothing components")
     args=parser.parse_args()

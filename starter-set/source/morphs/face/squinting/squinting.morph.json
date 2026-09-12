@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "asset": {
+    "id": "cuba:face/squinting.v1",
+    "kind": "face",
+    "displayName": "Squinting",
+    "rigProfile": "cuba:rig/biped15.v1",
+    "fitProfiles": [
+      "cuba:fit/person-standard.v1"
+    ],
+    "supportedBases": [
+      "cuba:base/person.v1",
+      "cuba:base/person-02.v1"
+    ],
+    "occupiedSlots": [
+      "face"
+    ],
+    "coverage": [
+      "face"
+    ],
+    "conflicts": [],
+    "materials": [
+      "face-sclera-001",
+      "face-iris-001",
+      "face-pupil-001",
+      "face-catchlight-001",
+      "face-brow-ink-001",
+      "face-mouth-001"
+    ],
+    "lod": {
+      "near": 2500,
+      "mid": 800,
+      "far": 174
+    },
+    "requiredCapabilities": [
+      "mesh.rigid.v1",
+      "material.base-color-texture.v1",
+      "face.authored-static.v1"
+    ],
+    "source": {
+      "geometry": "squinting.glb"
+    },
+    "provenance": {
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
+      "license": "Cubacadabra official"
+    }
+  },
+  "geometry": {
+    "file": "squinting.glb",
+    "lodNodes": {
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
+    }
+  },
+  "attachment": {
+    "mode": "rigid",
+    "joint": "head",
+    "translation": [
+      0,
+      0,
+      0
+    ],
+    "rotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ]
+  }
+}

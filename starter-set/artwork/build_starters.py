@@ -15,14 +15,19 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 sys.path.insert(0,str(ROOT.parents[1]/'studio/tools'))
 from artwork import study_geometry as g, study_materials as sm, build_study as export
-from artwork import hair, accessories
+from artwork import hair, accessories, faces
 from artwork.geometry import Mesh
 from generate_parts import ASSETS
 import generate_person_asset as person
 import generate_person_clothing_assets as clothing
 
 BUDGETS={'base':16000,'top':20000,'bottom':9000,'footwear':20000,'hair':17000,
-         'facewear':10000,'headwear':13000,'accessory':8000}
+         'facewear':10000,'headwear':13000,'accessory':8000,'face':2500}
+
+FACE_ASSETS = [
+    (slug, 'face', slug.replace('-', ' ').title(), 'face', 'face', [])
+    for slug in faces.EXPRESSIONS
+]
 
 
 def linear(color):
@@ -172,6 +177,7 @@ def blend_fit(objects,kind):
 
 def build_one(path,objects,kind):
     slug=path.parent.name
+    path.parent.mkdir(parents=True, exist_ok=True)
     if kind in ('base','top','bottom','footwear'): blend_fit(objects,kind)
     # Smart-project writes a separate atlas UV layer, leaving the logo's source
     # coordinates intact for baking.
@@ -208,16 +214,47 @@ def build_one(path,objects,kind):
         lods[level]=low
     rigid=kind not in ('base','top','bottom','footwear')
     counts,materials=export.write_glb(path,lods,image,rigid=rigid,preserve_weights=True)
-    manifest=json.loads(path.with_suffix('.morph.json').read_text())
+    manifest_path = path.with_suffix('.morph.json')
+    if manifest_path.is_file():
+        manifest=json.loads(manifest_path.read_text())
+    else:
+        manifest={
+            'schemaVersion': 1,
+            'asset': {
+                'id': f'cuba:{kind}/{slug}.v1',
+                'kind': kind,
+                'displayName': slug.replace('-', ' ').title(),
+                'rigProfile': 'cuba:rig/biped15.v1',
+                'fitProfiles': ['cuba:fit/person-standard.v1'],
+                'supportedBases': ['cuba:base/person.v1', 'cuba:base/person-02.v1'],
+                'occupiedSlots': ['face'],
+                'coverage': ['face'],
+                'conflicts': [],
+                'materials': [],
+                'lod': {},
+                'requiredCapabilities': [],
+                'source': {'geometry': path.name},
+                'provenance': {
+                    'source': 'Cubacadabra starter-set/artwork/faces.py',
+                    'license': 'Cubacadabra official',
+                },
+            },
+            'geometry': {'file': path.name, 'lodNodes': {level: level for level in lods}},
+            'attachment': {
+                'mode': 'rigid', 'joint': 'head', 'translation': [0, 0, 0],
+                'rotation': [0, 0, 0, 1], 'scale': [1, 1, 1],
+            },
+        }
     manifest['asset']['lod']=counts; manifest['asset']['materials']=materials
     manifest['geometry']['lodNodes']={level:level for level in lods}
     caps=['mesh.rigid.v1' if rigid else 'skin.biped15-linear.v1','material.base-color-texture.v1']
     if kind=='base': caps.append('rig.canonical-rest.v1')
     if kind=='hair': caps.append('hair.authored.v1')
     if kind=='accessory': caps.append('accessory.ear-device.v1')
+    if kind=='face': caps.append('face.authored-static.v1')
     manifest['asset']['requiredCapabilities']=caps
     manifest['asset']['provenance']['source']='Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake'
-    path.with_suffix('.morph.json').write_text(json.dumps(manifest,indent=2)+'\n')
+    manifest_path.write_text(json.dumps(manifest,indent=2)+'\n')
     print(f'BAKED {slug}: {counts}',flush=True)
 
 
@@ -230,6 +267,12 @@ def main():
         if args.only and slug not in args.only: continue
         filename='test_top_hat' if slug=='test-top-hat' else slug
         specs.append((ROOT/f'source/morphs/{kind}/{slug}/{filename}.glb',kind,slug,spec))
+    if not args.only or any(slug in faces.EXPRESSIONS for slug in args.only):
+        specs.extend(
+            (ROOT / 'source/morphs/face' / slug / f'{slug}.glb', kind, slug, spec)
+            for slug, kind, _name, _slot, _coverage, _materials in FACE_ASSETS
+            if not args.only or slug in args.only
+        )
     if args.wardrobe:
         for relative,key in [('base/person/person_skinned','person-01'),('base/person-02/person_02','person-02'),
                              ('top/person-top/person_top','top'),('bottom/person-bottom/person_bottom','bottom'),
@@ -243,6 +286,18 @@ def main():
         scene.cycles.seed=47; scene.world=bpy.data.worlds.new('Neutral bake world')
         if kind=='base': objects=body(sm.materials(),person.PERSON_VARIANTS[key])
         elif kind in ('top','bottom','footwear'): objects=wardrobe(key,sm.materials())
+        elif kind=='face':
+            face_materials = {
+                'sclera': sm.material('Face sclera',linear((.93,.89,.82))),
+                'iris': sm.material('Face iris',linear((.17,.095,.055))),
+                'pupil': sm.material('Face pupil',linear((.018,.012,.010))),
+                'highlight': sm.material('Face catchlight',linear((.99,.98,.94))),
+                'ink': sm.material('Face brow ink',linear((.12,.07,.045))),
+                'mouth': sm.material('Face mouth',linear((.08,.05,.07))),
+                'tongue': sm.material('Face tongue',linear((.82,.29,.34))),
+                'teeth': sm.material('Face teeth',linear((.96,.92,.82))),
+            }
+            objects=faces.build(key,3,face_materials)
         elif key=='floppy':
             objects=g.hair(sm.materials())
             # Fit the established broader interactive head envelope.

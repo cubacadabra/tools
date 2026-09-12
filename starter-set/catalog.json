@@ -80,12 +80,97 @@
     {
       "id": "cuba:accessory/hearing-aids.v1",
       "source": "source/morphs/accessory/hearing-aids/hearing-aids.morph.json"
+    },
+    {
+      "id": "cuba:face/neutral.v1",
+      "source": "source/morphs/face/neutral/neutral.morph.json"
+    },
+    {
+      "id": "cuba:face/happy.v1",
+      "source": "source/morphs/face/happy/happy.morph.json"
+    },
+    {
+      "id": "cuba:face/surprised.v1",
+      "source": "source/morphs/face/surprised/surprised.morph.json"
+    },
+    {
+      "id": "cuba:face/determined.v1",
+      "source": "source/morphs/face/determined/determined.morph.json"
+    },
+    {
+      "id": "cuba:face/sad.v1",
+      "source": "source/morphs/face/sad/sad.morph.json"
+    },
+    {
+      "id": "cuba:face/laughing.v1",
+      "source": "source/morphs/face/laughing/laughing.morph.json"
+    },
+    {
+      "id": "cuba:face/smile.v1",
+      "source": "source/morphs/face/smile/smile.morph.json"
+    },
+    {
+      "id": "cuba:face/grin.v1",
+      "source": "source/morphs/face/grin/grin.morph.json"
+    },
+    {
+      "id": "cuba:face/curious.v1",
+      "source": "source/morphs/face/curious/curious.morph.json"
+    },
+    {
+      "id": "cuba:face/amazed.v1",
+      "source": "source/morphs/face/amazed/amazed.morph.json"
+    },
+    {
+      "id": "cuba:face/angry.v1",
+      "source": "source/morphs/face/angry/angry.morph.json"
+    },
+    {
+      "id": "cuba:face/crying.v1",
+      "source": "source/morphs/face/crying/crying.morph.json"
+    },
+    {
+      "id": "cuba:face/worried.v1",
+      "source": "source/morphs/face/worried/worried.morph.json"
+    },
+    {
+      "id": "cuba:face/embarrassed.v1",
+      "source": "source/morphs/face/embarrassed/embarrassed.morph.json"
+    },
+    {
+      "id": "cuba:face/sleepy.v1",
+      "source": "source/morphs/face/sleepy/sleepy.morph.json"
+    },
+    {
+      "id": "cuba:face/squinting.v1",
+      "source": "source/morphs/face/squinting/squinting.morph.json"
+    },
+    {
+      "id": "cuba:face/wink.v1",
+      "source": "source/morphs/face/wink/wink.morph.json"
+    },
+    {
+      "id": "cuba:face/smirk.v1",
+      "source": "source/morphs/face/smirk/smirk.morph.json"
+    },
+    {
+      "id": "cuba:face/confused.v1",
+      "source": "source/morphs/face/confused/confused.morph.json"
+    },
+    {
+      "id": "cuba:face/excited.v1",
+      "source": "source/morphs/face/excited/excited.morph.json"
+    },
+    {
+      "id": "cuba:face/unimpressed.v1",
+      "source": "source/morphs/face/unimpressed/unimpressed.morph.json"
     }
   ],
   "builtins": "../../rust/assets/characters/morph_catalog.json",
   "excludeBuiltinKinds": [
     "outfit",
-    "hair"
+    "hair",
+    "face"
   ],
   "presets": [
     {
