@@ -23,6 +23,12 @@ editable afterward. Changing one recipe never changes another recipe.
 - `artwork/`: authored curves, wearable construction, and curly-hair sculpting.
 - `presets/thumbnails/`: full-character previews rendered by the engine.
 
+These thumbnails are part of the local catalog, not Blender preview output.
+After an art change, regenerate fixed front captures and run `morph build`.
+Studio now loads the relative PNGs when launched with `--morph-catalog
+catalog.json`, installing them into the same texture cache used by published
+catalogs so the left library cards stay in sync with the runtime characters.
+
 For example, `presets/person-17.json` combines the Broad Jaw base, Floppy Hair,
 Short Sleeve Collared Shirt, Slacks, and Sparkles shoes. Its `parameters` hold
 skin and clothing colors; `face` selects an expression. Change those references
