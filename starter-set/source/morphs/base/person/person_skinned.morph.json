@@ -16,33 +16,32 @@
     ],
     "conflicts": [],
     "materials": [
-      "skin",
-      "face"
+      "warm-skin-001"
     ],
     "lod": {
-      "near": 40800,
-      "mid": 10608,
-      "far": 1360
+      "near": 16000,
+      "mid": 5120,
+      "far": 1120
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
-      "material.cuba-pbr.v1",
-      "material.base-color-texture.v1"
+      "material.base-color-texture.v1",
+      "rig.canonical-rest.v1"
     ],
     "source": {
       "geometry": "person_skinned.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set presentation skinned person-01 base",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },
   "geometry": {
     "file": "person_skinned.glb",
     "lodNodes": {
-      "near": "Person_Near",
-      "mid": "Person_Mid",
-      "far": "Person_Far"
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
     }
   },
   "attachment": {

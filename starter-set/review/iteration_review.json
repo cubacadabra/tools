@@ -1,0 +1,14 @@
+{
+  "reference": "/Users/aa/Documents/goal.jpg; supplied 001/002/003 runtime screenshots",
+  "baseline": "catalog-before/front (24 runtime captures), git f923fb8",
+  "requirements": {
+    "fabric": {"status": "fail", "cause": "Unfiltered 9px random cells and per-vertex modulo UVs produce squares and stretched bands."},
+    "hoodie": {"status": "fail", "cause": "Older capped torso, polygonal pocket opening, disconnected trim; study construction was not promoted."},
+    "footwear": {"status": "fail", "cause": "Older dark pebble upper and three lace bars differ materially from study sneakers."},
+    "hair": {"status": "fail", "cause": "Broad intersecting clumps and uniform material; preserve hairstyle identities while improving surface treatment."},
+    "deformation": {"status": "unclear", "cause": "Study has known rigid-weight defects; requires fresh motion captures."}
+  },
+  "invariants": ["24 complete editable recipes", "both base identities", "dynamic expressions", "three LODs", "authored normals", "no runtime format changes"],
+  "assumptions": ["Unseen rear construction follows the existing study and garment sources.", "Palette diversity and optional equipment remain part of each starter."],
+  "decision": "in_progress"
+}

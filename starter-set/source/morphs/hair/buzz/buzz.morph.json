@@ -20,12 +20,12 @@
     ],
     "conflicts": [],
     "materials": [
-      "umber"
+      "umber-001"
     ],
     "lod": {
       "near": 4032,
-      "mid": 1584,
-      "far": 480
+      "mid": 1290,
+      "far": 282
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -36,7 +36,7 @@
       "geometry": "buzz.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/artwork",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },

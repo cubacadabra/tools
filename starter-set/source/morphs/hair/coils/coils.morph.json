@@ -20,23 +20,23 @@
     ],
     "conflicts": [],
     "materials": [
-      "espresso"
+      "espresso-002"
     ],
     "lod": {
       "near": 14000,
-      "mid": 4500,
-      "far": 1200
+      "mid": 4480,
+      "far": 980
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
-      "hair.authored.v1",
-      "material.base-color-texture.v1"
+      "material.base-color-texture.v1",
+      "hair.authored.v1"
     ],
     "source": {
       "geometry": "coils.glb"
     },
     "provenance": {
-      "source": "Cubacadabra artwork/sculpt_curls.py \u00b7 voxel-unioned sculpt",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },

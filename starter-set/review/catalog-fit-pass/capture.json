@@ -1,0 +1,119 @@
+{
+  "catalogSha256": "e932a86875cec521128eaa7de05c5b49eb0729d685ac4b8a8ded323c2529c2d7",
+  "resolution": [
+    512,
+    640
+  ],
+  "cases": [
+    {
+      "name": "front",
+      "yaw": 0,
+      "pitch": 0,
+      "pose": "rest",
+      "lod": "near",
+      "count": 24
+    },
+    {
+      "name": "hero",
+      "yaw": 0.26,
+      "pitch": 0.12,
+      "pose": "rest",
+      "lod": "near",
+      "count": 24
+    },
+    {
+      "name": "back",
+      "yaw": 3.14159,
+      "pitch": 0,
+      "pose": "rest",
+      "lod": "near",
+      "count": 24
+    },
+    {
+      "name": "left",
+      "yaw": 1.5708,
+      "pitch": 0,
+      "pose": "rest",
+      "lod": "near",
+      "count": 24
+    },
+    {
+      "name": "right",
+      "yaw": -1.5708,
+      "pitch": 0,
+      "pose": "rest",
+      "lod": "near",
+      "count": 24
+    },
+    {
+      "name": "top",
+      "yaw": 0,
+      "pitch": 1.55,
+      "pose": "rest",
+      "lod": "near",
+      "count": 24
+    },
+    {
+      "name": "mid",
+      "yaw": 0.26,
+      "pitch": 0.12,
+      "pose": "rest",
+      "lod": "mid",
+      "count": 24
+    },
+    {
+      "name": "far",
+      "yaw": 0.26,
+      "pitch": 0.12,
+      "pose": "rest",
+      "lod": "far",
+      "count": 24
+    },
+    {
+      "name": "walk",
+      "yaw": 0.7,
+      "pitch": 0.12,
+      "pose": "walk",
+      "lod": "near",
+      "count": 24
+    },
+    {
+      "name": "bend",
+      "yaw": 0.7,
+      "pitch": 0.12,
+      "pose": "bend",
+      "lod": "near",
+      "count": 24
+    },
+    {
+      "name": "jump",
+      "yaw": 0.7,
+      "pitch": 0.12,
+      "pose": "jump",
+      "lod": "near",
+      "count": 24
+    }
+  ],
+  "sourceHashes": {
+    "source/morphs/accessory/hearing-aids/hearing-aids.glb": "3176f0f1d5052379541ace366781241e43ee78679b60f177ae5dec7e14e38ce7",
+    "source/morphs/base/person/person_skinned.glb": "82d508db5c0ab3ca8e53a2d129f3f2cbcb85bd8ba9690e756e183904af3ed03b",
+    "source/morphs/base/person-02/person_02.glb": "a3797ea16b0cbad502123ccc2c0b54585fa7d76597ffb4c091cab12db6d2b169",
+    "source/morphs/bottom/person-bottom/person_bottom.glb": "d0276ab08ba8f95f04c8b210b357c3efc75a942b4357a46da6511ebd323fe98a",
+    "source/morphs/bottom/slacks/person_slacks.glb": "814f9f9ac28fdfdbbcc8e14e8c4f3c10d22bda13275f43c31d8c7e0cab41e5a2",
+    "source/morphs/facewear/round-glasses/round-glasses.glb": "c41d5651a472818c4fe6582e3ae8eb4651b0c4251a94eaef5b7bd7c8c374aa7b",
+    "source/morphs/facewear/square-glasses/square-glasses.glb": "3bc86da5a07d32cab607de46886adfff4905c0fa394a59a69020c9b3d86bb1a9",
+    "source/morphs/footwear/person-shoes/person_shoes.glb": "3abbccd48148723ae60dbbd187dcce63fe3a424f660b4dbf01eb7d1697d81b0b",
+    "source/morphs/footwear/sparkles/person_sparkles.glb": "b48a22f0d15129fe51ace69f90b4bb5daa57f80182bb3559464a222e6dfec8cf",
+    "source/morphs/hair/bob/bob.glb": "cf19335fd76ba746191d21244f9bc03a96014f50f693f03f4ab69cfafc0ece03",
+    "source/morphs/hair/braids/braids.glb": "26129b764c63f2d97c625fc8c45e8c927a300fc5cc0788917fbcf8a3f3434045",
+    "source/morphs/hair/buns/buns.glb": "7273731488c5f4b411a5613d72c8145e86acd073749e71781c866c09c06daf7b",
+    "source/morphs/hair/buzz/buzz.glb": "d2abc3c36d8b135a92808c1bc60594abf30e28a5371a2c2486e931bc5e6504e3",
+    "source/morphs/hair/coils/coils.glb": "70238dd76f0c58db9148152f480a9c1028ac2f0a2410749ccc0a37370b641445",
+    "source/morphs/hair/curls/curls.glb": "db823d17f9cfabeda8d3dff610fd3655f1dd6f19a699c85f91f1cffafffc8a96",
+    "source/morphs/hair/floppy/floppy.glb": "7c7606a4e7b1e9d5e683f7d70749a375661aa59b7192b2c720d35030bcd4a87b",
+    "source/morphs/headwear/headphones/headphones.glb": "f0dfe410e3bda655b9ab1982a300e4eb8ec4acc6d840b685923b291557905b5f",
+    "source/morphs/headwear/test-top-hat/test_top_hat.glb": "218a938555775bdec19d000447d924e730009b54c504dece46d831273d73eec9",
+    "source/morphs/top/person-top/person_top.glb": "da69a2ace18b0d700e73f06d0c3c8755726d451562f88cb56e0106068c307560",
+    "source/morphs/top/short-sleeve-collared/person_short_sleeve_collared.glb": "63d19bdc4d7157fce112002d7c999c55f63881bbcf995a8d424a46bdb2ced340"
+  }
+}

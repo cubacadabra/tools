@@ -20,14 +20,14 @@
     ],
     "conflicts": [],
     "materials": [
-      "slate-shell",
-      "soft-padding",
-      "blue-trim"
+      "slate-shell-001",
+      "soft-padding-001",
+      "blue-trim-001"
     ],
     "lod": {
       "near": 12432,
-      "mid": 4848,
-      "far": 1152
+      "mid": 3978,
+      "far": 870
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -37,7 +37,7 @@
       "geometry": "headphones.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/artwork",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },

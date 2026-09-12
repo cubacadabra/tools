@@ -20,12 +20,12 @@
     ],
     "conflicts": [],
     "materials": [
-      "chestnut"
+      "chestnut-swept-hair-001"
     ],
     "lod": {
-      "near": 13536,
-      "mid": 5364,
-      "far": 1452
+      "near": 16928,
+      "mid": 5410,
+      "far": 1178
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -36,7 +36,7 @@
       "geometry": "floppy.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/artwork",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },

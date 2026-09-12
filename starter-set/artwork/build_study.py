@@ -60,7 +60,7 @@ def join(objects,name):
     return obj
 
 
-def bake(obj,slug):
+def bake(obj,slug,output=OUT):
     image=bpy.data.images.new(slug+'-color-contact',width=512,height=512,alpha=False)
     for mat in obj.data.materials:
         node=mat.node_tree.nodes.new('ShaderNodeTexImage'); node.image=image
@@ -68,12 +68,12 @@ def bake(obj,slug):
     bpy.ops.object.select_all(action='DESELECT'); obj.select_set(True)
     bpy.context.view_layer.objects.active=obj
     bpy.ops.object.bake(type='EMIT',margin=5,use_clear=True)
-    texture_dir=OUT/'textures'; texture_dir.mkdir(parents=True,exist_ok=True)
+    texture_dir=output/'textures'; texture_dir.mkdir(parents=True,exist_ok=True)
     image.filepath_raw=str(texture_dir/(slug+'.png')); image.file_format='PNG'; image.save()
     return image
 
 
-def write_glb(path,lods,image):
+def write_glb(path,lods,image,rigid=False,preserve_weights=False):
     binary=bytearray(); views=[]; accessors=[]; meshes=[]
     def blob(data,target=None):
         binary.extend(b'\0'*(-len(binary)%4))
@@ -96,6 +96,7 @@ def write_glb(path,lods,image):
     for mat in lods['near'].data.materials:
         tint=bool(mat.get('cubaUseAvatarTint',False))
         default=([184/255,123/255,78/255,1] if mat.name.startswith('Warm skin') else [131/255,84/255,181/255,1]) if tint else [1,1,1,1]
+        default=list(mat.get('defaultTint',default))
         # glTF factors are linear, whereas the editor palette is display sRGB.
         # The runtime substitutes its live palette for these tintable surfaces;
         # standalone GLB viewers need the correctly encoded default factor.
@@ -116,13 +117,20 @@ def write_glb(path,lods,image):
                     normal=tuple(data.corner_normals[loop_index].vector)
                     key=(index,tuple(round(v,6) for v in texcoord),normal)
                     if key not in lookup:
-                        group=max(vertex.groups,key=lambda g:g.weight)
-                        joint=int(obj.vertex_groups[group.group].name)
+                        groups=sorted(vertex.groups,key=lambda g:g.weight,reverse=True)
+                        groups=groups[:4] if preserve_weights else groups[:1]
+                        total_weight=sum(g.weight for g in groups)
+                        binding=[(int(obj.vertex_groups[g.group].name),g.weight/total_weight) for g in groups]
                         x,negative_z,y=vertex.co; world=(x,y,-negative_z)
-                        positions.append(tuple(world[i]-BIND[joint][i] for i in range(3)))
+                        # The current shared renderer uses joint-local positions
+                        # and identity inverse binds. Subtract the weighted rest
+                        # origin so a multi-influence vertex has the same rest
+                        # position in Blender and the runtime.
+                        positions.append(tuple(world[i]-sum(BIND[j][i]*w for j,w in binding) for i in range(3)))
                         nx,nz,ny=normal; normals.append((nx,ny,-nz))
                         uvs.append((texcoord[0],1-texcoord[1]))
-                        joints.append((joint,0,0,0)); weights.append((1.,0.,0.,0.))
+                        joints.append(tuple(j for j,w in binding)+(0,)*(4-len(binding)))
+                        weights.append(tuple(w for j,w in binding)+(0.,)*(4-len(binding)))
                         lookup[key]=len(positions)-1
                     indices.append((lookup[key],))
             if not indices: continue
@@ -132,6 +140,8 @@ def write_glb(path,lods,image):
                         'TEXCOORD_0':accessor(uvs,'<2f',5126,'VEC2',34962),
                         'JOINTS_0':accessor(joints,'<4H',5123,'VEC4',34962),
                         'WEIGHTS_0':accessor(weights,'<4f',5126,'VEC4',34962)}
+            if rigid:
+                del attributes['JOINTS_0']; del attributes['WEIGHTS_0']
             primitives.append({'attributes':attributes,'indices':accessor(indices,'<I',5125,'SCALAR',34963),
                                'mode':4,'material':mat_index})
         counts[level]=total; meshes.append({'name':level,'primitives':primitives})
@@ -147,6 +157,10 @@ def write_glb(path,lods,image):
               'nodes':nodes,'meshes':meshes,'materials':materials,'images':[{'bufferView':image_view,'mimeType':'image/png'}],
               'textures':[{'source':0}], 'skins':[{'name':'Person_Skin','joints':list(range(15)),'inverseBindMatrices':binds,'skeleton':0}],
               'buffers':[{'byteLength':len(binary)}],'bufferViews':views,'accessors':accessors}
+    if rigid:
+        document.pop('skins')
+        document['nodes']=[{'name':level,'mesh':i} for i,level in enumerate(lods)]
+        document['scenes']=[{'nodes':list(range(len(lods)))}]
     doc=json.dumps(document,separators=(',',':')).encode(); doc+=b' '*(-len(doc)%4)
     path.write_bytes(struct.pack('<III',0x46546c67,2,28+len(doc)+len(binary))+
                      struct.pack('<II',len(doc),0x4e4f534a)+doc+struct.pack('<II',len(binary),0x004e4942)+binary)

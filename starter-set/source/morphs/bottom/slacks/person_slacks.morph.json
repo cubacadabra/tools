@@ -20,33 +20,32 @@
     ],
     "conflicts": [],
     "materials": [
-      "slacks",
-      "seams"
+      "charcoal-tailored-twill-001",
+      "charcoal-topstitch-001"
     ],
     "lod": {
-      "near": 9824,
-      "mid": 2624,
-      "far": 400
+      "near": 9000,
+      "mid": 2880,
+      "far": 630
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
-      "material.cuba-pbr.v1",
       "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "person_slacks.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set presentation wardrobe",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },
   "geometry": {
     "file": "person_slacks.glb",
     "lodNodes": {
-      "near": "PersonBottom_Near",
-      "mid": "PersonBottom_Mid",
-      "far": "PersonBottom_Far"
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
     }
   },
   "attachment": {

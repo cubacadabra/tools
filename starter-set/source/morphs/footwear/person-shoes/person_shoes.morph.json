@@ -20,34 +20,35 @@
     ],
     "conflicts": [],
     "materials": [
-      "footwear",
-      "sole",
-      "laces"
+      "warm-white-cupsole-001",
+      "soft-white-leather-001",
+      "white-ribbed-sock-001",
+      "ivory-woven-cotton-001",
+      "sole-grooves-and-stitches-001"
     ],
     "lod": {
-      "near": 13344,
-      "mid": 2976,
-      "far": 800
+      "near": 20000,
+      "mid": 6400,
+      "far": 1252
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
-      "material.cuba-pbr.v1",
       "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "person_shoes.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set presentation wardrobe",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },
   "geometry": {
     "file": "person_shoes.glb",
     "lodNodes": {
-      "near": "PersonFootwear_Near",
-      "mid": "PersonFootwear_Mid",
-      "far": "PersonFootwear_Far"
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
     }
   },
   "attachment": {

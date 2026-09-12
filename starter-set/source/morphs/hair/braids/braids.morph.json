@@ -20,13 +20,13 @@
     ],
     "conflicts": [],
     "materials": [
-      "dark-brown",
-      "ties"
+      "dark-brown-001",
+      "ties-001"
     ],
     "lod": {
       "near": 15936,
-      "mid": 6704,
-      "far": 1920
+      "mid": 5098,
+      "far": 1114
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -37,7 +37,7 @@
       "geometry": "braids.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/artwork",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },

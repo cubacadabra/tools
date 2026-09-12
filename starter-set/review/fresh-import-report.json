@@ -1,0 +1,1325 @@
+{
+  "blender": "5.2.1 LTS",
+  "assets": [
+    {
+      "file": "source/morphs/accessory/hearing-aids/hearing-aids.glb",
+      "sha256": "3176f0f1d5052379541ace366781241e43ee78679b60f177ae5dec7e14e38ce7",
+      "lods": {
+        "far": {
+          "triangles": 530,
+          "vertices": 629,
+          "boundsZUp": [
+            [
+              -0.5620992183685303,
+              -0.13116241991519928,
+              -0.10107894241809845
+            ],
+            [
+              0.5620992183685303,
+              0.12185809761285782,
+              0.13526944816112518
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 2426,
+          "vertices": 2022,
+          "boundsZUp": [
+            [
+              -0.5624870657920837,
+              -0.13049782812595367,
+              -0.10049505531787872
+            ],
+            [
+              0.5624870657920837,
+              0.12199795246124268,
+              0.13391928374767303
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 7584,
+          "vertices": 5125,
+          "boundsZUp": [
+            [
+              -0.5623971819877625,
+              -0.13050000369548798,
+              -0.10049505531787872
+            ],
+            [
+              0.5623971819877625,
+              0.12200000137090683,
+              0.13391928374767303
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/base/person/person_skinned.glb",
+      "sha256": "3076b980bd78fb416cf2a890dea593a795b681731059c8a49c940c54eac759ff",
+      "lods": {
+        "far": {
+          "triangles": 1120,
+          "vertices": 1172,
+          "boundsZUp": [
+            [
+              -0.8110120296478271,
+              -0.4209950268268585,
+              0.05252310633659363
+            ],
+            [
+              0.8150607347488403,
+              0.4209950268268585,
+              3.1781842708587646
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "mid": {
+          "triangles": 5120,
+          "vertices": 3720,
+          "boundsZUp": [
+            [
+              -0.8163641691207886,
+              -0.42122554779052734,
+              0.050258517265319824
+            ],
+            [
+              0.8155876398086548,
+              0.42122554779052734,
+              3.1720943450927734
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "near": {
+          "triangles": 16000,
+          "vertices": 10031,
+          "boundsZUp": [
+            [
+              -0.8163641691207886,
+              -0.42151743173599243,
+              0.05036050081253052
+            ],
+            [
+              0.8155876398086548,
+              0.42151743173599243,
+              3.170041799545288
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        }
+      }
+    },
+    {
+      "file": "source/morphs/base/person-02/person_02.glb",
+      "sha256": "e860c97120b6fda1b53835d37eb3d8c07ebbf6c47e0cf0f1b9983319dcbcb763",
+      "lods": {
+        "far": {
+          "triangles": 1120,
+          "vertices": 1172,
+          "boundsZUp": [
+            [
+              -0.8110120296478271,
+              -0.435512900352478,
+              0.05252310633659363
+            ],
+            [
+              0.8150607347488403,
+              0.435512900352478,
+              3.1786675453186035
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "mid": {
+          "triangles": 5120,
+          "vertices": 3742,
+          "boundsZUp": [
+            [
+              -0.8163641691207886,
+              -0.4359709918498993,
+              0.050258517265319824
+            ],
+            [
+              0.8155876398086548,
+              0.4359709918498993,
+              3.172694683074951
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "near": {
+          "triangles": 16000,
+          "vertices": 10067,
+          "boundsZUp": [
+            [
+              -0.8163641691207886,
+              -0.435691773891449,
+              0.05036050081253052
+            ],
+            [
+              0.8155876398086548,
+              0.435691773891449,
+              3.170034885406494
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        }
+      }
+    },
+    {
+      "file": "source/morphs/bottom/person-bottom/person_bottom.glb",
+      "sha256": "9d84400746f1cdb287e6019fab739472c9a744ba8c60e00251538371a542eb30",
+      "lods": {
+        "far": {
+          "triangles": 630,
+          "vertices": 705,
+          "boundsZUp": [
+            [
+              -0.4704684913158417,
+              -0.2531680762767792,
+              0.567987322807312
+            ],
+            [
+              0.47262704372406006,
+              0.2587405741214752,
+              1.210020661354065
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "mid": {
+          "triangles": 2880,
+          "vertices": 2370,
+          "boundsZUp": [
+            [
+              -0.47088944911956787,
+              -0.25440627336502075,
+              0.5680027604103088
+            ],
+            [
+              0.47294414043426514,
+              0.2594551742076874,
+              1.209991455078125
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "near": {
+          "triangles": 9000,
+          "vertices": 6225,
+          "boundsZUp": [
+            [
+              -0.4705307185649872,
+              -0.25527775287628174,
+              0.5680009722709656
+            ],
+            [
+              0.47282037138938904,
+              0.25985854864120483,
+              1.209997534751892
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        }
+      }
+    },
+    {
+      "file": "source/morphs/bottom/slacks/person_slacks.glb",
+      "sha256": "e83a3acc65a9c950661e339ed4cdcefe3ae284430ca0274155ce3a02514c1271",
+      "lods": {
+        "far": {
+          "triangles": 630,
+          "vertices": 588,
+          "boundsZUp": [
+            [
+              -0.46307864785194397,
+              -0.24098099768161774,
+              0.40496522188186646
+            ],
+            [
+              0.4625454246997833,
+              0.24507199227809906,
+              1.2000467777252197
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "mid": {
+          "triangles": 2880,
+          "vertices": 2061,
+          "boundsZUp": [
+            [
+              -0.46422767639160156,
+              -0.24108019471168518,
+              0.40499556064605713
+            ],
+            [
+              0.4635991156101227,
+              0.24481064081192017,
+              1.199996829032898
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "near": {
+          "triangles": 9000,
+          "vertices": 5655,
+          "boundsZUp": [
+            [
+              -0.4638250768184662,
+              -0.24097006022930145,
+              0.40500006079673767
+            ],
+            [
+              0.463687539100647,
+              0.2448914647102356,
+              1.2000000476837158
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        }
+      }
+    },
+    {
+      "file": "source/morphs/facewear/round-glasses/round-glasses.glb",
+      "sha256": "c41d5651a472818c4fe6582e3ae8eb4651b0c4251a94eaef5b7bd7c8c374aa7b",
+      "lods": {
+        "far": {
+          "triangles": 654,
+          "vertices": 694,
+          "boundsZUp": [
+            [
+              -0.5426542162895203,
+              -0.18062090873718262,
+              -0.0873231440782547
+            ],
+            [
+              0.5439170598983765,
+              0.5085127949714661,
+              0.21932320296764374
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 2994,
+          "vertices": 2270,
+          "boundsZUp": [
+            [
+              -0.5430251955986023,
+              -0.18050004541873932,
+              -0.08797331154346466
+            ],
+            [
+              0.5432766675949097,
+              0.5079184770584106,
+              0.2199738472700119
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 9360,
+          "vertices": 6231,
+          "boundsZUp": [
+            [
+              -0.5429311394691467,
+              -0.1806710660457611,
+              -0.08800001442432404
+            ],
+            [
+              0.5429311394691467,
+              0.5080000162124634,
+              0.22000007331371307
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/facewear/square-glasses/square-glasses.glb",
+      "sha256": "3bc86da5a07d32cab607de46886adfff4905c0fa394a59a69020c9b3d86bb1a9",
+      "lods": {
+        "far": {
+          "triangles": 654,
+          "vertices": 712,
+          "boundsZUp": [
+            [
+              -0.5426542162895203,
+              -0.18062090873718262,
+              -0.08893175423145294
+            ],
+            [
+              0.5439170598983765,
+              0.5085127949714661,
+              0.22093157470226288
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 2994,
+          "vertices": 2308,
+          "boundsZUp": [
+            [
+              -0.5430251955986023,
+              -0.18050004541873932,
+              -0.09005804359912872
+            ],
+            [
+              0.5432766675949097,
+              0.5079184770584106,
+              0.22205810248851776
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 9360,
+          "vertices": 6301,
+          "boundsZUp": [
+            [
+              -0.5429311394691467,
+              -0.1806710660457611,
+              -0.09000010788440704
+            ],
+            [
+              0.5429311394691467,
+              0.5080000162124634,
+              0.22199992835521698
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/footwear/person-shoes/person_shoes.glb",
+      "sha256": "f7c7c7d12502397d3a383372dc2aa3bfacff0feb8dd75460bb375b8f5a9eb8e9",
+      "lods": {
+        "far": {
+          "triangles": 1252,
+          "vertices": 1612,
+          "boundsZUp": [
+            [
+              -0.4625368118286133,
+              -0.2358296662569046,
+              0.029143352061510086
+            ],
+            [
+              0.4638480544090271,
+              0.5137630105018616,
+              0.4401818513870239
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "mid": {
+          "triangles": 6400,
+          "vertices": 6518,
+          "boundsZUp": [
+            [
+              -0.46447858214378357,
+              -0.2368476539850235,
+              0.029062775894999504
+            ],
+            [
+              0.46460655331611633,
+              0.514531135559082,
+              0.4403257668018341
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "near": {
+          "triangles": 20000,
+          "vertices": 15802,
+          "boundsZUp": [
+            [
+              -0.4647025763988495,
+              -0.2368859201669693,
+              0.02862340770661831
+            ],
+            [
+              0.4648709297180176,
+              0.5149152874946594,
+              0.4400644898414612
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        }
+      }
+    },
+    {
+      "file": "source/morphs/footwear/sparkles/person_sparkles.glb",
+      "sha256": "c9a88138db99d7e2b0975eb708061bf0a9f8e9e49fc677a687f17ca2df8af056",
+      "lods": {
+        "far": {
+          "triangles": 1252,
+          "vertices": 1612,
+          "boundsZUp": [
+            [
+              -0.4625368118286133,
+              -0.2358296662569046,
+              0.029143352061510086
+            ],
+            [
+              0.4638480544090271,
+              0.5137630105018616,
+              0.4401818513870239
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "mid": {
+          "triangles": 6400,
+          "vertices": 6518,
+          "boundsZUp": [
+            [
+              -0.46447858214378357,
+              -0.2368476539850235,
+              0.029062775894999504
+            ],
+            [
+              0.46460655331611633,
+              0.514531135559082,
+              0.4403257668018341
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "near": {
+          "triangles": 20000,
+          "vertices": 15802,
+          "boundsZUp": [
+            [
+              -0.4647025763988495,
+              -0.2368859201669693,
+              0.02862340770661831
+            ],
+            [
+              0.4648709297180176,
+              0.5149152874946594,
+              0.4400644898414612
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        }
+      }
+    },
+    {
+      "file": "source/morphs/hair/bob/bob.glb",
+      "sha256": "cf19335fd76ba746191d21244f9bc03a96014f50f693f03f4ab69cfafc0ece03",
+      "lods": {
+        "far": {
+          "triangles": 872,
+          "vertices": 974,
+          "boundsZUp": [
+            [
+              -0.6568386554718018,
+              -0.4854072630405426,
+              -0.4866904616355896
+            ],
+            [
+              0.6391907930374146,
+              0.5050590634346008,
+              0.7284949421882629
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 3992,
+          "vertices": 3313,
+          "boundsZUp": [
+            [
+              -0.6579145193099976,
+              -0.4880000352859497,
+              -0.48802560567855835
+            ],
+            [
+              0.6405478715896606,
+              0.5059826970100403,
+              0.7222512364387512
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 12480,
+          "vertices": 8617,
+          "boundsZUp": [
+            [
+              -0.6580663919448853,
+              -0.4880000054836273,
+              -0.4880000948905945
+            ],
+            [
+              0.641237735748291,
+              0.5055304169654846,
+              0.7240803837776184
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/hair/braids/braids.glb",
+      "sha256": "26129b764c63f2d97c625fc8c45e8c927a300fc5cc0788917fbcf8a3f3434045",
+      "lods": {
+        "far": {
+          "triangles": 1114,
+          "vertices": 1541,
+          "boundsZUp": [
+            [
+              -0.6041146516799927,
+              -0.46504342555999756,
+              -0.7048271298408508
+            ],
+            [
+              0.6107032895088196,
+              0.452336847782135,
+              0.544999897480011
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 5098,
+          "vertices": 4728,
+          "boundsZUp": [
+            [
+              -0.6042424440383911,
+              -0.46596354246139526,
+              -0.7053924202919006
+            ],
+            [
+              0.6053199768066406,
+              0.45352068543434143,
+              0.544999897480011
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 15936,
+          "vertices": 11698,
+          "boundsZUp": [
+            [
+              -0.6042424440383911,
+              -0.4659999907016754,
+              -0.7053400874137878
+            ],
+            [
+              0.6042424440383911,
+              0.45399999618530273,
+              0.544999897480011
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/hair/buns/buns.glb",
+      "sha256": "7273731488c5f4b411a5613d72c8145e86acd073749e71781c866c09c06daf7b",
+      "lods": {
+        "far": {
+          "triangles": 768,
+          "vertices": 889,
+          "boundsZUp": [
+            [
+              -0.5365273356437683,
+              -0.4653673470020294,
+              -0.2317153960466385
+            ],
+            [
+              0.542395830154419,
+              0.452336847782135,
+              0.6387179493904114
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 3516,
+          "vertices": 2878,
+          "boundsZUp": [
+            [
+              -0.5385050177574158,
+              -0.46598368883132935,
+              -0.2299928218126297
+            ],
+            [
+              0.5386687517166138,
+              0.4537036120891571,
+              0.6379252076148987
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 10992,
+          "vertices": 7317,
+          "boundsZUp": [
+            [
+              -0.5378689169883728,
+              -0.4659999907016754,
+              -0.22999997437000275
+            ],
+            [
+              0.5388576984405518,
+              0.45399999618530273,
+              0.6373775601387024
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/hair/buzz/buzz.glb",
+      "sha256": "d2abc3c36d8b135a92808c1bc60594abf30e28a5371a2c2486e931bc5e6504e3",
+      "lods": {
+        "far": {
+          "triangles": 282,
+          "vertices": 221,
+          "boundsZUp": [
+            [
+              -0.5428498387336731,
+              -0.44835397601127625,
+              -0.17007775604724884
+            ],
+            [
+              0.5428488850593567,
+              0.43549853563308716,
+              0.48799997568130493
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 1290,
+          "vertices": 882,
+          "boundsZUp": [
+            [
+              -0.5438171625137329,
+              -0.44772687554359436,
+              -0.17007465660572052
+            ],
+            [
+              0.5438171625137329,
+              0.43550124764442444,
+              0.48799997568130493
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 4032,
+          "vertices": 2420,
+          "boundsZUp": [
+            [
+              -0.5436986684799194,
+              -0.44769176840782166,
+              -0.17000003159046173
+            ],
+            [
+              0.5436986684799194,
+              0.4356973171234131,
+              0.48799997568130493
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/hair/coils/coils.glb",
+      "sha256": "70238dd76f0c58db9148152f480a9c1028ac2f0a2410749ccc0a37370b641445",
+      "lods": {
+        "far": {
+          "triangles": 980,
+          "vertices": 1344,
+          "boundsZUp": [
+            [
+              -0.6619967222213745,
+              -0.5938733816146851,
+              -0.20941944420337677
+            ],
+            [
+              0.6605018377304077,
+              0.5541375279426575,
+              0.6795673966407776
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 4480,
+          "vertices": 4169,
+          "boundsZUp": [
+            [
+              -0.6590318083763123,
+              -0.5912325382232666,
+              -0.20533795654773712
+            ],
+            [
+              0.6617406010627747,
+              0.5514954924583435,
+              0.6795576214790344
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 14000,
+          "vertices": 10790,
+          "boundsZUp": [
+            [
+              -0.6599363088607788,
+              -0.592303991317749,
+              -0.20534034073352814
+            ],
+            [
+              0.6611236333847046,
+              0.5512920618057251,
+              0.6798136830329895
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/hair/curls/curls.glb",
+      "sha256": "db823d17f9cfabeda8d3dff610fd3655f1dd6f19a699c85f91f1cffafffc8a96",
+      "lods": {
+        "far": {
+          "triangles": 980,
+          "vertices": 1169,
+          "boundsZUp": [
+            [
+              -0.6907493472099304,
+              -0.637691855430603,
+              -0.214978888630867
+            ],
+            [
+              0.7146523594856262,
+              0.5967912077903748,
+              0.6851564049720764
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 4480,
+          "vertices": 3879,
+          "boundsZUp": [
+            [
+              -0.6915159821510315,
+              -0.6325066089630127,
+              -0.21558065712451935
+            ],
+            [
+              0.7153857350349426,
+              0.6010488271713257,
+              0.6795156598091125
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 14000,
+          "vertices": 10329,
+          "boundsZUp": [
+            [
+              -0.6915159821510315,
+              -0.6326291561126709,
+              -0.21421189606189728
+            ],
+            [
+              0.7153230309486389,
+              0.6028174757957458,
+              0.6796920895576477
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/hair/floppy/floppy.glb",
+      "sha256": "823792cc6039bd546cb87b5d612b4a7d5ba8681fb5eb1ed55ce88fad693653e3",
+      "lods": {
+        "far": {
+          "triangles": 1178,
+          "vertices": 1599,
+          "boundsZUp": [
+            [
+              -0.5880792140960693,
+              -0.5031333565711975,
+              -0.17670030891895294
+            ],
+            [
+              0.6009041666984558,
+              0.4972701370716095,
+              0.6309013962745667
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 5410,
+          "vertices": 5979,
+          "boundsZUp": [
+            [
+              -0.5820500254631042,
+              -0.4994881749153137,
+              -0.18131394684314728
+            ],
+            [
+              0.5985954999923706,
+              0.4986470341682434,
+              0.627528965473175
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 16928,
+          "vertices": 14837,
+          "boundsZUp": [
+            [
+              -0.5819469690322876,
+              -0.49844810366630554,
+              -0.18049950897693634
+            ],
+            [
+              0.5977903604507446,
+              0.4980839192867279,
+              0.6276732087135315
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/headwear/headphones/headphones.glb",
+      "sha256": "f0dfe410e3bda655b9ab1982a300e4eb8ec4acc6d840b685923b291557905b5f",
+      "lods": {
+        "far": {
+          "triangles": 870,
+          "vertices": 886,
+          "boundsZUp": [
+            [
+              -0.7028602361679077,
+              -0.19408287107944489,
+              -0.1864435225725174
+            ],
+            [
+              0.7028602361679077,
+              0.11284535378217697,
+              0.7361469864845276
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 3978,
+          "vertices": 2830,
+          "boundsZUp": [
+            [
+              -0.7041121125221252,
+              -0.19582495093345642,
+              -0.18850012123584747
+            ],
+            [
+              0.7041121125221252,
+              0.11482863873243332,
+              0.737000048160553
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 12432,
+          "vertices": 7810,
+          "boundsZUp": [
+            [
+              -0.7045000195503235,
+              -0.19599999487400055,
+              -0.18850012123584747
+            ],
+            [
+              0.7045000195503235,
+              0.11500000208616257,
+              0.737000048160553
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/headwear/test-top-hat/test_top_hat.glb",
+      "sha256": "218a938555775bdec19d000447d924e730009b54c504dece46d831273d73eec9",
+      "lods": {
+        "far": {
+          "triangles": 300,
+          "vertices": 348,
+          "boundsZUp": [
+            [
+              -0.6378066539764404,
+              -0.4875090718269348,
+              0.5248487591743469
+            ],
+            [
+              0.6378066539764404,
+              0.4875090718269348,
+              1.200056552886963
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "mid": {
+          "triangles": 1372,
+          "vertices": 1150,
+          "boundsZUp": [
+            [
+              -0.6380013227462769,
+              -0.48599204421043396,
+              0.5239735245704651
+            ],
+            [
+              0.6380013227462769,
+              0.48599204421043396,
+              1.2000155448913574
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        },
+        "near": {
+          "triangles": 4288,
+          "vertices": 3182,
+          "boundsZUp": [
+            [
+              -0.6380000114440918,
+              -0.4860000014305115,
+              0.5239999890327454
+            ],
+            [
+              0.6380000114440918,
+              0.4860000014305115,
+              1.2000000476837158
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": false
+        }
+      }
+    },
+    {
+      "file": "source/morphs/top/person-top/person_top.glb",
+      "sha256": "711dbc97fd5907e5bee717821443219a6863b0deadd3aec48b2b6b87325698fb",
+      "lods": {
+        "far": {
+          "triangles": 1397,
+          "vertices": 1447,
+          "boundsZUp": [
+            [
+              -0.806460976600647,
+              -0.4095512926578522,
+              1.0268402099609375
+            ],
+            [
+              0.806460976600647,
+              0.38794898986816406,
+              2.276015043258667
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "mid": {
+          "triangles": 6400,
+          "vertices": 4911,
+          "boundsZUp": [
+            [
+              -0.810431957244873,
+              -0.4096246063709259,
+              1.027001976966858
+            ],
+            [
+              0.810431957244873,
+              0.3895978033542633,
+              2.2762138843536377
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "near": {
+          "triangles": 20000,
+          "vertices": 13133,
+          "boundsZUp": [
+            [
+              -0.8103659152984619,
+              -0.4093080461025238,
+              1.026999831199646
+            ],
+            [
+              0.8103659152984619,
+              0.390246719121933,
+              2.2759783267974854
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        }
+      }
+    },
+    {
+      "file": "source/morphs/top/short-sleeve-collared/person_short_sleeve_collared.glb",
+      "sha256": "588d9cc595e674f167f22cc64efaea0aa2141a35393e3c1a77e7ac272b204e25",
+      "lods": {
+        "far": {
+          "triangles": 1399,
+          "vertices": 1233,
+          "boundsZUp": [
+            [
+              -0.7461967468261719,
+              -0.32324734330177307,
+              1.1799430847167969
+            ],
+            [
+              0.745970606803894,
+              0.3517049551010132,
+              2.262305736541748
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "mid": {
+          "triangles": 6399,
+          "vertices": 4355,
+          "boundsZUp": [
+            [
+              -0.7467029094696045,
+              -0.3242129385471344,
+              1.1799986362457275
+            ],
+            [
+              0.7465300559997559,
+              0.3492295742034912,
+              2.262040853500366
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        },
+        "near": {
+          "triangles": 20000,
+          "vertices": 12032,
+          "boundsZUp": [
+            [
+              -0.7466821670532227,
+              -0.32436874508857727,
+              1.179999828338623
+            ],
+            [
+              0.7463502883911133,
+              0.3492295742034912,
+              2.2619998455047607
+            ]
+          ],
+          "authoredNormals": true,
+          "uvs": true,
+          "embeddedTexture": true,
+          "skinned": true
+        }
+      }
+    }
+  ]
+}

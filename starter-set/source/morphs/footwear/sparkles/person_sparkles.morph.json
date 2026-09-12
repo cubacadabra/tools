@@ -20,35 +20,35 @@
     ],
     "conflicts": [],
     "materials": [
-      "sparkle-satin",
-      "gold-sole",
-      "gold-laces",
-      "sequins"
+      "warm-white-cupsole-001",
+      "amethyst-satin-001",
+      "white-ribbed-sock-001",
+      "champagne-laces-001",
+      "sole-grooves-and-stitches-001"
     ],
     "lod": {
-      "near": 14784,
-      "mid": 3776,
-      "far": 1120
+      "near": 20000,
+      "mid": 6400,
+      "far": 1252
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
-      "material.cuba-pbr.v1",
       "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "person_sparkles.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set presentation wardrobe",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },
   "geometry": {
     "file": "person_sparkles.glb",
     "lodNodes": {
-      "near": "PersonFootwear_Near",
-      "mid": "PersonFootwear_Mid",
-      "far": "PersonFootwear_Far"
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
     }
   },
   "attachment": {

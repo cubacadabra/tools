@@ -21,34 +21,35 @@
     ],
     "conflicts": [],
     "materials": [
-      "top",
-      "drawstring",
-      "pocket-opening"
+      "brushed-purple-fleece-001",
+      "dense-rib-knit-001",
+      "recessed-cloth-seam-001",
+      "matching-cloth-stitch-001",
+      "ivory-woven-cotton-001"
     ],
     "lod": {
-      "near": 15348,
-      "mid": 4600,
-      "far": 1270
+      "near": 20000,
+      "mid": 6400,
+      "far": 1397
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
-      "material.cuba-pbr.v1",
       "material.base-color-texture.v1"
     ],
     "source": {
       "geometry": "person_top.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set presentation wardrobe",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },
   "geometry": {
     "file": "person_top.glb",
     "lodNodes": {
-      "near": "PersonTop_Near",
-      "mid": "PersonTop_Mid",
-      "far": "PersonTop_Far"
+      "near": "near",
+      "mid": "mid",
+      "far": "far"
     }
   },
   "attachment": {

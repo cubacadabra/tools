@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import struct
 import zlib
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -41,20 +42,28 @@ def _atlas(kind: str) -> bytes:
     pixels: list[tuple[int, int, int]] = []
     for y in range(SIZE):
         for x in range(SIZE):
-            broad = _noise(x // 9, y // 9, seed)
+            # Smooth periodic value noise: no block boundaries or tile seams.
+            def noise(scale):
+                u, v = x / SIZE * scale, y / SIZE * scale
+                ix, iy = math.floor(u), math.floor(v)
+                a, b = u-ix, v-iy
+                a, b = a*a*(3-2*a), b*b*(3-2*b)
+                row = lambda yy: _noise(ix%scale, yy%scale, seed)*(1-a)+_noise((ix+1)%scale, yy%scale, seed)*a
+                return row(iy)*(1-b)+row(iy+1)*b
+            broad = .65*noise(7)+.35*noise(19)
             fine = _noise(x, y, seed + 31)
             if kind == "denim":
                 weave = 0.5 + 0.5 * math.sin((x + y) * 0.58) * math.sin((x - y) * 0.12)
-                value = 0.82 + broad * 0.22 + fine * 0.035 + weave * 0.055
+                value = 0.90 + broad * 0.065 + fine * 0.02 + weave * 0.015
             elif kind == "fleece":
-                value = 0.87 + broad * 0.18 + fine * 0.025
+                value = 0.94 + broad * 0.045 + fine * 0.008
             elif kind == "rib":
                 value = 0.88 + broad * 0.12 + (0.035 if (x // 3) % 2 else -0.01)
             elif kind == "hair":
                 flow = 0.5 + 0.5 * math.sin((x * 0.12) + (y * 0.025))
                 value = 0.83 + broad * 0.15 + flow * 0.045 + fine * 0.02
             elif kind == "skin":
-                value = 0.94 + broad * 0.075 + fine * 0.012
+                value = 0.992 + broad * 0.006
             elif kind == "leather":
                 value = 0.90 + broad * 0.10 + fine * 0.02
             elif kind == "rubber":
@@ -71,6 +80,7 @@ def _atlas(kind: str) -> bytes:
     return _png(pixels)
 
 
+@lru_cache(maxsize=1)
 def ensure() -> dict[str, str]:
     ASSET_DIR.mkdir(parents=True, exist_ok=True)
     result = {}

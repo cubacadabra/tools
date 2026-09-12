@@ -20,13 +20,13 @@
     ],
     "conflicts": [],
     "materials": [
-      "blue-shell",
-      "receiver"
+      "blue-shell-001",
+      "receiver-001"
     ],
     "lod": {
       "near": 7584,
-      "mid": 2952,
-      "far": 696
+      "mid": 2426,
+      "far": 530
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -37,7 +37,7 @@
       "geometry": "hearing-aids.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/artwork",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },

@@ -20,14 +20,14 @@
     ],
     "conflicts": [],
     "materials": [
-      "indigo-felt",
-      "ochre-ribbon",
-      "brass-buckle"
+      "indigo-felt-001",
+      "ochre-ribbon-001",
+      "brass-buckle-001"
     ],
     "lod": {
       "near": 4288,
-      "mid": 2416,
-      "far": 1056
+      "mid": 1372,
+      "far": 300
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -37,7 +37,7 @@
       "geometry": "test_top_hat.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/artwork",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },

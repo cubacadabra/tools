@@ -20,13 +20,13 @@
     ],
     "conflicts": [],
     "materials": [
-      "slate-acetate",
-      "brass-hinges"
+      "slate-acetate-001",
+      "brass-hinges-001"
     ],
     "lod": {
       "near": 9360,
-      "mid": 4076,
-      "far": 1140
+      "mid": 2994,
+      "far": 654
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
@@ -36,7 +36,7 @@
       "geometry": "round-glasses.glb"
     },
     "provenance": {
-      "source": "Cubacadabra starter-set/artwork",
+      "source": "Cubacadabra artwork/build_starters.py; study construction and Blender color/AO bake",
       "license": "Cubacadabra official"
     }
   },

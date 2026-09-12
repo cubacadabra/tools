@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build artist-authored starter surfaces and editable GLBs.
 
-No runtime or Python package dependencies. Sculpted curls require Blender
-at authoring time. --blend also saves an editable scene for each component.
+No runtime or Python package dependencies. All final assets require Blender
+for delivery-mesh unwrapping and baking. --blend saves editable import scenes.
 """
 import argparse
 import json
@@ -161,7 +161,7 @@ def main():
     args=parser.parse_args()
     sculpted=[slug for slug in ("curls","coils") if not args.only or slug in args.only]
     blender=shutil.which("blender") or "/Applications/Blender.app/Contents/MacOS/Blender"
-    if (sculpted or args.blend) and not Path(blender).is_file():
+    if not Path(blender).is_file():
         raise SystemExit("Install Blender or put it on PATH to rebuild sculpted curls or .blend sources.")
     paths=[ROOT/"source/morphs/hair"/spec[0]/f"{spec[0]}.glb" if spec[0] in sculpted else build_asset(spec)
            for spec in ASSETS if not args.only or spec[0] in args.only]
@@ -171,6 +171,11 @@ def main():
     if args.wardrobe:
         from artwork import clothing
         paths.extend(clothing.build())
+    # Deliver all selected parts through the same corner-normal / UV unwrap /
+    # color-AO bake path as the approved single-character study.
+    bake_args=(['--only',*args.only] if args.only else [])+(['--wardrobe'] if args.wardrobe else [])
+    subprocess.run([blender,'--background','--factory-startup','--python-exit-code','1',
+                    '--python',str(ROOT/'artwork/build_starters.py'),'--',*bake_args],check=True)
     if args.blend:
         subprocess.run([blender,"--background","--factory-startup","--python",
                         str(ROOT/"artwork/save_blender.py"),"--",*[str(p) for p in paths]],check=True)

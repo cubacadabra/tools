@@ -89,25 +89,44 @@ Run from `tools/`:
 python3 starter-set/generate_parts.py --wardrobe --blend
 ```
 
-This rebuilds all 20 GLBs without changing the 24 recipes. It requires Blender
-for sculpted curls and optional local `.blend` output; Blender is an authoring
-dependency only, not a game/runtime dependency. Other hair and accessories can
-be regenerated without it, for example:
+This rebuilds all 20 GLBs without changing the 24 recipes. Blender is required
+for every final asset's unwrap and color/AO bake; it is an authoring dependency
+only, not a game/runtime dependency. To regenerate one hairstyle:
 
 ```sh
 python3 starter-set/generate_parts.py --only floppy
 ```
 
-`--wardrobe` also refreshes bodies and clothing via the canonical rig tools in
-`studio/tools/`; omit it to work only on hair/accessories. **Regeneration replaces
+`--wardrobe` also refreshes bodies and clothing; omit it to work only on
+hair/accessories. `artwork/build_starters.py` is the final delivery stage: it
+uses the study hoodie, shorts, sneakers, hands and swept-hair construction,
+fitted polo/slacks, and the established interactive head shapes. All garments
+use the existing 15-joint rig with blended shoulder/elbow/knee weights.
+**Regeneration replaces
 the selected source files**, including manual edits. Generate local `.blend` files
 with `--blend` when hand-editing the model. Keep all three LOD node names, the
 head-local origin (for rigid wearables), and the existing rig (for skinned
 clothing). Export GLB with hidden LODs included and Custom Properties enabled so
-material avatar-tint flags survive. The generator also refreshes the deterministic
-atlases in `assets/` and embeds them in each GLB; do not edit those generated PNGs
-by hand. Update sidecar triangle counts when geometry changes. The checked-in
-GLBs remain the source assets.
+material avatar-tint flags survive. Final 512px color/AO atlases are baked onto
+the reduced Near mesh, embedded in the GLBs, and saved for inspection under
+`review/bakes/textures/`. Materials are authored in `artwork/study_materials.py`;
+the small `assets/starter-*.png` tiles are staging inputs only. Never hand-edit
+generated textures or GLBs as a durable fix. Sidecar counts are refreshed by
+the exporter. The checked-in GLBs are the compiler's source assets.
+
+From `starter-set/`, independently validate all exported GLBs and capture the
+full catalog with identical hero/front/back/side/top, LOD and motion settings:
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup \
+  --python-exit-code 1 --python artwork/validate_starters.py
+python3 review_starters.py --label unique-review-name
+```
+
+The review script uses the shared runtime renderer; Pillow only assembles
+contact sheets. It refuses to overwrite an existing review label. Read
+`review/iteration_review.json` for accepted improvements and unresolved gates.
+Static bend/jump stress captures do not establish full gameplay animation quality.
 
 After changing geometry or a recipe, build, render the actual composed people,
 then build/publish locally again so the new preview hashes enter the release:
@@ -144,13 +163,15 @@ The first release has 20 authored components plus 24 builtin hair/expression
 components and 24 recipes. It includes 12 skin tones, seven new hair meshes,
 two glasses styles, and hearing aids. The artwork uses a consistent rounded toy
 style; it is not a claim to represent every child or an art-complete diversity
-roster. Presentation-detail hair/accessory LOD budgets stay below
-17,000/7,000/2,000 triangles; the skinned body remains bounded below
-41,000/11,000/1,400 and the reusable wardrobe below 16,000/5,000/1,400 per
-part. Authored normals, UVs, embedded color atlases, and material
+roster. Near ceilings are 17,000 triangles for hair, 16,000 for bodies, 20,000
+for tops/footwear, and 9,000 for bottoms. Mid/Far reductions are 32%/7%; small
+accessories stay below their separate 8,000–13,000 Near ceilings. The shared
+renderer registry has a 64 MiB residency ceiling so the entire baked wardrobe
+can be registered; per-frame skinning and instance limits are unchanged.
+Authored normals, UVs, embedded color atlases, and material
 interpretation are shared across renderer targets.
 
-The two bodies currently share a build. More body shapes, culturally varied
+The two bodies share limb construction but retain distinct head profiles. More body shapes, culturally varied
 hair/clothing, mobility devices, prostheses, and seated rigs still need proper
 art and animation work. Do not represent wheelchair support as a cosmetic hat
 slot: it needs its own fit, pose, locomotion, and interaction support.
@@ -158,8 +179,9 @@ slot: it needs its own fit, pose, locomotion, and interaction support.
 Authored hair and hearing devices advertise `hair.authored.v1` and
 `accessory.ear-device.v1`. Client catalog integration must advertise the
 capabilities it actually supports before selecting these complete presets.
-The isolated study additionally requires the shared canonical-rest and static
-face semantics described in the v5 contract.
+Both starter bases now require shared canonical-rest semantics. The isolated
+study additionally uses a static authored face; the reusable starters retain
+their interactive expression choices.
 
 ## Character-art skills
 
