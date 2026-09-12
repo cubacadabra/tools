@@ -153,3 +153,40 @@ Authored hair and hearing devices advertise `hair.authored.v1` and
 capabilities it actually supports before selecting these complete presets.
 The isolated study additionally requires the shared canonical-rest and static
 face semantics described in the v5 contract.
+
+## Blender character-art workflow notes
+
+For Blender work on the isolated study or starter artwork, these are
+recommended workflows from [Blender Agent Studio](https://github.com/ifBars/blender-agent-studio).
+They are recommendations, not assumed-installed skills; the existing local
+Blender/Python setup is sufficient. Do not auto-install a plugin, MCP server,
+or dependency. The recommendation names use a `blender-` prefix; the links
+point to the upstream skill files:
+
+- [blender-iterative-refinement](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/iterative-refinement/SKILL.md): freeze a baseline and review ledger, make one causal edit, and compare with the same settings.
+- [blender-modeling-workflow](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/modeling-workflow/SKILL.md): solve silhouette, secondary forms, and fit; treat budgets as ceilings, not targets.
+- [blender-character-workflow](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/character-workflow/SKILL.md): check garment fit and skinning/joint stress, including motion.
+- [blender-rendering-workflow](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/rendering-workflow/SKILL.md): diagnose camera, light, material, and scale before changing geometry.
+- [blender-asset-validation](https://github.com/ifBars/blender-agent-studio/blob/main/plugins/blender-agent-studio/skills/asset-validation/SKILL.md): review hero plus front/back/left/right/top views, perform a fresh GLB import, and accept the actual runtime result.
+
+See the repository [AGENTS.md](../../../AGENTS.md), the [mockup-person study
+README](studies/mockup-person/README.md), and its [iteration review
+ledger](studies/mockup-person/review/iteration_review.json). From this
+directory, useful checkpoints are:
+
+```sh
+python3 review_study.py --beauty-only --label baseline-<unique-name>
+python3 review_study.py --generate --motion --label <unique-pass>
+Blender --background --factory-startup --python-exit-code 1 \
+  --python artwork/validate_study_export.py
+```
+
+`--generate` overwrites isolated study source files, so preserve a baseline
+and use a unique label for each pass. The optional
+[RenderDoc workflow](https://github.com/HKUDS/CLI-Anything/blob/main/skills/cli-anything-renderdoc/SKILL.md)
+is only for `.rdc` GPU diagnosis on supported APIs such as Vulkan/Android;
+it does not apply to Metal/macOS. See [RenderDoc API
+support](https://github.com/baldurk/renderdoc#api-support).
+
+Prefer shared-engine runtime captures over Blender beauty renders when judging
+whether an asset is ready.
