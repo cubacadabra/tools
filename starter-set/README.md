@@ -133,9 +133,10 @@ The first release has 20 authored components plus 24 builtin hair/expression
 components and 24 recipes. It includes 12 skin tones, seven new hair meshes,
 two glasses styles, and hearing aids. The artwork uses a consistent rounded toy
 style; it is not a claim to represent every child or an art-complete diversity
-roster. Hair/accessory LOD budgets stay below 15,000/6,000/2,000 triangles;
-the skinned body is below 19,000/5,000/1,400. Hair's softer Studio material is
-feature-gated so it doesn't change other clients' default shading.
+roster. Presentation-detail hair/accessory LOD budgets stay below
+17,000/7,000/2,000 triangles; the skinned body remains bounded below
+30,000/8,000/1,400. Hair's softer Studio material is feature-gated so it
+doesn't change other clients' default shading.
 
 The two bodies currently share a build. More body shapes, culturally varied
 hair/clothing, mobility devices, prostheses, and seated rigs still need proper

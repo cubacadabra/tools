@@ -23,9 +23,9 @@
       "espresso"
     ],
     "lod": {
-      "near": 5952,
-      "mid": 2544,
-      "far": 936
+      "near": 10992,
+      "mid": 4320,
+      "far": 1152
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

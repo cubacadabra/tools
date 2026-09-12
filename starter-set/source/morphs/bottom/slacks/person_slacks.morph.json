@@ -24,8 +24,8 @@
       "seams"
     ],
     "lod": {
-      "near": 4480,
-      "mid": 1248,
+      "near": 6912,
+      "mid": 1888,
       "far": 400
     },
     "requiredCapabilities": [
@@ -36,7 +36,7 @@
       "geometry": "person_slacks.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated Blender-compatible Phase 5 clothing fixture",
+      "source": "Cubacadabra starter-set presentation wardrobe",
       "license": "Cubacadabra official"
     }
   },

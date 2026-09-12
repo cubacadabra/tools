@@ -91,7 +91,10 @@ class Mesh:
 
 
 def sweep(mesh, curve, width, depth, detail, material=0, outward=(0., 0., -1.), twist=0., grooves=0.):
-    rows, radial = {3: (24, 12), 2: (16, 8), 1: (8, 6)}[detail]
+    # Near and mid are presentation meshes: their curved silhouettes remain
+    # visible in the editor, portrait captures, and close gameplay cameras.
+    # Far deliberately stays small for crowds and mobile play.
+    rows, radial = {3: (32, 16), 2: (20, 10), 1: (8, 6)}[detail]
     def surface(u, t):
         tangent = unit(sub(curve(min(1., t+.0001)), curve(max(0., t-.0001))))
         guide = outward(t) if callable(outward) else outward
@@ -117,7 +120,7 @@ def lock(mesh, points, width, depth, detail, material=0, outward=(0., 0., -1.)):
 
 
 def loop(mesh, curve, radius, detail, material=0, outward=(0., 0., -1.)):
-    rows, radial = {3: (64, 10), 2: (40, 8), 1: (24, 6)}[detail]
+    rows, radial = {3: (72, 12), 2: (44, 10), 1: (24, 6)}[detail]
     def surface(u, t):
         tangent = unit(sub(curve((t+.0001)%1), curve((t-.0001)%1)))
         normal = unit(sub(outward, mul(tangent, dot(outward, tangent))))
@@ -127,7 +130,7 @@ def loop(mesh, curve, radius, detail, material=0, outward=(0., 0., -1.)):
 
 
 def ellipsoid(mesh, center, size, detail, material=0, exponent=1., twist=0.):
-    radial, rows = {3: (28, 16), 2: (20, 10), 1: (12, 6)}[detail]
+    radial, rows = {3: (36, 20), 2: (24, 12), 1: (12, 6)}[detail]
     def surface(u, v):
         theta, phi = u*TAU, v*math.pi
         x = size[0]*.5*power(math.sin(phi)*math.sin(theta), exponent)
@@ -138,7 +141,7 @@ def ellipsoid(mesh, center, size, detail, material=0, exponent=1., twist=0.):
 
 
 def lathe(mesh, rings, detail, material=0):
-    radial = {3: 64, 2: 40, 1: 24}[detail]
+    radial = {3: 80, 2: 48, 1: 24}[detail]
     # Rings are ordered top-to-bottom for outward triangle winding.
     ids = []
     for y, rx, rz in rings:

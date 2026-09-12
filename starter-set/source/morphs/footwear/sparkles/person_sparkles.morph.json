@@ -26,8 +26,8 @@
       "sequins"
     ],
     "lod": {
-      "near": 7520,
-      "mid": 2432,
+      "near": 10800,
+      "mid": 3040,
       "far": 1120
     },
     "requiredCapabilities": [
@@ -38,7 +38,7 @@
       "geometry": "person_sparkles.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated Blender-compatible Phase 5 clothing fixture",
+      "source": "Cubacadabra starter-set presentation wardrobe",
       "license": "Cubacadabra official"
     }
   },

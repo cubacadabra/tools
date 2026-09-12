@@ -18,7 +18,7 @@ def build():
         person.make_glb(path,variant)
         counts={level:len(person.weld_surface(person.lod_geometry(detail,variant["head_profile"]))[1])//3
                 for level,detail in [("near",3),("mid",2),("far",1)]}
-        update(path,counts)
+        update(path,counts,f"Cubacadabra starter-set presentation skinned {variant_name} base")
         paths.append(path)
     for key,relative in [
         ("top","top/person-top/person_top.glb"),
@@ -30,14 +30,15 @@ def build():
     ]:
         path=ROOT/"source/morphs"/relative
         counts=clothing.make_glb(path,clothing.ASSETS[key])
-        update(path,counts)
+        update(path,counts,"Cubacadabra starter-set presentation wardrobe")
         paths.append(path)
     return paths
 
 
-def update(path,counts):
+def update(path,counts,provenance):
     sidecar=path.with_suffix(".morph.json")
     document=json.loads(sidecar.read_text())
     document["asset"]["lod"]=counts
+    document["asset"]["provenance"]["source"]=provenance
     sidecar.write_text(json.dumps(document,indent=2)+"\n")
     print(f"{path.stem}: {counts}")

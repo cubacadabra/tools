@@ -25,8 +25,8 @@
       "laces"
     ],
     "lod": {
-      "near": 6080,
-      "mid": 1632,
+      "near": 9360,
+      "mid": 2240,
       "far": 800
     },
     "requiredCapabilities": [
@@ -37,7 +37,7 @@
       "geometry": "person_shoes.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated Blender-compatible Phase 5 clothing fixture",
+      "source": "Cubacadabra starter-set presentation wardrobe",
       "license": "Cubacadabra official"
     }
   },

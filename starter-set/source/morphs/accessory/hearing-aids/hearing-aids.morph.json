@@ -24,8 +24,8 @@
       "receiver"
     ],
     "lod": {
-      "near": 4560,
-      "mid": 1984,
+      "near": 7584,
+      "mid": 2952,
       "far": 696
     },
     "requiredCapabilities": [

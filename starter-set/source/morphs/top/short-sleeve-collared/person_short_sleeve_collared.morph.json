@@ -29,9 +29,9 @@
       "collar-underside"
     ],
     "lod": {
-      "near": 2564,
-      "mid": 1936,
-      "far": 1310
+      "near": 3208,
+      "mid": 2260,
+      "far": 1316
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
@@ -42,7 +42,7 @@
       "geometry": "person_short_sleeve_collared.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated Blender-compatible Phase 5 clothing fixture",
+      "source": "Cubacadabra starter-set presentation wardrobe",
       "license": "Cubacadabra official"
     }
   },

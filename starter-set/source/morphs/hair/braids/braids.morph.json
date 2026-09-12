@@ -24,8 +24,8 @@
       "ties"
     ],
     "lod": {
-      "near": 10432,
-      "mid": 4736,
+      "near": 15936,
+      "mid": 6704,
       "far": 1920
     },
     "requiredCapabilities": [

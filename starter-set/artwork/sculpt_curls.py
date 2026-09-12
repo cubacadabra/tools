@@ -22,14 +22,16 @@ def build(slug):
     randomizer=random.Random(47 if tight else 83)
     mesh=Mesh()
     surface=scalp(mesh,3,rx=.535,rz=.465,top=.60,back=-.12,front=.30)
-    count=64 if tight else 34
+    # More, smaller construction forms preserve individual curl clusters after
+    # unioning while retaining one cohesive, animation-friendly volume.
+    count=78 if tight else 46
     for index in range(count):
         u=(index*.61803398875+.013)%1
         v=.12+.86*math.sqrt((index+.5)/count)
         center=surface(u,v)
         normal=unit((center[0],center[1]-.02,center[2]))
         center=add(center,mul(normal,.005))
-        radius=(.125 if tight else .18)*randomizer.uniform(.84,1.14)
+        radius=(.112 if tight else .158)*randomizer.uniform(.84,1.14)
         ellipsoid(mesh,center,(radius*2.05,radius*1.65,radius*1.94),2,
                   twist=randomizer.uniform(-.6,.6))
     # Fill the crown so its profile is a cohesive curly volume.
@@ -43,14 +45,14 @@ def build(slug):
     bpy.context.collection.objects.link(obj)
     bpy.context.view_layer.objects.active=obj
     obj.select_set(True)
-    obj.data.remesh_voxel_size=.009 if tight else .011
+    obj.data.remesh_voxel_size=.0075 if tight else .009
     bpy.ops.object.voxel_remesh()
     smooth=obj.modifiers.new("Soft sculpted junctions","SMOOTH")
-    smooth.factor=.72
-    smooth.iterations=5
+    smooth.factor=.58
+    smooth.iterations=4
     bpy.ops.object.modifier_apply(modifier=smooth.name)
     lods={}
-    for level,budget in [("near",9000),("mid",3000),("far",900)]:
+    for level,budget in [("near",14000),("mid",4500),("far",1200)]:
         copy=obj.copy()
         copy.data=obj.data.copy()
         bpy.context.collection.objects.link(copy)

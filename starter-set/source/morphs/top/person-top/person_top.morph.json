@@ -26,9 +26,9 @@
       "pocket-opening"
     ],
     "lod": {
-      "near": 6392,
-      "mid": 2184,
-      "far": 964
+      "near": 10968,
+      "mid": 3680,
+      "far": 1270
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
@@ -38,7 +38,7 @@
       "geometry": "person_top.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated Blender-compatible Phase 5 clothing fixture",
+      "source": "Cubacadabra starter-set presentation wardrobe",
       "license": "Cubacadabra official"
     }
   },

@@ -5,7 +5,7 @@ from .geometry import Mesh, TAU, power, smooth, sweep, lock, loop, ellipsoid
 
 def scalp(mesh, detail, rx=.535, rz=.46, top=.565, back=-.23, front=.24,
           bob=False, material=0):
-    radial, rows = {3: (64, 24), 2: (40, 16), 1: (24, 10)}[detail]
+    radial, rows = {3: (72, 28), 2: (44, 18), 1: (24, 10)}[detail]
     def surface(u, v):
         angle = u*TAU
         facing = smooth((math.cos(angle)-.15)/.7)
@@ -34,6 +34,12 @@ def floppy(mesh, detail):
         (((.47,.26,-.13),(.48,.46,-.36),(.23,.31,-.49),(.10,.245,-.475)), .15,.072),
         (((-.33,.37,.02),(-.58,.32,-.08),(-.54,.00,-.26),(-.485,-.10,-.18)), .13,.063),
         (((.37,.34,.09),(.54,.33,.01),(.55,.08,-.08),(.505,-.055,-.12)), .12,.06),
+        # Narrow secondary clumps break up the helmet silhouette and create
+        # the layered, combed highlight rhythm visible at portrait scale.
+        (((-.16,.54,.015),(-.27,.62,-.22),(-.43,.38,-.48),(-.475,.15,-.39)), .095,.050),
+        (((.03,.57,-.005),(-.01,.66,-.29),(-.20,.39,-.525),(-.285,.18,-.455)), .105,.052),
+        (((.21,.53,.005),(.29,.62,-.24),(.13,.39,-.515),(.015,.22,-.475)), .10,.050),
+        (((.37,.43,.025),(.49,.49,-.18),(.42,.29,-.445),(.30,.14,-.425)), .086,.047),
     ]:
         lock(mesh, points, width, depth, detail)
 
@@ -46,7 +52,7 @@ def buzz(mesh, detail):
     import sys
     sys.path.insert(0,str(Path(__file__).resolve().parents[3]/"studio/tools"))
     import generate_person_asset as person
-    radial,rows={3:(64,24),2:(40,16),1:(24,10)}[detail]
+    radial,rows={3:(72,28),2:(44,18),1:(24,10)}[detail]
     def surface(u,v):
         angle=u*TAU
         front=smooth((math.cos(angle)-.15)/.7)
@@ -68,6 +74,10 @@ def bob(mesh, detail):
         (((.41,.34,-.22),(.41,.49,-.42),(.03,.26,-.49),(-.075,.215,-.474)), .18,.07),
         (((.45,.28,-.18),(.54,.19,-.28),(.53,-.25,-.26),(.445,-.46,-.19)), .135,.07),
         (((-.43,.29,-.15),(-.56,.18,-.23),(-.54,-.24,-.26),(-.455,-.45,-.18)), .14,.07),
+        (((-.22,.51,-.16),(-.31,.59,-.35),(-.41,.34,-.50),(-.36,.16,-.455)), .105,.050),
+        (((-.04,.56,-.18),(-.12,.64,-.39),(-.24,.39,-.525),(-.18,.20,-.475)), .105,.050),
+        (((.15,.55,-.18),(.18,.63,-.39),(.05,.40,-.525),(-.01,.22,-.478)), .105,.050),
+        (((.32,.48,-.14),(.41,.54,-.32),(.32,.34,-.49),(.20,.18,-.455)), .095,.047),
     ]:
         lock(mesh, points, width, depth, detail)
 
@@ -106,6 +116,15 @@ def buns(mesh, detail):
             return (side*.36+radius*math.cos(angle), .503+radius*.68*math.sin(angle),
                     -.035-.045*math.sin(t*math.pi))
         sweep(mesh, curve, lambda t: .029*(1-.65*t), lambda t: .022*(1-.65*t), detail)
+        # A second tucked strand keeps the bun readable from the back and side
+        # instead of leaving the detail only on its forward face.
+        def tuck(t, side=side):
+            angle = .7 + t*TAU*1.35
+            radius = .125*(1-.72*t)
+            return (side*.36+radius*math.cos(angle), .485+radius*.70*math.sin(angle),
+                    .16+.055*math.sin(t*math.pi))
+        sweep(mesh, tuck, lambda t: .024*(1-.65*t), lambda t: .019*(1-.65*t), detail,
+              outward=(0.,0.,1.))
 
 
 BUILDERS = {"floppy": floppy,

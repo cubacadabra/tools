@@ -23,9 +23,9 @@
       "bottom"
     ],
     "lod": {
-      "near": 2176,
-      "mid": 576,
-      "far": 160
+      "near": 4632,
+      "mid": 1664,
+      "far": 578
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",
@@ -35,7 +35,7 @@
       "geometry": "person_bottom.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated Blender-compatible Phase 5 clothing fixture",
+      "source": "Cubacadabra starter-set presentation wardrobe",
       "license": "Cubacadabra official"
     }
   },

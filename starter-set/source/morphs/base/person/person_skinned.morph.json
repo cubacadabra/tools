@@ -20,8 +20,8 @@
       "face"
     ],
     "lod": {
-      "near": 18496,
-      "mid": 4896,
+      "near": 28560,
+      "mid": 7480,
       "far": 1360
     },
     "requiredCapabilities": [
@@ -32,7 +32,7 @@
       "geometry": "person_skinned.glb"
     },
     "provenance": {
-      "source": "Cubacadabra generated skinned person-01 source",
+      "source": "Cubacadabra starter-set presentation skinned person-01 base",
       "license": "Cubacadabra official"
     }
   },

@@ -25,8 +25,8 @@
       "blue-trim"
     ],
     "lod": {
-      "near": 7440,
-      "mid": 3248,
+      "near": 12432,
+      "mid": 4848,
       "far": 1152
     },
     "requiredCapabilities": [

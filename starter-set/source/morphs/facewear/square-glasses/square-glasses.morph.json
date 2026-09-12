@@ -24,8 +24,8 @@
       "brass-hinges"
     ],
     "lod": {
-      "near": 6040,
-      "mid": 2816,
+      "near": 9360,
+      "mid": 4076,
       "far": 1140
     },
     "requiredCapabilities": [

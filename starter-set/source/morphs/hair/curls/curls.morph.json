@@ -23,9 +23,9 @@
       "warm-brown"
     ],
     "lod": {
-      "near": 9000,
-      "mid": 3000,
-      "far": 900
+      "near": 14000,
+      "mid": 4500,
+      "far": 1200
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

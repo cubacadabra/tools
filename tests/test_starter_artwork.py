@@ -62,7 +62,10 @@ class StarterArtworkTests(unittest.TestCase):
                             edges[tuple(sorted((start,end)))]+=1
                     self.assertTrue(all(count==2 for count in edges.values()),"open/non-manifold surface")
                     self.assertGreater(volume,0,"inward triangle winding")
-            self.assertLess(counts[0],15000)
+            # Near is intentionally presentation quality; the renderer only
+            # selects it above 180 projected pixels. Keep a hard content bound
+            # while allowing layered locks and sculpted curl silhouettes.
+            self.assertLess(counts[0],17000)
             self.assertLess(counts[2],2000)
             self.assertGreater(counts[0],counts[1])
             self.assertGreater(counts[1],counts[2])

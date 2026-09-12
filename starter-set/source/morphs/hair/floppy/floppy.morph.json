@@ -23,9 +23,9 @@
       "chestnut"
     ],
     "lod": {
-      "near": 6072,
-      "mid": 2640,
-      "far": 1020
+      "near": 13536,
+      "mid": 5364,
+      "far": 1452
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
