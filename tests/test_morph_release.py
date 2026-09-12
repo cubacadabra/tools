@@ -8,7 +8,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cubacadabra.morph_release import MorphReleaseError, build_morph_release
+from cubacadabra.morph_release import (
+    MorphReleaseError,
+    build_morph_release,
+    refresh_starter_thumbnails,
+)
 
 
 class MorphReleaseTests(unittest.TestCase):
@@ -70,3 +74,26 @@ class MorphReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(MorphReleaseError, "unknown preset part"):
                     self.build(root)
             self.assertEqual(lock.read_text(), "previous valid release")
+
+    def test_thumbnail_refresh_stages_gpu_captures_before_replacing_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            lock = root / "generated/catalog.lock.json"
+            lock.parent.mkdir()
+            lock.write_text("{}")
+
+            def capture(_command, *, env, **_kwargs):
+                output = Path(env["CUBA_STARTER_THUMBNAILS"])
+                output.mkdir(parents=True, exist_ok=True)
+                (output / "person-17.png").write_bytes(b"new thumbnail")
+                return subprocess.CompletedProcess([], 0)
+
+            with patch("cubacadabra.morph_release.subprocess.run", side_effect=capture) as run:
+                refreshed = refresh_starter_thumbnails(root, lock)
+
+            self.assertEqual(refreshed, 1)
+            self.assertEqual((root / "presets/person.png").read_bytes(), b"new thumbnail")
+            environment = run.call_args.kwargs["env"]
+            self.assertEqual(environment["CUBA_STARTER_SCALE"], "1")
+            self.assertEqual(environment["CUBA_STARTER_LOD"], "near")

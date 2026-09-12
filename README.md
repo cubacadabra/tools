@@ -125,9 +125,11 @@ cubacadabra setup-local
 
 The command compiles every source manifest with the pinned authoring compiler,
 uploads immutable content-addressed packs, applies local D1 migrations, and
-installs an idempotent catalog release. Use `cubacadabra morph build` to only
-generate the ignored release directory. `--starter-set DIR`, `--endpoint URL`,
-and `--dry-run` remain available.
+installs an idempotent catalog release. Both commands refresh the starter
+thumbnails through the shared GPU renderer and update their content hashes;
+use `--skip-thumbnails` for headless builds. Use `cubacadabra morph build` to
+only generate the ignored release directory. `--starter-set DIR`, `--endpoint
+URL`, and `--dry-run` remain available.
 
 Upload both example games after a change to the engine, web client, or example
 projects. The default target is the local backend at `127.0.0.1:8787`:

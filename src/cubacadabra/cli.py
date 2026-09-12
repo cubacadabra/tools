@@ -26,7 +26,12 @@ from .local_r2_setup import (
     default_starter_set,
     setup_local_r2,
 )
-from .morph_release import MorphReleaseError, build_morph_release, write_release_sql
+from .morph_release import (
+    MorphReleaseError,
+    build_morph_release,
+    refresh_starter_thumbnails,
+    write_release_sql,
+)
 
 
 DESCRIPTION = "Tools for building and maintaining Cubacadabra projects."
@@ -215,6 +220,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Validate and show uploads without writing R2 objects.",
     )
+    setup_parser.add_argument(
+        "--skip-thumbnails",
+        action="store_true",
+        help="Skip the GPU-backed starter thumbnail refresh (for headless builds).",
+    )
     setup_parser.set_defaults(handler=_run_setup_local)
 
     morph_parser = commands.add_parser(
@@ -232,6 +242,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", type=Path, default=None, metavar="DIR",
         help="Generated release directory (default: .cubacadabra/generated/morphs).",
     )
+    morph_build_parser.add_argument(
+        "--skip-thumbnails",
+        action="store_true",
+        help="Skip the GPU-backed starter thumbnail refresh (for headless builds).",
+    )
     morph_build_parser.set_defaults(handler=_run_morph_build)
     morph_publish_parser = morph_commands.add_parser(
         "publish", help="Upload compiled packs, then atomically update production D1."
@@ -241,6 +256,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     morph_publish_parser.add_argument("--bucket", default="prod")
     morph_publish_parser.add_argument("--dry-run", action="store_true")
+    morph_publish_parser.add_argument("--skip-thumbnails", action="store_true")
     morph_publish_parser.set_defaults(handler=_run_morph_publish)
     morph_rollback_parser = morph_commands.add_parser(
         "rollback", help="Make a previously generated catalog lock active."
@@ -379,7 +395,9 @@ def _run_upload_examples(args: argparse.Namespace) -> int:
 
 def _run_setup_local(args: argparse.Namespace) -> int:
     try:
-        release = build_morph_release(args.starter_set)
+        release, refreshed = _build_release_for_command(
+            args.starter_set, refresh_thumbnails=not args.skip_thumbnails
+        )
         result = setup_local_r2(
             release.runtime_root.parent,
             endpoint=args.endpoint,
@@ -405,27 +423,33 @@ def _run_setup_local(args: argparse.Namespace) -> int:
     print(
         f"{action} {args.bucket}: files={result.files} "
         f"uploaded={result.uploaded} skipped={result.skipped} "
-        f"bytes_uploaded={result.bytes_uploaded} release={release.release_id}"
+        f"bytes_uploaded={result.bytes_uploaded} release={release.release_id} "
+        f"thumbnails={refreshed}"
     )
     return 0
 
 
 def _run_morph_build(args: argparse.Namespace) -> int:
     try:
-        result = build_morph_release(args.starter_set, output=args.output)
+        result, refreshed = _build_release_for_command(
+            args.starter_set, output=args.output,
+            refresh_thumbnails=not args.skip_thumbnails,
+        )
     except (MorphReleaseError, OSError) as error:
         print(f"cubacadabra morph build failed: {error}", file=sys.stderr)
         return 1
     print(
         f"Built Morph release {result.release_id}: assets={result.assets} "
-        f"packs={result.packs} lock={result.lock_path}"
+        f"packs={result.packs} thumbnails={refreshed} lock={result.lock_path}"
     )
     return 0
 
 
 def _run_morph_publish(args: argparse.Namespace) -> int:
     try:
-        release = build_morph_release(args.starter_set)
+        release, _ = _build_release_for_command(
+            args.starter_set, refresh_thumbnails=not args.skip_thumbnails
+        )
         sql_path = write_release_sql(release.lock_path)
         backend = args.starter_set.resolve().parents[1] / "backend"
         packs = sorted(release.runtime_root.rglob("*.morphpack"))
@@ -462,6 +486,22 @@ def _run_morph_publish(args: argparse.Namespace) -> int:
     action = "Would publish" if args.dry_run else "Published"
     print(f"{action} Morph catalog {release.release_id}: packs={release.packs}")
     return 0
+
+
+def _build_release_for_command(
+    starter_set: Path,
+    *,
+    output: Path | None = None,
+    refresh_thumbnails: bool,
+):
+    """Build packs, refresh source thumbnails, then lock their new hashes."""
+    result = build_morph_release(starter_set, output=output)
+    refreshed = 0
+    if refresh_thumbnails:
+        refreshed = refresh_starter_thumbnails(starter_set, result.lock_path)
+        if refreshed:
+            result = build_morph_release(starter_set, output=output)
+    return result, refreshed
 
 
 def _run_morph_rollback(args: argparse.Namespace) -> int:

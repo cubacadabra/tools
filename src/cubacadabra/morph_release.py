@@ -24,6 +24,78 @@ class MorphReleaseResult:
     packs: int
 
 
+def refresh_starter_thumbnails(starter_set: Path, lock_path: Path) -> int:
+    """Capture complete starter recipes through the shared GPU renderer.
+
+    Captures are staged until every preset succeeds, so an unavailable GPU or
+    incomplete catalog never leaves a partially refreshed thumbnail set.
+    """
+    root = starter_set.expanduser().resolve()
+    catalog_path = root / "catalog.json"
+    if not catalog_path.is_file():
+        return 0
+    catalog = _read_json(catalog_path)
+    preset_specs = catalog.get("presets", [])
+    if not isinstance(preset_specs, list):
+        raise MorphReleaseError("catalog presets must be a list")
+    targets: list[tuple[Path, str]] = []
+    for spec in preset_specs:
+        if not isinstance(spec, dict) or not isinstance(spec.get("source"), str):
+            raise MorphReleaseError("catalog presets must contain source paths")
+        preset_path = (root / str(spec["source"])).resolve()
+        if not preset_path.is_file() or not preset_path.is_relative_to(root):
+            raise MorphReleaseError(f"catalog references missing preset: {preset_path}")
+        preset = _read_json(preset_path)
+        thumbnail = preset.get("thumbnail")
+        if not thumbnail:
+            continue
+        if not isinstance(thumbnail, str) or Path(thumbnail).is_absolute():
+            raise MorphReleaseError(f"invalid preset thumbnail reference in {preset_path}")
+        target = (preset_path.parent / thumbnail).resolve()
+        if not target.is_relative_to(root) or target.suffix != ".png":
+            raise MorphReleaseError(f"invalid preset thumbnail: {target}")
+        targets.append((target, str(preset["id"]).rsplit("/", 1)[-1].removesuffix(".v1") + ".png"))
+    if not targets:
+        return 0
+
+    rust_root = root.parents[1]
+    with tempfile.TemporaryDirectory(prefix="cubacadabra-thumbnails-") as directory:
+        output = Path(directory)
+        environment = os.environ.copy()
+        environment.update({
+            "CUBA_STARTER_CATALOG": str(lock_path),
+            "CUBA_STARTER_THUMBNAILS": str(output),
+            "CUBA_STARTER_SCALE": "1",
+            "CUBA_STARTER_YAW": "0",
+            "CUBA_STARTER_PITCH": "0",
+            "CUBA_STARTER_POSE": "rest",
+            "CUBA_STARTER_LOD": "near",
+        })
+        command = [
+            "cargo", "test", "--manifest-path", str(rust_root / "rust/Cargo.toml"),
+            "--features", "studio-ui", "capture_starters", "--", "--ignored",
+        ]
+        try:
+            subprocess.run(command, cwd=rust_root, env=environment, check=True,
+                           capture_output=True, text=True)
+        except (OSError, subprocess.CalledProcessError) as error:
+            detail = getattr(error, "stderr", "") or str(error)
+            raise MorphReleaseError(
+                "Could not refresh starter thumbnails with the shared renderer. "
+                "Use --skip-thumbnails on headless machines. " + detail.strip()
+            ) from error
+        staged: list[tuple[Path, bytes]] = []
+        for target, capture_name in targets:
+            capture = output / capture_name
+            if not capture.is_file():
+                raise MorphReleaseError(f"starter thumbnail capture did not produce {capture_name}")
+            staged.append((target, capture.read_bytes()))
+        for target, contents in staged:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(contents)
+    return len(targets)
+
+
 def write_release_sql(lock_path: Path, output: Path | None = None, channel: str = "production") -> Path:
     """Turn a generated catalog lock into an idempotent D1 update."""
 

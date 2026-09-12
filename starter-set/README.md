@@ -68,10 +68,14 @@ PYTHONPATH=src python3 -m cubacadabra setup-local
 ```
 
 The build compiles the parts and validates every preset with the shared Rust
-resolver. It writes immutable packs, PNG previews, and `catalog.lock.json`
-under the ignored `.cubacadabra/generated/morphs/` directory. Failed validation
-does not replace the previous lock file. `setup-local` uploads to local R2 and
-installs the release in local D1; no production upload is necessary.
+resolver. On a normal development machine it then captures all starter cards
+through the shared GPU renderer at 256×320, updates `presets/thumbnails/`, and
+rebuilds the lock so the PNG hashes match. It writes immutable packs, PNG
+previews, and `catalog.lock.json` under the ignored
+`.cubacadabra/generated/morphs/` directory. Failed validation does not replace
+the previous lock file. `setup-local` performs the same refresh before uploading
+to local R2 and installing the release in local D1; no production upload is
+necessary. Use `--skip-thumbnails` for a headless build.
 
 Studio fetches the complete paginated catalog and verifies downloaded pack
 sizes and hashes. A starter is displayed only after all its parts are ready.
