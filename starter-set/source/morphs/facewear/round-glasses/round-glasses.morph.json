@@ -24,9 +24,9 @@
       "brass-hinges-001"
     ],
     "lod": {
-      "near": 9360,
-      "mid": 2994,
-      "far": 654
+      "near": 2500,
+      "mid": 550,
+      "far": 120
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

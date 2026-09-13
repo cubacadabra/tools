@@ -27,9 +27,9 @@
       "sole-grooves-and-stitches-001"
     ],
     "lod": {
-      "near": 20000,
-      "mid": 6400,
-      "far": 1252
+      "near": 5500,
+      "mid": 1062,
+      "far": 70
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

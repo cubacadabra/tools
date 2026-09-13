@@ -21,8 +21,14 @@ from generate_parts import ASSETS
 import generate_person_asset as person
 import generate_person_clothing_assets as clothing
 
-BUDGETS={'base':16000,'top':20000,'bottom':9000,'footwear':20000,'hair':17000,
-         'facewear':10000,'headwear':13000,'accessory':8000,'face':2500}
+# Mobile-first delivery ceilings.  These are per-part ceilings, not targets:
+# the common starter loadout stays around 30k--50k Near triangles once its
+# body, hair, clothing and optional equipment are composed.  Keep the source
+# geometry richer than these values; the delivery mesh is the budgeted mesh.
+BUDGETS={'base':8000,'top':6500,'bottom':3500,'footwear':5500,'hair':6500,
+         'facewear':2500,'headwear':3500,'accessory':2500,'face':1800}
+LOD_RATIOS=(('mid',.22),('far',.05))
+FINAL_ATLAS_SIZE=128
 
 FACE_ASSETS = [
     (slug, 'face', slug.replace('-', ' ').title(), 'face', 'face', [])
@@ -203,9 +209,9 @@ def build_one(path,objects,kind):
     bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.smart_project(angle_limit=1.10,island_margin=.012,area_weight=.7)
     bpy.ops.object.mode_set(mode='OBJECT')
-    image=export.bake(obj,slug,ROOT/'review/bakes')
+    image=export.bake(obj,slug,ROOT/'review/bakes',size=FINAL_ATLAS_SIZE)
     lods={'near':obj}
-    for level,ratio in [('mid',.32),('far',.07)]:
+    for level,ratio in LOD_RATIOS:
         low=obj.copy(); low.data=obj.data.copy(); bpy.context.collection.objects.link(low)
         bpy.context.view_layer.objects.active=low
         mod=low.modifiers.new('Delivery reduction','DECIMATE'); mod.ratio=ratio

@@ -19,9 +19,9 @@
       "warm-skin-001"
     ],
     "lod": {
-      "near": 16000,
-      "mid": 5120,
-      "far": 1120
+      "near": 8000,
+      "mid": 1760,
+      "far": 400
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

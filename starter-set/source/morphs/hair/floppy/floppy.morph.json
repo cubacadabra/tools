@@ -23,9 +23,9 @@
       "chestnut-swept-hair-001"
     ],
     "lod": {
-      "near": 16928,
-      "mid": 5410,
-      "far": 1178
+      "near": 6422,
+      "mid": 1412,
+      "far": 562
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

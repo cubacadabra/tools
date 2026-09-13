@@ -46,17 +46,19 @@ def main():
             assert all(b-a < 3.6 for a,b in zip(*bounds)), (path, bounds)
             for mat in obj.data.materials:
                 textures = [n.image for n in mat.node_tree.nodes if n.type == 'TEX_IMAGE']
-                assert textures and all(i and tuple(i.size) == (512,512) for i in textures), (path,mat.name)
+                assert textures and all(i and tuple(i.size) == (128,128) for i in textures), (path,mat.name)
             asset['lods'][obj.name] = {'triangles': len(mesh.loop_triangles),
                 'vertices': len(mesh.vertices), 'boundsZUp': bounds,
                 'authoredNormals': True, 'uvs': True, 'embeddedTexture': True, 'skinned': skinned}
             evaluated.to_mesh_clear()
         report['assets'].append(asset)
-    assert len(report['assets']) == 20
+    # 20 reusable authored parts plus 21 independently delivered expression
+    # meshes are all fresh-imported here.
+    assert len(report['assets']) == 41
     output = ROOT / 'review/fresh-import-report.json'
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + '\n')
-    print('Validated 20 independently imported GLBs / 60 LODs:', output)
+    print('Validated 41 independently imported GLBs / 123 LODs:', output)
 
 
 if __name__ == '__main__':

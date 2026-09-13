@@ -26,12 +26,13 @@
       "face-catchlight-001",
       "face-brow-ink-001",
       "face-mouth-001",
-      "face-tongue-001"
+      "face-tongue-001",
+      "face-teeth-001"
     ],
     "lod": {
-      "near": 2500,
-      "mid": 800,
-      "far": 174
+      "near": 1800,
+      "mid": 396,
+      "far": 82
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

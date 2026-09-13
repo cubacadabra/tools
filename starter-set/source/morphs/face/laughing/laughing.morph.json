@@ -30,9 +30,9 @@
       "face-teeth-001"
     ],
     "lod": {
-      "near": 2500,
-      "mid": 800,
-      "far": 174
+      "near": 1800,
+      "mid": 396,
+      "far": 78
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

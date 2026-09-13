@@ -24,9 +24,9 @@
       "ties-001"
     ],
     "lod": {
-      "near": 15936,
-      "mid": 5098,
-      "far": 1114
+      "near": 6500,
+      "mid": 1430,
+      "far": 324
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

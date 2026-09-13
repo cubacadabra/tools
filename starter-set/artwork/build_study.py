@@ -4,6 +4,7 @@ Run Blender --background --python artwork/build_study.py. Outputs include
 editable source geometry, three delivery LODs per part, and a composed .blend.
 """
 import json
+import math
 import struct
 import sys
 from pathlib import Path
@@ -60,8 +61,8 @@ def join(objects,name):
     return obj
 
 
-def bake(obj,slug,output=OUT):
-    image=bpy.data.images.new(slug+'-color-contact',width=512,height=512,alpha=False)
+def bake(obj,slug,output=OUT,size=512):
+    image=bpy.data.images.new(slug+'-color-contact',width=size,height=size,alpha=False)
     for mat in obj.data.materials:
         node=mat.node_tree.nodes.new('ShaderNodeTexImage'); node.image=image
         mat.node_tree.nodes.active=node
@@ -115,6 +116,16 @@ def write_glb(path,lods,image,rigid=False,preserve_weights=False):
                     index=data.loops[loop_index].vertex_index; vertex=data.vertices[index]
                     texcoord=tuple(uv[loop_index].uv)
                     normal=tuple(data.corner_normals[loop_index].vector)
+                    # Decimation can leave an isolated zero-area face (most
+                    # commonly an intentionally open polo panel).  Preserve
+                    # every authored direction, but make the degenerate case
+                    # a valid unit normal so the schema-5 compiler can reject
+                    # neither the whole asset nor otherwise good hard edges.
+                    length=sum(value*value for value in normal) ** .5
+                    if length < 1e-8 or not all(math.isfinite(value) for value in normal):
+                        normal=(0.,0.,1.)
+                    else:
+                        normal=tuple(value/length for value in normal)
                     key=(index,tuple(round(v,6) for v in texcoord),normal)
                     if key not in lookup:
                         groups=sorted(vertex.groups,key=lambda g:g.weight,reverse=True)

@@ -84,6 +84,30 @@ A failed or superseded download does not replace the current appearance.
 The separate `morph publish` command uploads to **production**. Only use it
 when a production release is intended.
 
+## Mobile-first delivery limits
+
+[`../docs/size_problem.md`](../docs/size_problem.md) records the baseline that prompted these limits: the
+default first preview was 8.30 MB and about 93,800 Near triangles. The target
+for the pre-launch starter set is **2–4 MB for the complete first-preview
+loadout** and **30,000–50,000 composed Near triangles**. These limits apply to
+the runtime payload, not the richer Blender construction meshes.
+
+- Near ceilings per reusable part are: base 8,000; top 6,500; bottom 3,500;
+  footwear 5,500; hair 6,500; facewear 2,500; headwear 3,500; accessory
+  2,500; face 1,800 triangles.
+- Every pack still contains Near/Mid/Far. Mid and Far are reduced to roughly
+  22% and 5% of the delivery mesh so distance rendering remains available
+  without shipping another high-detail copy.
+- Starter delivery atlases are baked at **128×128** and embedded once per
+  pack. The compiler accepts larger source images, but using them here only
+  increases downloads; the isolated mockup study's review bake is separate.
+- The shared registry is capped at 64 packs and 64 MiB of resident data; the
+  pack format's hard 64 MiB safety limit remains a guardrail, not a starter-size
+  target. A normal first preview should be comfortably below those ceilings.
+
+When adding an asset, measure the composed preset and the compiled lockfile;
+do not trade away the first-preview budget by raising a single part ceiling.
+
 ## Regenerating source and previews
 
 The artwork is real source geometry, not painted thumbnails. Floppy hair uses
@@ -99,7 +123,8 @@ Run from `tools/`:
 python3 starter-set/generate_parts.py --wardrobe --blend
 ```
 
-This rebuilds all 20 GLBs without changing the 24 recipes. Blender is required
+This rebuilds all reusable and expression component GLBs without changing the
+24 recipes. Blender is required
 for every final asset's unwrap and color/AO bake; it is an authoring dependency
 only, not a game/runtime dependency. To regenerate one hairstyle:
 
@@ -117,7 +142,7 @@ the selected source files**, including manual edits. Generate local `.blend` fil
 with `--blend` when hand-editing the model. Keep all three LOD node names, the
 head-local origin (for rigid wearables), and the existing rig (for skinned
 clothing). Export GLB with hidden LODs included and Custom Properties enabled so
-material avatar-tint flags survive. Final 512px color/AO atlases are baked onto
+material avatar-tint flags survive. Final 128px color/AO atlases are baked onto
 the reduced Near mesh, embedded in the GLBs, and saved for inspection under
 `review/bakes/textures/`. Materials are authored in `artwork/study_materials.py`;
 the small `assets/starter-*.png` tiles are staging inputs only. Never hand-edit
@@ -173,12 +198,13 @@ The first release has 20 authored components plus 21 builtin expression
 definitions and 24 recipes. It includes 12 skin tones, seven authored hair
 meshes, two glasses styles, and hearing aids. The artwork uses a consistent
 rounded toy style; it is not a claim to represent every child or an art-complete
-diversity roster. Near ceilings are 17,000 triangles for hair, 16,000 for
-bodies, 20,000
-for tops/footwear, and 9,000 for bottoms. Mid/Far reductions are 32%/7%; small
-accessories stay below their separate 8,000–13,000 Near ceilings. The shared
-renderer registry has a 64 MiB residency ceiling so the entire baked wardrobe
-can be registered; per-frame skinning and instance limits are unchanged.
+diversity roster. Near ceilings are 8,000 triangles for bases, 6,500 for tops,
+3,500 for bottoms, 5,500 for footwear, 6,500 for hair, 2,500 for
+facewear/headwear accessories, and 1,800 for builtin face meshes. Mid/Far
+reductions are approximately 22%/5%. The shared renderer registry has a 64 MiB
+residency ceiling and 64-pack registry bound; per-frame skinning and instance
+limits are unchanged. The
+complete first-preview target is 2–4 MB and 30k–50k composed Near triangles.
 Authored normals, UVs, embedded color atlases, and material
 interpretation are shared across renderer targets.
 

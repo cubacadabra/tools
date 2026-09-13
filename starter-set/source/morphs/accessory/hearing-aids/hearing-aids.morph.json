@@ -24,9 +24,9 @@
       "receiver-001"
     ],
     "lod": {
-      "near": 7584,
-      "mid": 2426,
-      "far": 530
+      "near": 2500,
+      "mid": 550,
+      "far": 124
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

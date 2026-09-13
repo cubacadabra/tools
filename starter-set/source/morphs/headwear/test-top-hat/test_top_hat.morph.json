@@ -25,9 +25,9 @@
       "brass-buckle-001"
     ],
     "lod": {
-      "near": 4288,
-      "mid": 1372,
-      "far": 300
+      "near": 3500,
+      "mid": 770,
+      "far": 174
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

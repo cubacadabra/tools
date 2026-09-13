@@ -24,9 +24,9 @@
       "charcoal-topstitch-001"
     ],
     "lod": {
-      "near": 9000,
-      "mid": 2880,
-      "far": 630
+      "near": 3500,
+      "mid": 770,
+      "far": 170
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

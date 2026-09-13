@@ -29,9 +29,9 @@
       "coral-embroidered-mark-001"
     ],
     "lod": {
-      "near": 20000,
-      "mid": 6399,
-      "far": 1399
+      "near": 6499,
+      "mid": 1428,
+      "far": 323
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

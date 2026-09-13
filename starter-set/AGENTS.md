@@ -62,13 +62,33 @@ or set `METAL_DEVICE_WRAPPER_TYPE=1` in a debug environment. Apple's optional
 `xcrun --find gpudebug` rather than assuming it exists. Links and the exact
 platform matrix are in [README.md](README.md#mac-gpu-debugging).
 
+## Mobile payload limits
+
+Read `../docs/size_problem.md` before changing starter geometry. The pre-launch
+first-preview target is **2–4 MB for the complete loadout** and **30k–50k
+composed Near triangles**. Keep the richer Blender source meshes, but deliver
+the following per-part Near ceilings from `artwork/build_starters.py`:
+
+- base 8,000; top 6,500; bottom 3,500; footwear 5,500; hair 6,500;
+  facewear 2,500; headwear 3,500; accessory 2,500; face 1,800 triangles.
+- Keep all three LODs, with approximately 22% Mid and 5% Far reductions.
+- Bake starter delivery atlases at 128×128. The compiler's 256px resize,
+  64-pack registry bound, and 64 MiB pack/residency limits are safety ceilings,
+  not targets.
+
+Measure compiled `.morphpack` bytes and composed preset triangles after every
+art pass. Do not raise a single part budget to fix a visual issue without
+showing that topology is the limiting factor and rechecking the complete
+first-preview budget. The isolated mockup study may retain its separate
+high-resolution review bake; those assets are not the starter download.
+
 ## Art iteration contract
 
 1. Inspect existing sources, the supplied reference, and any study README and
    review ledger before editing. Label assumptions about unseen views.
 2. Keep procedural changes in the durable `artwork/` Python source.
    `artwork/build_starters.py` uses study construction, unwraps the reduced
-   Near delivery mesh, and bakes embedded color/AO maps using
+   Near delivery mesh, and bakes embedded 128×128 color/AO maps using
    `artwork/study_materials.py`. `artwork/material_textures.py` owns only the
    small staging-generator tiles. Do not hand-edit generated atlas PNGs. Editing
    only a generated GLB or local `.blend` loses the change on regeneration.

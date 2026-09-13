@@ -23,9 +23,9 @@
       "chocolate-001"
     ],
     "lod": {
-      "near": 12480,
-      "mid": 3992,
-      "far": 872
+      "near": 6498,
+      "mid": 1428,
+      "far": 324
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

@@ -24,8 +24,8 @@
     ],
     "lod": {
       "near": 4032,
-      "mid": 1290,
-      "far": 282
+      "mid": 886,
+      "far": 200
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",

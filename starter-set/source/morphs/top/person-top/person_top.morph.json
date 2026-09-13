@@ -28,9 +28,9 @@
       "ivory-woven-cotton-001"
     ],
     "lod": {
-      "near": 20000,
-      "mid": 6400,
-      "far": 1397
+      "near": 6500,
+      "mid": 1426,
+      "far": 310
     },
     "requiredCapabilities": [
       "skin.biped15-linear.v1",

@@ -25,9 +25,9 @@
       "blue-trim-001"
     ],
     "lod": {
-      "near": 12432,
-      "mid": 3978,
-      "far": 870
+      "near": 3500,
+      "mid": 770,
+      "far": 174
     },
     "requiredCapabilities": [
       "mesh.rigid.v1",
