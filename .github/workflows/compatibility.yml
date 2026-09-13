@@ -3,44 +3,51 @@ name: Cross-repository compatibility
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      tools_ref:
+        description: "Tools ref to test"
+        required: false
+        default: main
+      rust_ref:
+        description: "Rust ref to test"
+        required: false
+        default: main
+      web_ref:
+        description: "Web ref to test"
+        required: false
+        default: main
+      first_game_ref:
+        description: "First-game ref to test"
+        required: false
+        default: main
+      second_game_ref:
+        description: "Second-game ref to test"
+        required: false
+        default: main
+      third_game_ref:
+        description: "Third-game ref to test"
+        required: false
+        default: main
+      examples_ref:
+        description: "Examples ref to test"
+        required: false
+        default: main
+      studio_ref:
+        description: "Studio ref to test"
+        required: false
+        default: main
 
 jobs:
-  game-packages:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: tools
-      - uses: actions/checkout@v4
-        with:
-          repository: cubacadabra/first-game
-          path: first-game
-      - uses: actions/checkout@v4
-        with:
-          repository: cubacadabra/second-game
-          path: second-game
-      - uses: actions/checkout@v4
-        with:
-          repository: cubacadabra/third-game
-          path: third-game
-      - uses: actions/checkout@v4
-        with:
-          repository: cubacadabra/examples
-          path: examples
-      - uses: actions/checkout@v4
-        with:
-          repository: cubacadabra/rust
-          path: rust
-      - uses: actions/checkout@v4
-        with:
-          repository: cubacadabra/web
-          path: web
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
-      - run: sh rust/scripts/build_web_renderer.sh --debug
-      - run: PYTHONPATH=tools/src python3 tools/scripts/check_workspace_compatibility.py
+  compatibility:
+    uses: ./.github/workflows/compatibility-reusable.yml
+    with:
+      tools_repository: ${{ github.repository }}
+      tools_ref: ${{ inputs.tools_ref || github.sha }}
+      rust_ref: ${{ inputs.rust_ref || 'main' }}
+      web_ref: ${{ inputs.web_ref || 'main' }}
+      first_game_ref: ${{ inputs.first_game_ref || 'main' }}
+      second_game_ref: ${{ inputs.second_game_ref || 'main' }}
+      third_game_ref: ${{ inputs.third_game_ref || 'main' }}
+      examples_ref: ${{ inputs.examples_ref || 'main' }}
+      studio_ref: ${{ inputs.studio_ref || 'main' }}

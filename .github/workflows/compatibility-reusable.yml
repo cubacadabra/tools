@@ -1,0 +1,96 @@
+name: Cross-repository compatibility runner
+
+on:
+  workflow_call:
+    inputs:
+      tools_repository:
+        required: false
+        type: string
+        default: cubacadabra/tools
+      tools_ref:
+        required: false
+        type: string
+        default: main
+      rust_ref:
+        required: false
+        type: string
+        default: main
+      web_ref:
+        required: false
+        type: string
+        default: main
+      first_game_ref:
+        required: false
+        type: string
+        default: main
+      second_game_ref:
+        required: false
+        type: string
+        default: main
+      third_game_ref:
+        required: false
+        type: string
+        default: main
+      examples_ref:
+        required: false
+        type: string
+        default: main
+      studio_ref:
+        required: false
+        type: string
+        default: main
+
+jobs:
+  game-packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.tools_repository }}
+          ref: ${{ inputs.tools_ref }}
+          path: tools
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/first-game
+          ref: ${{ inputs.first_game_ref }}
+          path: first-game
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/second-game
+          ref: ${{ inputs.second_game_ref }}
+          path: second-game
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/third-game
+          ref: ${{ inputs.third_game_ref }}
+          path: third-game
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/examples
+          ref: ${{ inputs.examples_ref }}
+          path: examples
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/rust
+          ref: ${{ inputs.rust_ref }}
+          path: rust
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/web
+          ref: ${{ inputs.web_ref }}
+          path: web
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/studio
+          ref: ${{ inputs.studio_ref }}
+          path: studio
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - run: sh rust/scripts/build_web_renderer.sh --debug
+      - run: PYTHONPATH=tools/src python3 tools/scripts/check_workspace_compatibility.py
+      - run: cargo test --manifest-path studio/Cargo.toml --no-default-features

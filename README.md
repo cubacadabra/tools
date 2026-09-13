@@ -127,7 +127,13 @@ PYTHONPATH=src python3 scripts/check_workspace_compatibility.py
 ```
 
 It builds every supported game with this CLI and loads the resulting packages
-through both the native Rust client and browser WASM client.
+through the native Rust client, browser WASM client, and Studio's raw-project
+validator. It also runs a deterministic lifecycle/input trace through native
+and WASM and compares the serialized game actions and public snapshot bits.
+
+The same reusable workflow is called by the tools, Rust, web, Studio, game,
+and examples repositories. For a coordinated change, run the tools workflow
+manually and provide explicit refs for the participating repositories.
 
 The complete preview contract is in the
 [Cubacadabra Game Developer Guide](docs/cubacadabra-game-developer-guide-preview-0.3.md).
