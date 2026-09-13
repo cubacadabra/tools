@@ -241,3 +241,5 @@ function CubaSharedState:update(api, delta_seconds)
     self.inflightSeconds = 0
     self:_submit_next(api)
 end
+
+return CubaSharedState

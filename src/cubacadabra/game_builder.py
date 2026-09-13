@@ -1,17 +1,19 @@
 """Build portable Cubacadabra game packages.
 
-Game source modules can include one another with a directive such as::
+Game source uses ordinary Luau modules, for example::
 
-    -- @include "ui/document.luau"
+    local Document = require("./ui/document")
 
-The builder expands those directives into one deterministic Luau entry chunk,
-then copies the manifest and optional assets into a client-ready package.
+The builder resolves and bundles those modules into one deterministic Luau
+entry chunk, then copies the manifest and optional assets into a client-ready
+package.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import posixpath
 import re
 import shutil
 import wave
@@ -20,15 +22,15 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 
-INCLUDE_RE = re.compile(r'^\s*--\s*@include\s+"([^"]+)"\s*$')
-SDK_INCLUDE_PREFIX = "@cubacadabra/"
-SDK_INCLUDE_RE = re.compile(r"^@cubacadabra/[a-z0-9-]+\.luau$")
-SDK_INCLUDES = {
-    "@cubacadabra/disclosure-v1.luau": "disclosure.luau",
-    "@cubacadabra/obby-v1.luau": "obby.luau",
-    "@cubacadabra/survival-v1.luau": "survival.luau",
-    "@cubacadabra/cycle-v1.luau": "cycle.luau",
-    "@cubacadabra/shared-state-v1.luau": "shared-state.luau",
+INCLUDE_RE = re.compile(r'^\s*--\s*@include(?:\s|$)')
+SDK_REQUIRE_PREFIX = "@cubacadabra/"
+SDK_REQUIRE_RE = re.compile(r"^@cubacadabra/[a-z0-9-]+$")
+SDK_MODULES = {
+    "@cubacadabra/disclosure": "disclosure.luau",
+    "@cubacadabra/obby": "obby.luau",
+    "@cubacadabra/survival": "survival.luau",
+    "@cubacadabra/cycle": "cycle.luau",
+    "@cubacadabra/shared-state": "shared-state.luau",
 }
 AUDIO_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 AUDIO_PATH_RE = re.compile(
@@ -62,32 +64,21 @@ class GameBuildError(ValueError):
     """An input project cannot be turned into a valid game package."""
 
 
-def _read_sdk_include(include_value: str) -> str:
-    if not SDK_INCLUDE_RE.fullmatch(include_value):
+def _read_sdk_module(module_name: str) -> str:
+    if not SDK_REQUIRE_RE.fullmatch(module_name):
         raise GameBuildError(
-            "Cubacadabra SDK includes must use "
-            '"@cubacadabra/<module-name>.luau"'
+            "Cubacadabra SDK requires must use "
+            'require("@cubacadabra/<module-name>")'
         )
-    sdk_file = SDK_INCLUDES.get(include_value)
+    sdk_file = SDK_MODULES.get(module_name)
     if sdk_file is None:
-        raise GameBuildError(f"unknown Cubacadabra SDK include: {include_value}")
+        raise GameBuildError(f"unknown Cubacadabra SDK module: {module_name}")
     sdk_path = Path(__file__).with_name("sdk") / sdk_file
 
     try:
         source = sdk_path.read_text(encoding="utf-8")
     except UnicodeDecodeError as error:
-        raise GameBuildError(f"{include_value}: SDK source is not valid UTF-8") from error
-
-    for line_number, line in enumerate(source.splitlines(), start=1):
-        if re.match(r"^return(?:\s|$)", line):
-            raise GameBuildError(
-                f"{include_value}:{line_number}: SDK modules share the entry "
-                "chunk and cannot contain a top-level return"
-            )
-        if INCLUDE_RE.match(line):
-            raise GameBuildError(
-                f"{include_value}:{line_number}: SDK modules cannot include other files"
-            )
+        raise GameBuildError(f"{module_name}: SDK source is not valid UTF-8") from error
     return source
 
 
@@ -101,66 +92,301 @@ class GameBuildResult:
     zip_path: Path | None
 
 
-def _read_source_file(
-    path: Path,
-    source_root: Path,
-    stack: tuple[Path, ...],
-) -> str:
-    relative = path.relative_to(source_root).as_posix()
-    if path in stack:
-        chain = " -> ".join(item.relative_to(source_root).as_posix() for item in (*stack, path))
-        raise GameBuildError(f"cyclic Luau include: {chain}")
+@dataclass(frozen=True)
+class _LuauModule:
+    """One source module and its build-time require routing table."""
 
-    lines: list[str] = []
+    module_id: str
+    source: str
+    routes: dict[str, str]
+
+
+def _read_luau_source(path: Path, source_root: Path) -> str:
+    relative = path.relative_to(source_root).as_posix()
     try:
-        source = path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")
     except UnicodeDecodeError as error:
         raise GameBuildError(f"{relative}: source is not valid UTF-8") from error
 
-    for line_number, line in enumerate(source.splitlines(), start=1):
-        if stack and re.match(r"^return(?:\s|$)", line):
-            raise GameBuildError(
-                f"{relative}:{line_number}: included files share the entry chunk "
-                "and cannot contain a top-level return"
-            )
 
-        match = INCLUDE_RE.match(line)
-        if not match:
-            lines.append(line)
+def _long_bracket_end(source: str, offset: int) -> tuple[str, int] | None:
+    """Return a Luau long-bracket closing token and content offset."""
+
+    if offset >= len(source) or source[offset] != "[":
+        return None
+    cursor = offset + 1
+    while cursor < len(source) and source[cursor] == "=":
+        cursor += 1
+    if cursor >= len(source) or source[cursor] != "[":
+        return None
+    equals = source[offset + 1 : cursor]
+    return "]" + equals + "]", cursor + 1
+
+
+def _skip_space_and_comments(source: str, offset: int) -> int:
+    """Skip whitespace and comments while parsing a require expression."""
+
+    cursor = offset
+    while cursor < len(source):
+        if source[cursor].isspace():
+            cursor += 1
+            continue
+        if source.startswith("--", cursor):
+            long_comment = _long_bracket_end(source, cursor + 2)
+            if long_comment is not None:
+                closing, content_offset = long_comment
+                end = source.find(closing, content_offset)
+                cursor = len(source) if end < 0 else end + len(closing)
+            else:
+                newline = source.find("\n", cursor + 2)
+                cursor = len(source) if newline < 0 else newline + 1
+            continue
+        break
+    return cursor
+
+
+def _require_specifiers(source: str, module_name: str) -> tuple[str, ...]:
+    """Find global require calls without mistaking comments or strings for code."""
+
+    specifiers: list[str] = []
+    cursor = 0
+    previous_token = ""
+    while cursor < len(source):
+        if source.startswith("--", cursor):
+            long_comment = _long_bracket_end(source, cursor + 2)
+            if long_comment is not None:
+                closing, content_offset = long_comment
+                end = source.find(closing, content_offset)
+                cursor = len(source) if end < 0 else end + len(closing)
+            else:
+                newline = source.find("\n", cursor + 2)
+                cursor = len(source) if newline < 0 else newline + 1
             continue
 
-        if match.group(1).startswith(SDK_INCLUDE_PREFIX):
-            include_name = match.group(1)
-            lines.append(f"-- begin SDK include: {include_name}")
-            lines.append(_read_sdk_include(include_name))
-            lines.append(f"-- end SDK include: {include_name}")
+        character = source[cursor]
+        if character in ('"', "'", "`"):
+            quote = character
+            cursor += 1
+            while cursor < len(source):
+                if source[cursor] == "\\":
+                    cursor += 2
+                elif source[cursor] == quote:
+                    cursor += 1
+                    break
+                else:
+                    cursor += 1
+            previous_token = "string"
             continue
 
-        include_value = PurePosixPath(match.group(1))
-        if (
-            not match.group(1)
-            or include_value.is_absolute()
-            or ".." in include_value.parts
-        ):
-            raise GameBuildError(f"{relative}:{line_number}: include must stay inside src/")
+        long_string = _long_bracket_end(source, cursor)
+        if long_string is not None:
+            closing, content_offset = long_string
+            end = source.find(closing, content_offset)
+            cursor = len(source) if end < 0 else end + len(closing)
+            previous_token = "string"
+            continue
 
-        include_path = source_root.joinpath(*include_value.parts)
-        try:
-            include_path = include_path.resolve().relative_to(source_root.resolve())
-        except ValueError as error:
-            raise GameBuildError(
-                f"{relative}:{line_number}: include must stay inside src/"
-            ) from error
-        include_path = source_root / include_path
-        if not include_path.is_file():
-            raise GameBuildError(
-                f"{relative}:{line_number}: included file not found: {include_value}"
+        if character.isalpha() or character == "_":
+            end = cursor + 1
+            while end < len(source) and (source[end].isalnum() or source[end] == "_"):
+                end += 1
+            identifier = source[cursor:end]
+            if identifier != "require" or previous_token in (".", ":"):
+                previous_token = identifier
+                cursor = end
+                continue
+
+            call = _skip_space_and_comments(source, end)
+            if call >= len(source) or source[call] != "(":
+                previous_token = identifier
+                cursor = end
+                continue
+            argument = _skip_space_and_comments(source, call + 1)
+            if argument >= len(source) or source[argument] not in ('"', "'"):
+                raise GameBuildError(
+                    f"{module_name}: require paths must be static quoted strings"
+                )
+            quote = source[argument]
+            value_start = argument + 1
+            value_end = value_start
+            while value_end < len(source) and source[value_end] != quote:
+                if source[value_end] == "\\":
+                    raise GameBuildError(
+                        f"{module_name}: require paths cannot contain escapes"
+                    )
+                value_end += 1
+            if value_end >= len(source):
+                raise GameBuildError(f"{module_name}: unterminated require path")
+            close = _skip_space_and_comments(source, value_end + 1)
+            if close >= len(source) or source[close] != ")":
+                raise GameBuildError(
+                    f"{module_name}: require must contain exactly one string path"
+                )
+            specifiers.append(source[value_start:value_end])
+            previous_token = ")"
+            cursor = close + 1
+            continue
+
+        if not character.isspace():
+            previous_token = character
+        cursor += 1
+
+    return tuple(dict.fromkeys(specifiers))
+
+
+def _resolve_local_module(
+    specifier: str,
+    requiring_path: Path,
+    source_root: Path,
+) -> Path:
+    relative = requiring_path.relative_to(source_root).as_posix()
+    if not specifier.startswith(("./", "../")):
+        raise GameBuildError(
+            f"{relative}: require path must start with './', '../', or '@cubacadabra/'"
+        )
+    if "\\" in specifier:
+        raise GameBuildError(f"{relative}: require paths must use forward slashes")
+
+    requiring_module = PurePosixPath(relative)
+    unresolved = posixpath.normpath(
+        (requiring_module.parent / PurePosixPath(specifier)).as_posix()
+    )
+    if unresolved == ".." or unresolved.startswith("../") or unresolved.startswith("/"):
+        raise GameBuildError(f"{relative}: require must stay inside src/")
+
+    unresolved_path = PurePosixPath(unresolved)
+    if unresolved_path.suffix in (".luau", ".lua"):
+        candidates = [source_root.joinpath(*unresolved_path.parts)]
+    else:
+        candidates = [
+            source_root.joinpath(*PurePosixPath(unresolved + suffix).parts)
+            for suffix in (".luau", ".lua")
+        ] + [
+            source_root.joinpath(*unresolved_path.parts, filename)
+            for filename in ("init.luau", "init.lua")
+        ]
+    matches = [candidate for candidate in candidates if candidate.is_file()]
+    if not matches:
+        raise GameBuildError(f"{relative}: required module not found: {specifier}")
+    if len(matches) > 1:
+        choices = ", ".join(path.relative_to(source_root).as_posix() for path in matches)
+        raise GameBuildError(
+            f"{relative}: required module is ambiguous: {specifier} ({choices})"
+        )
+
+    match = matches[0]
+    try:
+        match.resolve().relative_to(source_root.resolve())
+    except ValueError as error:
+        raise GameBuildError(f"{relative}: require must stay inside src/") from error
+    return match
+
+
+def _bundle_luau_modules(entry: Path, source_root: Path) -> str:
+    modules: dict[str, _LuauModule] = {}
+
+    def visit_local(path: Path, stack: tuple[str, ...]) -> str:
+        module_id = path.relative_to(source_root).as_posix()
+        return visit(module_id, _read_luau_source(path, source_root), path, stack)
+
+    def visit_sdk(module_id: str, stack: tuple[str, ...]) -> str:
+        return visit(module_id, _read_sdk_module(module_id), None, stack)
+
+    def visit(
+        module_id: str,
+        source: str,
+        path: Path | None,
+        stack: tuple[str, ...],
+    ) -> str:
+        if module_id in stack:
+            chain = " -> ".join((*stack, module_id))
+            raise GameBuildError(f"cyclic Luau require: {chain}")
+        if module_id in modules:
+            return module_id
+
+        for line_number, line in enumerate(source.splitlines(), start=1):
+            if INCLUDE_RE.match(line):
+                raise GameBuildError(
+                    f"{module_id}:{line_number}: @include is no longer supported; "
+                    "use a Luau require() and return a value from the module"
+                )
+
+        routes: dict[str, str] = {}
+        next_stack = (*stack, module_id)
+        for specifier in _require_specifiers(source, module_id):
+            if specifier.startswith(SDK_REQUIRE_PREFIX):
+                dependency_id = visit_sdk(specifier, next_stack)
+            else:
+                if path is None:
+                    raise GameBuildError(
+                        f"{module_id}: SDK modules cannot require game source modules"
+                    )
+                dependency = _resolve_local_module(specifier, path, source_root)
+                dependency_id = visit_local(dependency, next_stack)
+            routes[specifier] = dependency_id
+
+        modules[module_id] = _LuauModule(module_id, source, routes)
+        return module_id
+
+    entry_id = visit_local(entry, ())
+    lines = [
+        "local __modules = {}",
+        "local __routes = {}",
+        "local __cache = {}",
+        "local __loading = {}",
+        "",
+    ]
+    for module_id in sorted(modules):
+        module = modules[module_id]
+        encoded_id = json.dumps(module_id)
+        lines.append(f"-- begin module: {module_id}")
+        lines.append(f"__routes[{encoded_id}] = {{")
+        for specifier, dependency_id in sorted(module.routes.items()):
+            lines.append(
+                f"    [{json.dumps(specifier)}] = {json.dumps(dependency_id)},"
             )
+        lines.append("}")
+        lines.append(f"__modules[{encoded_id}] = function(require)")
+        lines.append(module.source)
+        lines.append("end")
+        lines.append(f"-- end module: {module_id}")
+        lines.append("")
 
-        lines.append(f"-- begin include: {include_value}")
-        lines.append(_read_source_file(include_path, source_root, (*stack, path)))
-        lines.append(f"-- end include: {include_value}")
-
+    lines.extend(
+        [
+            "local function __require(module_id)",
+            "    local cached = __cache[module_id]",
+            "    if cached ~= nil then",
+            "        return cached",
+            "    end",
+            "    if __loading[module_id] then",
+            '        error("cyclic bundled require: " .. module_id)',
+            "    end",
+            "    local loader = __modules[module_id]",
+            "    if loader == nil then",
+            '        error("bundled module not found: " .. module_id)',
+            "    end",
+            "    local routes = __routes[module_id]",
+            "    local function module_require(path)",
+            "        local dependency_id = routes[path]",
+            "        if dependency_id == nil then",
+            '            error("undeclared bundled require from " .. module_id .. ": " .. tostring(path))',
+            "        end",
+            "        return __require(dependency_id)",
+            "    end",
+            "    __loading[module_id] = true",
+            "    local result = loader(module_require)",
+            "    __loading[module_id] = nil",
+            "    if result == nil then",
+            '        error("bundled module returned nil: " .. module_id)',
+            "    end",
+            "    __cache[module_id] = result",
+            "    return result",
+            "end",
+            "",
+            f"return __require({json.dumps(entry_id)})",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -459,7 +685,7 @@ def build_game(
         "-- GENERATED FILE: do not edit; edit src/ and run cubacadabra build-game.\n"
         f"-- game: {game_id}\n"
         f"-- version: {version}\n\n"
-        + _read_source_file(entry, source_root, ())
+        + _bundle_luau_modules(entry, source_root)
         + "\n"
     )
     (output / "game.luau").write_text(generated_script, encoding="utf-8")

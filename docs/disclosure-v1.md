@@ -5,7 +5,7 @@ or more optional UI nodes. The game still owns the document, copy, styles, and
 placement; the helper only owns the open state and tap handling.
 
 ```luau
--- @include "@cubacadabra/disclosure-v1.luau"
+local CubaDisclosure = require("@cubacadabra/disclosure")
 
 local objective = CubaDisclosure.create({
     action = "objective.toggle",

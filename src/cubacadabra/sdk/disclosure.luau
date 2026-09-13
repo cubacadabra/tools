@@ -74,3 +74,5 @@ function CubaDisclosure:handle(api, event)
     self:set_open(api, not self.open)
     return true
 end
+
+return CubaDisclosure

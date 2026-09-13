@@ -82,6 +82,14 @@ class PreviewConformanceTests(unittest.TestCase):
             self.assertEqual(manifest["version"], "0.3.0", game_id)
             self.assertEqual(manifest["sdkVersion"], "0.3.0", game_id)
 
+    def test_game_workspaces_map_the_sdk_alias_to_real_luau_modules(self) -> None:
+        for workspace in ("first-game", "second-game", "third-game", "examples"):
+            config = json.loads((ROOT / workspace / ".luaurc").read_text())
+            sdk_root = (ROOT / workspace / config["aliases"]["cubacadabra"]).resolve()
+            self.assertEqual(sdk_root, (ROOT / "tools/src/cubacadabra/sdk").resolve())
+            for module in ("shared-state", "disclosure", "survival", "cycle", "obby"):
+                self.assertTrue((sdk_root / f"{module}.luau").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

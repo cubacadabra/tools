@@ -66,17 +66,29 @@ cubacadabra build-game --source ~/games/the-wild-west --output ../the-wild-west 
 By convention, a game project contains `manifest.json`, `src/main.luau`, and
 an optional `assets/` directory. The manifest's `id` and SemVer `version`
 become package metadata; legacy positive integer versions remain accepted.
-Luau files can include other files with `-- @include "relative/path.luau"`
-directives.
-
-Portable SDK helpers use the same explicit syntax with a reserved namespace:
+Luau files use normal relative modules. The builder follows static string
+`require()` calls, gives each module its own scope and cached return value, and
+bundles the reachable graph into the package's single `game.luau` artifact:
 
 ```luau
--- @include "@cubacadabra/shared-state-v1.luau"
--- @include "@cubacadabra/disclosure-v1.luau"
--- @include "@cubacadabra/survival-v1.luau"
--- @include "@cubacadabra/cycle-v1.luau"
+local Round = require("./round")
+local Document = require("./ui/document")
 ```
+
+Portable SDK helpers use the `@cubacadabra` alias. The manifest's `sdkVersion`
+pins the SDK contract, so module paths do not repeat the version:
+
+```luau
+local CubaSharedState = require("@cubacadabra/shared-state")
+local CubaDisclosure = require("@cubacadabra/disclosure")
+local CubaSurvival = require("@cubacadabra/survival")
+local CubaCycle = require("@cubacadabra/cycle")
+```
+
+The checked-in workspaces map that alias to the SDK source with `.luaurc`, so
+Luau-aware editors can navigate and type-check the same module graph that the
+builder bundles. Require paths must be static strings and must start with
+`./`, `../`, or `@cubacadabra/`.
 
 `CubaSharedState` v1 owns bounded intent queuing, compare-and-set retries,
 conflict rebasing, and reconnect snapshots. Games provide their own initial

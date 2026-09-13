@@ -68,8 +68,8 @@ def build_parser() -> argparse.ArgumentParser:
         "build-game",
         help="Build a portable game package from a game project.",
         description=(
-            "Assemble a game's Luau source and manifest into the portable "
-            "package consumed by Cubacadabra clients."
+            "Bundle a game's Luau require() module graph and manifest into "
+            "the portable package consumed by Cubacadabra clients."
         ),
         epilog=(
             "Examples:\n"

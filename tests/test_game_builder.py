@@ -22,10 +22,12 @@ class GameBuilderTests(unittest.TestCase):
             json.dumps({"id": "test-game", "version": 3}), encoding="utf-8"
         )
         (self.project / "src/main.luau").write_text(
-            '-- @include "ui/document.luau"\nreturn {}\n', encoding="utf-8"
+            'local document = require("./ui/document")\n'
+            'return { document = document }\n',
+            encoding="utf-8",
         )
         (self.project / "src/ui/document.luau").write_text(
-            "local document = {}\n", encoding="utf-8"
+            "local document = {}\nreturn document\n", encoding="utf-8"
         )
         (self.project / "assets/logo.txt").write_text("asset", encoding="utf-8")
 
@@ -123,7 +125,10 @@ class GameBuilderTests(unittest.TestCase):
         )
 
         self.assertEqual(result.game_id, "test-game")
-        self.assertIn("begin include: ui/document.luau", (output / "game.luau").read_text())
+        script = (output / "game.luau").read_text()
+        self.assertIn("begin module: ui/document.luau", script)
+        self.assertIn('["./ui/document"] = "ui/document.luau"', script)
+        self.assertIn('return __require("main.luau")', script)
         self.assertTrue((output / "assets/logo.txt").exists())
         package = json.loads((output / "package.json").read_text())
         self.assertEqual(package["files"], ["assets/logo.txt", "game.luau", "manifest.json"])
@@ -135,9 +140,9 @@ class GameBuilderTests(unittest.TestCase):
                 "package.json",
             ])
 
-    def test_expands_a_versioned_cubacadabra_sdk_include(self) -> None:
+    def test_bundles_a_cubacadabra_sdk_module(self) -> None:
         (self.project / "src/main.luau").write_text(
-            '-- @include "@cubacadabra/shared-state-v1.luau"\n'
+            'local CubaSharedState = require("@cubacadabra/shared-state")\n'
             'return { shared = CubaSharedState }\n',
             encoding="utf-8",
         )
@@ -151,14 +156,15 @@ class GameBuilderTests(unittest.TestCase):
 
         script = (output / "game.luau").read_text()
         self.assertIn(
-            "begin SDK include: @cubacadabra/shared-state-v1.luau",
+            "begin module: @cubacadabra/shared-state",
             script,
         )
         self.assertIn("local CubaSharedState = {}", script)
+        self.assertIn("return CubaSharedState", script)
 
-    def test_expands_the_disclosure_sdk_include(self) -> None:
+    def test_bundles_the_disclosure_sdk_module(self) -> None:
         (self.project / "src/main.luau").write_text(
-            '-- @include "@cubacadabra/disclosure-v1.luau"\n'
+            'local CubaDisclosure = require("@cubacadabra/disclosure")\n'
             'return { disclosure = CubaDisclosure }\n',
             encoding="utf-8",
         )
@@ -172,14 +178,14 @@ class GameBuilderTests(unittest.TestCase):
 
         script = (output / "game.luau").read_text()
         self.assertIn(
-            "begin SDK include: @cubacadabra/disclosure-v1.luau",
+            "begin module: @cubacadabra/disclosure",
             script,
         )
         self.assertIn("local CubaDisclosure = {}", script)
 
-    def test_expands_the_survival_sdk_include(self) -> None:
+    def test_bundles_the_survival_sdk_module(self) -> None:
         (self.project / "src/main.luau").write_text(
-            '-- @include "@cubacadabra/survival-v1.luau"\n'
+            'local CubaSurvival = require("@cubacadabra/survival")\n'
             'return { survival = CubaSurvival }\n',
             encoding="utf-8",
         )
@@ -193,18 +199,18 @@ class GameBuilderTests(unittest.TestCase):
 
         script = (output / "game.luau").read_text()
         self.assertIn(
-            "begin SDK include: @cubacadabra/survival-v1.luau",
+            "begin module: @cubacadabra/survival",
             script,
         )
         self.assertIn("local CubaSurvival = {}", script)
 
-    def test_rejects_an_unknown_cubacadabra_sdk_include(self) -> None:
+    def test_rejects_an_unknown_cubacadabra_sdk_module(self) -> None:
         (self.project / "src/main.luau").write_text(
-            '-- @include "@cubacadabra/missing.luau"\nreturn {}\n',
+            'local missing = require("@cubacadabra/missing")\nreturn missing\n',
             encoding="utf-8",
         )
 
-        with self.assertRaisesRegex(GameBuildError, "unknown Cubacadabra SDK include"):
+        with self.assertRaisesRegex(GameBuildError, "unknown Cubacadabra SDK module"):
             build_game(
                 source_root=self.project / "src",
                 manifest_path=self.project / "manifest.json",
@@ -264,27 +270,101 @@ class GameBuilderTests(unittest.TestCase):
                 output=self.project / "build/package",
             )
 
-    def test_rejects_include_traversal(self) -> None:
-        (self.project / "src/ui/document.luau").write_text(
-            '-- @include "../main.luau"\n', encoding="utf-8"
+    def test_rejects_require_traversal(self) -> None:
+        (self.project / "src/main.luau").write_text(
+            'local outside = require("../../outside")\nreturn outside\n',
+            encoding="utf-8",
         )
 
-        with self.assertRaisesRegex(GameBuildError, "include must stay inside src"):
+        with self.assertRaisesRegex(GameBuildError, "require must stay inside src"):
             build_game(
                 source_root=self.project / "src",
                 manifest_path=self.project / "manifest.json",
                 output=self.project / "build/package",
             )
 
-    def test_rejects_cyclic_include(self) -> None:
+    def test_rejects_cyclic_require(self) -> None:
         (self.project / "src/main.luau").write_text(
-            '-- @include "ui/document.luau"\n', encoding="utf-8"
+            'local document = require("./ui/document")\nreturn document\n',
+            encoding="utf-8",
         )
         (self.project / "src/ui/document.luau").write_text(
-            '-- @include "ui/document.luau"\n', encoding="utf-8"
+            'local main = require("../main")\nreturn main\n', encoding="utf-8"
         )
 
-        with self.assertRaisesRegex(GameBuildError, "cyclic Luau include"):
+        with self.assertRaisesRegex(GameBuildError, "cyclic Luau require"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
+    def test_resolves_transitive_requires_relative_to_each_module(self) -> None:
+        (self.project / "src/ui/document.luau").write_text(
+            'local styles = require("./styles")\nreturn { styles = styles }\n',
+            encoding="utf-8",
+        )
+        (self.project / "src/ui/styles.luau").write_text(
+            'return { accent = "#57E5D0" }\n', encoding="utf-8"
+        )
+
+        output = self.project / "build/package"
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+
+        script = (output / "game.luau").read_text()
+        self.assertIn("begin module: ui/styles.luau", script)
+        self.assertIn('["./styles"] = "ui/styles.luau"', script)
+
+    def test_ignores_require_text_inside_strings_and_comments(self) -> None:
+        (self.project / "src/main.luau").write_text(
+            '-- require("./missing-line")\n'
+            '--[[ require("./missing-block") ]]\n'
+            'local example = "require(\\"./missing-string\\")"\n'
+            'return { example = example }\n',
+            encoding="utf-8",
+        )
+
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=self.project / "build/package",
+        )
+
+    def test_rejects_dynamic_require_paths(self) -> None:
+        (self.project / "src/main.luau").write_text(
+            'local path = "./ui/document"\nreturn require(path)\n',
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "static quoted strings"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
+    def test_rejects_ambiguous_luau_module_paths(self) -> None:
+        (self.project / "src/ui/document.lua").write_text(
+            "return {}\n", encoding="utf-8"
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "required module is ambiguous"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
+    def test_rejects_legacy_include_with_migration_guidance(self) -> None:
+        (self.project / "src/main.luau").write_text(
+            '-- @include "ui/document.luau"\nreturn {}\n', encoding="utf-8"
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "@include is no longer supported"):
             build_game(
                 source_root=self.project / "src",
                 manifest_path=self.project / "manifest.json",

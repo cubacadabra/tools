@@ -78,3 +78,5 @@ function CubaCycle:sync(phase, day, elapsed)
         self.elapsed = math.max(0, elapsed)
     end
 end
+
+return CubaCycle

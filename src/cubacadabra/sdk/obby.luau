@@ -85,3 +85,5 @@ function CubaObby:status()
         deaths = self.deaths,
     }
 end
+
+return CubaObby

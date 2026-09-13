@@ -4,11 +4,12 @@ Use the shared-state helper when several clients can change one retained piece
 of cooperative game state.
 
 ```luau
--- @include "@cubacadabra/shared-state-v1.luau"
+local CubaSharedState = require("@cubacadabra/shared-state")
 ```
 
-The include defines `CubaSharedState` in the generated game chunk. The SDK is
-client-side Luau built on `api.network:compare_set_state`; it does not add game
+The module returns `CubaSharedState`; `build-game` bundles it into the generated
+game chunk. The SDK is client-side Luau built on
+`api.network:compare_set_state`; it does not add game
 rules to Rust or the backend.
 
 ## Create a store

@@ -32,11 +32,12 @@ PYTHONPATH=tools/src python3 -m cubacadabra build-game first-game \
   --zip first-game/build/first-game-v0.3.0.zip
 ```
 
-The builder expands local `-- @include "file.luau"` directives, expands the
-reserved SDK includes, validates the manifest and assets, inlines an effects
+The builder follows normal static-string Luau `require()` calls, bundles local
+and reserved SDK modules, validates the manifest and assets, inlines an effects
 source file, and writes `game.luau`, `manifest.json`, and `package.json`.
-Includes must stay below `src/`; cycles, invalid UTF-8, unsafe paths, and
-top-level returns in included modules are rejected.
+Local modules must stay below `src/`; cycles, invalid UTF-8, unsafe paths, and
+ambiguous module paths are rejected. Each module has its own scope and returns
+its exported value normally.
 
 Use SemVer for game and SDK compatibility:
 
@@ -216,7 +217,7 @@ spamming commands every frame.
 ### Shared state v1
 
 ```luau
--- @include "@cubacadabra/shared-state-v1.luau"
+local CubaSharedState = require("@cubacadabra/shared-state")
 
 local store = CubaSharedState.create({
     channel = "shared-score",
@@ -277,7 +278,7 @@ respawns. A world opts in with fields like:
 }
 ```
 
-Include `@cubacadabra/obby-v1.luau` for a small game-owned lifecycle helper.
+Require `@cubacadabra/obby` for a small game-owned lifecycle helper.
 Inside a ladder volume, forward/back input (or the explicit `player.climb`
 button action) moves the player vertically. The helper is presentation/state
 convenience only; an important multiplayer reward still needs authoritative
@@ -320,16 +321,17 @@ more authored damage volumes:
 player is inside, and the runtime emits `heal` events at a bounded cadence.
 `respawn.mode` defaults to `"checkpoint"` for compatibility with existing
 obby packages. `"spawn"` keeps route/checkpoint events useful without moving a
-survival player’s respawn point. Include `@cubacadabra/survival-v1.luau` when
+survival player’s respawn point. Require `@cubacadabra/survival` when
 the game wants a reusable health/death/respawn state tracker. The helper starts
 in `waiting` state and mirrors the runtime’s `spawn` event; its `status()` call
 returns a named table. Mission rules, shelter timers, inventory, and HUD
 presentation remain game-owned.
 
-For repeating pressure such as day/night or calm/storm, include
-`@cubacadabra/cycle-v1.luau`:
+For repeating pressure such as day/night or calm/storm, require
+`@cubacadabra/cycle`:
 
 ```luau
+local CubaCycle = require("@cubacadabra/cycle")
 local cycle = CubaCycle.create({ daySeconds = 42, nightSeconds = 28 })
 
 function Game.on_tick(api, delta)
@@ -345,7 +347,7 @@ must agree on the current phase; the cycle helper can be synchronized with
 ### Disclosure v1
 
 ```luau
--- @include "@cubacadabra/disclosure-v1.luau"
+local CubaDisclosure = require("@cubacadabra/disclosure")
 
 local disclosure = CubaDisclosure.create({
     action = "objective.toggle",

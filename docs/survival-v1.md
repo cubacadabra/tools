@@ -5,7 +5,7 @@ manifest declares those rules; the Luau helper only keeps lifecycle state for a
 game-owned HUD or objective.
 
 ```luau
--- @include "@cubacadabra/survival-v1.luau"
+local CubaSurvival = require("@cubacadabra/survival")
 
 local survival = CubaSurvival.create({})
 

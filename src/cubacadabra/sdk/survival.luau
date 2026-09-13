@@ -110,3 +110,5 @@ function CubaSurvival:status()
         source = self.source,
     }
 end
+
+return CubaSurvival
