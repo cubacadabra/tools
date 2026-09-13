@@ -57,6 +57,7 @@ MAX_AUDIO_ASSET_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_ASSETS = 16
 MAX_IMAGE_ASSET_BYTES = 8 * 1024 * 1024
 MATERIAL_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+CUBE_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 PREVIEW_SDK_VERSION = "0.3.0"
 
 
@@ -656,8 +657,29 @@ def build_game(
 
     game_id = _manifest_value(manifest, "id")
     version = _manifest_value(manifest, "version")
-    if not isinstance(game_id, str) or not game_id:
-        raise GameBuildError("manifest.id must be a non-empty string")
+    if not isinstance(game_id, str) or not CUBE_ID_RE.fullmatch(game_id):
+        raise GameBuildError(
+            "manifest.id must use lowercase letters, numbers, and single dashes"
+        )
+
+    package = manifest.get("package")
+    if package is None:
+        package = {"formatVersion": 3, "entry": "game.luau"}
+        manifest["package"] = package
+    elif not isinstance(package, dict) or package.get("entry") != "game.luau":
+        raise GameBuildError("manifest.package.entry must be 'game.luau'")
+
+    display_name = manifest.get("displayName")
+    if display_name is None:
+        manifest["displayName"] = game_id
+    elif (
+        not isinstance(display_name, str)
+        or not display_name.strip()
+        or len(display_name.strip()) > 120
+    ):
+        raise GameBuildError(
+            "manifest.displayName must be a non-empty string of at most 120 characters"
+        )
     legacy_version = isinstance(version, int) and not isinstance(version, bool) and version >= 1
     semantic_version = isinstance(version, str) and SEMVER_RE.fullmatch(version) is not None
     if not legacy_version and not semantic_version:
@@ -704,7 +726,7 @@ def build_game(
         if path.is_file()
     )
     package_info = {
-        "formatVersion": 1,
+        "formatVersion": package.get("formatVersion", 3),
         "id": game_id,
         "version": version,
         "entry": "game.luau",

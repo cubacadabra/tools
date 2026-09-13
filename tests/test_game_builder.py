@@ -129,6 +129,11 @@ class GameBuilderTests(unittest.TestCase):
         self.assertIn("begin module: ui/document.luau", script)
         self.assertIn('["./ui/document"] = "ui/document.luau"', script)
         self.assertIn('return __require("main.luau")', script)
+        built_manifest = json.loads((output / "manifest.json").read_text())
+        self.assertEqual(
+            built_manifest["package"], {"formatVersion": 3, "entry": "game.luau"}
+        )
+        self.assertEqual(built_manifest["displayName"], "test-game")
         self.assertTrue((output / "assets/logo.txt").exists())
         package = json.loads((output / "package.json").read_text())
         self.assertEqual(package["files"], ["assets/logo.txt", "game.luau", "manifest.json"])
@@ -211,6 +216,18 @@ class GameBuilderTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(GameBuildError, "unknown Cubacadabra SDK module"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
+    def test_rejects_an_upload_invalid_cube_id(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({"id": "Test Game", "version": 3}), encoding="utf-8"
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "manifest.id"):
             build_game(
                 source_root=self.project / "src",
                 manifest_path=self.project / "manifest.json",
