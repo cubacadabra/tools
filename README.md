@@ -118,6 +118,17 @@ tap-to-reveal controller, and [Survival SDK v1](docs/survival-v1.md) provides a
 reusable health/death/respawn lifecycle while each game continues to own its
 HUD composition. See the game guide for the cycle and safe-zone contracts.
 
+For a checked-out platform workspace, run the cross-repository compatibility
+gate after building the browser renderer:
+
+```sh
+sh ../rust/scripts/build_web_renderer.sh --debug
+PYTHONPATH=src python3 scripts/check_workspace_compatibility.py
+```
+
+It builds every supported game with this CLI and loads the resulting packages
+through both the native Rust client and browser WASM client.
+
 The complete preview contract is in the
 [Cubacadabra Game Developer Guide](docs/cubacadabra-game-developer-guide-preview-0.3.md).
 

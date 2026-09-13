@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,36 @@ GUIDE = ROOT / "tools/docs/cubacadabra-game-developer-guide-preview-0.3.md"
 
 
 class PreviewConformanceTests(unittest.TestCase):
+    SUPPORTED_GAME_PROJECTS = (
+        ROOT / "first-game",
+        ROOT / "second-game",
+        ROOT / "third-game",
+        ROOT / "examples/adventure-101",
+        ROOT / "examples/survival-101",
+        ROOT / "examples/the-wild-west",
+    )
+
+    def test_all_supported_game_sources_use_and_build_with_the_shared_pipeline(self) -> None:
+        for project in self.SUPPORTED_GAME_PROJECTS:
+            with self.subTest(project=project.name):
+                source = project / "src/main.luau"
+                self.assertNotIn("@include", source.read_text(encoding="utf-8"))
+                with tempfile.TemporaryDirectory() as directory:
+                    output = Path(directory) / project.name
+                    result = build_game(
+                        source_root=project / "src",
+                        manifest_path=project / "manifest.json",
+                        output=output,
+                    )
+                    package = json.loads((output / "package.json").read_text(encoding="utf-8"))
+                    self.assertEqual(result.game_id, package["id"])
+                    self.assertEqual(set(package["files"]), set(package["sha256"]))
+                    for name in package["files"]:
+                        self.assertEqual(
+                            package["sha256"][name],
+                            hashlib.sha256((output / name).read_bytes()).hexdigest(),
+                        )
+
     def test_capability_probe_covers_the_documented_game_api(self) -> None:
         game = ROOT / "third-game"
         source = (game / "src/main.luau").read_text(encoding="utf-8")

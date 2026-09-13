@@ -1,0 +1,46 @@
+name: Cross-repository compatibility
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  game-packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tools
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/first-game
+          path: first-game
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/second-game
+          path: second-game
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/third-game
+          path: third-game
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/examples
+          path: examples
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/rust
+          path: rust
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/web
+          path: web
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - run: sh rust/scripts/build_web_renderer.sh --debug
+      - run: PYTHONPATH=tools/src python3 tools/scripts/check_workspace_compatibility.py
