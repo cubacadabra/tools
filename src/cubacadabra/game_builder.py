@@ -71,7 +71,38 @@ class GameBuildError(ValueError):
     """An input project cannot be turned into a valid game package."""
 
 
-def _read_sdk_module(module_name: str) -> str:
+def _resolve_sdk_root(source_root: Path) -> Path:
+    """Resolve the SDK from the same alias configuration used by editors."""
+
+    fallback = Path(__file__).with_name("sdk").resolve()
+    config_path = source_root.parent / ".luaurc"
+    if not config_path.is_file():
+        return fallback
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as error:
+        raise GameBuildError(f".luaurc is not valid UTF-8: {config_path}") from error
+    except json.JSONDecodeError as error:
+        raise GameBuildError(f".luaurc is not valid JSON: {error.msg}") from error
+    if not isinstance(config, dict):
+        raise GameBuildError(".luaurc must contain a JSON object")
+    aliases = config.get("aliases", {})
+    if not isinstance(aliases, dict):
+        raise GameBuildError(".luaurc aliases must be an object")
+    alias = aliases.get("cubacadabra")
+    if alias is None:
+        return fallback
+    if not isinstance(alias, str) or not alias.strip():
+        raise GameBuildError(".luaurc aliases.cubacadabra must be a non-empty path")
+    sdk_root = (config_path.parent / alias).resolve()
+    if not sdk_root.is_dir():
+        raise GameBuildError(
+            f".luaurc aliases.cubacadabra does not point to an SDK directory: {sdk_root}"
+        )
+    return sdk_root
+
+
+def _read_sdk_module(module_name: str, sdk_root: Path) -> str:
     if not SDK_REQUIRE_RE.fullmatch(module_name):
         raise GameBuildError(
             "Cubacadabra SDK requires must use "
@@ -80,7 +111,7 @@ def _read_sdk_module(module_name: str) -> str:
     sdk_file = SDK_MODULES.get(module_name)
     if sdk_file is None:
         raise GameBuildError(f"unknown Cubacadabra SDK module: {module_name}")
-    sdk_path = Path(__file__).with_name("sdk") / sdk_file
+    sdk_path = sdk_root / sdk_file
 
     try:
         source = sdk_path.read_text(encoding="utf-8")
@@ -291,13 +322,14 @@ def _resolve_local_module(
 
 def _bundle_luau_modules(entry: Path, source_root: Path) -> str:
     modules: dict[str, _LuauModule] = {}
+    sdk_root = _resolve_sdk_root(source_root)
 
     def visit_local(path: Path, stack: tuple[str, ...]) -> str:
         module_id = path.relative_to(source_root).as_posix()
         return visit(module_id, _read_luau_source(path, source_root), path, stack)
 
     def visit_sdk(module_id: str, stack: tuple[str, ...]) -> str:
-        return visit(module_id, _read_sdk_module(module_id), None, stack)
+        return visit(module_id, _read_sdk_module(module_id, sdk_root), None, stack)
 
     def visit(
         module_id: str,

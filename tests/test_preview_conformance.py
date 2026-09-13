@@ -121,6 +121,31 @@ class PreviewConformanceTests(unittest.TestCase):
             for module in ("shared-state", "disclosure", "survival", "cycle", "obby"):
                 self.assertTrue((sdk_root / f"{module}.luau").is_file())
 
+    def test_shared_operations_and_round_actions_are_explicitly_scoped(self) -> None:
+        sdk = (ROOT / "tools/src/cubacadabra/sdk/shared-state.luau").read_text()
+        docs = (ROOT / "tools/docs/shared-state-v1.md").read_text()
+        self.assertIn('local DISTINCT_MODE = "distinct"', sdk)
+        self.assertIn("config.operationStatus", sdk)
+        self.assertIn("config.intentExpired", sdk)
+        self.assertIn("intent.operationId", sdk)
+        for status in ("pending", "accepted", "rejected", "expired"):
+            self.assertIn(status, docs)
+
+        first_round = (ROOT / "first-game/src/round.luau").read_text()
+        second_relay = (ROOT / "second-game/src/relay.luau").read_text()
+        probe = (ROOT / "third-game/src/main.luau").read_text()
+        self.assertIn('mode = "distinct"', probe)
+        self.assertIn("operationStatus = operation_status", probe)
+        self.assertIn("operationId = operation_prefix", probe)
+        self.assertIn("and intent.round == state.round", first_round)
+        self.assertIn("intentExpired = function(state, intent)", first_round)
+        self.assertIn("type = \"learn\", charm = charm, round = self.round", first_round)
+        self.assertIn("type = \"cast\", charm = charm, round = self.round", first_round)
+        self.assertIn("and intent.round == state.round", second_relay)
+        self.assertIn("intentExpired = function(state, intent)", second_relay)
+        self.assertIn("type = \"capture\", node = index, round = state.round", second_relay)
+        self.assertIn("type = \"uplink\", round = state.round", second_relay)
+
 
 if __name__ == "__main__":
     unittest.main()

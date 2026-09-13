@@ -178,6 +178,48 @@ class GameBuilderTests(unittest.TestCase):
         self.assertIn("local CubaSharedState = {}", script)
         self.assertIn("return CubaSharedState", script)
 
+    def test_builder_uses_the_project_sdk_alias(self) -> None:
+        sdk_root = self.project / ".cubacadabra/sdk"
+        sdk_root.mkdir(parents=True)
+        (self.project / ".luaurc").write_text(
+            json.dumps({"aliases": {"cubacadabra": ".cubacadabra/sdk"}}),
+            encoding="utf-8",
+        )
+        (self.project / "src/main.luau").write_text(
+            'return require("@cubacadabra/disclosure")\n',
+            encoding="utf-8",
+        )
+        (sdk_root / "disclosure.luau").write_text(
+            "local ProjectSdk = {}\nreturn ProjectSdk\n",
+            encoding="utf-8",
+        )
+
+        output = self.project / "build/package"
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+
+        self.assertIn("local ProjectSdk = {}", (output / "game.luau").read_text())
+
+    def test_builder_rejects_a_missing_configured_project_sdk(self) -> None:
+        (self.project / ".luaurc").write_text(
+            json.dumps({"aliases": {"cubacadabra": ".cubacadabra/sdk"}}),
+            encoding="utf-8",
+        )
+        (self.project / "src/main.luau").write_text(
+            'return require("@cubacadabra/disclosure")\n',
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "does not point to an SDK directory"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
     def test_bundles_the_disclosure_sdk_module(self) -> None:
         (self.project / "src/main.luau").write_text(
             'local CubaDisclosure = require("@cubacadabra/disclosure")\n'

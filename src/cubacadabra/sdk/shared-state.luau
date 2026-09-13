@@ -8,6 +8,14 @@ CubaSharedState.__index = CubaSharedState
 
 local MAX_PENDING_INTENTS = 32
 local DEFAULT_RETRY_SECONDS = 0.75
+local DEFAULT_MODE = "coalescing"
+local DISTINCT_MODE = "distinct"
+local OPERATION_STATUSES = {
+    pending = true,
+    accepted = true,
+    rejected = true,
+    expired = true,
+}
 
 local function require_function(config, key)
     if type(config[key]) ~= "function" then
@@ -31,6 +39,18 @@ function CubaSharedState.create(config)
     require_function(config, "initial")
     require_function(config, "validate")
     require_function(config, "reduce")
+    local mode = config.mode or DEFAULT_MODE
+    if mode ~= DEFAULT_MODE and mode ~= DISTINCT_MODE then
+        error("CubaSharedState config.mode must be coalescing or distinct")
+    end
+    if mode == DISTINCT_MODE then
+        require_function(config, "operationStatus")
+    elseif config.operationStatus ~= nil then
+        error("CubaSharedState config.operationStatus requires distinct mode")
+    end
+    if config.intentExpired ~= nil and type(config.intentExpired) ~= "function" then
+        error("CubaSharedState config.intentExpired must be a function")
+    end
     if config.onChange ~= nil and type(config.onChange) ~= "function" then
         error("CubaSharedState config.onChange must be a function")
     end
@@ -45,6 +65,9 @@ function CubaSharedState.create(config)
         initial = config.initial,
         validate = config.validate,
         reduce = config.reduce,
+        mode = mode,
+        operationStatus = config.operationStatus,
+        intentExpired = config.intentExpired,
         onChange = config.onChange,
         listeners = {},
         retrySeconds = retry_seconds,
@@ -59,6 +82,35 @@ function CubaSharedState.create(config)
         inflight = nil,
         inflightSeconds = 0,
     }, CubaSharedState)
+end
+
+function CubaSharedState:_operation_status(state, intent)
+    if self.mode == DISTINCT_MODE then
+        local status = self.operationStatus(state, intent)
+        if not OPERATION_STATUSES[status] then
+            error("CubaSharedState operationStatus must return pending, accepted, rejected, or expired")
+        end
+        return status
+    end
+    if self.intentExpired ~= nil then
+        local expired = self.intentExpired(state, intent)
+        if type(expired) ~= "boolean" then
+            error("CubaSharedState intentExpired must return a boolean")
+        end
+        if expired then
+            return "expired"
+        end
+    end
+    return nil
+end
+
+function CubaSharedState:_has_operation_id(operation_id)
+    for _, queued in ipairs(self.pending) do
+        if queued.operationId == operation_id then
+            return true
+        end
+    end
+    return false
 end
 
 -- Add a consumer to the ordered state-change feed. Consumers receive the same
@@ -98,25 +150,32 @@ function CubaSharedState:_submit_next(api)
 
     while #self.pending > 0 do
         local intent = self.pending[1]
-        local next_value = self.reduce(self.value, intent)
-        if next_value == nil then
+        local operation_status = self:_operation_status(self.value, intent)
+        if operation_status ~= nil and operation_status ~= "pending" then
             self:_drop_head()
+            -- A caller may dispatch an operation after its snapshot has
+            -- already arrived. It is complete without another CAS proposal.
         else
-            local validated = self.validate(next_value)
-            if validated == nil then
-                error("CubaSharedState reducer returned an invalid state")
+            local next_value = self.reduce(self.value, intent)
+            if next_value == nil then
+                self:_drop_head()
+            else
+                local validated = self.validate(next_value)
+                if validated == nil then
+                    error("CubaSharedState reducer returned an invalid state")
+                end
+                self.inflight = {
+                    intent = intent,
+                    expectedSequence = self.sequence,
+                }
+                self.inflightSeconds = 0
+                api.network:compare_set_state(
+                    self.channel,
+                    self.sequence,
+                    validated
+                )
+                return
             end
-            self.inflight = {
-                intent = intent,
-                expectedSequence = self.sequence,
-            }
-            self.inflightSeconds = 0
-            api.network:compare_set_state(
-                self.channel,
-                self.sequence,
-                validated
-            )
-            return
         end
     end
 end
@@ -144,6 +203,7 @@ function CubaSharedState:start(api)
     }, {
         initialized = false,
         completedIntent = nil,
+        completedStatus = nil,
         source = "initial",
     })
     api.network:compare_set_state(self.channel, 0, initial_value)
@@ -152,6 +212,17 @@ end
 function CubaSharedState:dispatch(api, intent)
     if type(intent) ~= "table" then
         error("CubaSharedState intents must be tables")
+    end
+    if self.mode == DISTINCT_MODE then
+        if type(intent.operationId) ~= "string"
+            or #intent.operationId < 1
+            or #intent.operationId > 128
+        then
+            error("CubaSharedState distinct intents require a 1-128 byte operationId")
+        end
+        if self:_has_operation_id(intent.operationId) then
+            return true
+        end
     end
     if #self.pending >= MAX_PENDING_INTENTS then
         return false
@@ -198,10 +269,17 @@ function CubaSharedState:receive(api, event)
     self.bootstrapSeconds = 0
 
     local completed_intent = nil
+    local completed_status = nil
     if self.inflight ~= nil then
-        local remaining_change = self.reduce(self.value, self.inflight.intent)
-        if remaining_change == nil then
+        local operation_status = self:_operation_status(self.value, self.inflight.intent)
+        local complete = operation_status ~= nil
+            and operation_status ~= "pending"
+        if operation_status == nil then
+            complete = self.reduce(self.value, self.inflight.intent) == nil
+        end
+        if complete then
             completed_intent = self.inflight.intent
+            completed_status = operation_status or "accepted"
             self:_drop_head()
         end
         self.inflight = nil
@@ -211,6 +289,7 @@ function CubaSharedState:receive(api, event)
     self:_publish(api, self.value, previous_value, event, {
         initialized = was_initialized,
         completedIntent = completed_intent,
+        completedStatus = completed_status,
         source = "network",
     })
     self:_submit_next(api)
