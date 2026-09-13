@@ -127,6 +127,7 @@ class PreviewConformanceTests(unittest.TestCase):
         self.assertIn('local DISTINCT_MODE = "distinct"', sdk)
         self.assertIn("config.operationStatus", sdk)
         self.assertIn("config.intentExpired", sdk)
+        self.assertIn("expiredIntents", sdk)
         self.assertIn("intent.operationId", sdk)
         for status in ("pending", "accepted", "rejected", "expired"):
             self.assertIn(status, docs)

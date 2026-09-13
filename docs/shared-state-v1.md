@@ -97,6 +97,8 @@ Configuration:
   snapshot. `context.initialized` distinguishes that first snapshot and
   `context.completedIntent` contains a queued intent resolved by the new
   state, and `context.completedStatus` contains its terminal status.
+  `context.expiredIntents` contains any additional queued intents discarded
+  by the same round or generation change as `{ intent, status = "expired" }`.
 - `store:subscribe(listener)`: adds another consumer to the ordered change
  feed. Subscribers receive the same arguments as `onChange`, after the store
  has validated and installed an authoritative snapshot, or primed the initial
@@ -136,7 +138,8 @@ identity or provide server-side deduplication.
 Coalescing stores that have round or session generations should use
 `intentExpired` for stale queued intents. The SDK reports their
 `completedStatus` as `expired`, so a UI can stop showing a pending action
-without presenting it as accepted.
+without presenting it as accepted. Additional stale intents queued behind the
+in-flight one are reported in `context.expiredIntents`.
 
 ## Lifecycle
 

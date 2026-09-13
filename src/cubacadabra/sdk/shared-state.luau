@@ -143,6 +143,25 @@ function CubaSharedState:_drop_head()
     table.remove(self.pending, 1)
 end
 
+function CubaSharedState:_drop_expired_pending()
+    local expired = {}
+    if self.mode == DISTINCT_MODE or self.intentExpired == nil then
+        return expired
+    end
+    while #self.pending > 0 do
+        local intent = self.pending[1]
+        if self:_operation_status(self.value, intent) ~= "expired" then
+            break
+        end
+        expired[#expired + 1] = {
+            intent = intent,
+            status = "expired",
+        }
+        self:_drop_head()
+    end
+    return expired
+end
+
 function CubaSharedState:_submit_next(api)
     if not self.hasSnapshot or self.inflight ~= nil then
         return
@@ -158,6 +177,9 @@ function CubaSharedState:_submit_next(api)
         else
             local next_value = self.reduce(self.value, intent)
             if next_value == nil then
+                if self.mode == DISTINCT_MODE then
+                    error("CubaSharedState distinct reducer returned nil for a pending operation")
+                end
                 self:_drop_head()
             else
                 local validated = self.validate(next_value)
@@ -204,6 +226,7 @@ function CubaSharedState:start(api)
         initialized = false,
         completedIntent = nil,
         completedStatus = nil,
+        expiredIntents = {},
         source = "initial",
     })
     api.network:compare_set_state(self.channel, 0, initial_value)
@@ -285,11 +308,13 @@ function CubaSharedState:receive(api, event)
         self.inflight = nil
         self.inflightSeconds = 0
     end
+    local expired_intents = self:_drop_expired_pending()
 
     self:_publish(api, self.value, previous_value, event, {
         initialized = was_initialized,
         completedIntent = completed_intent,
         completedStatus = completed_status,
+        expiredIntents = expired_intents,
         source = "network",
     })
     self:_submit_next(api)
