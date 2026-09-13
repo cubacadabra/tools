@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -50,6 +51,9 @@ class GameBuilderTests(unittest.TestCase):
         self.assertTrue((result.project / "assets").is_dir())
         self.assertTrue((result.project / "assets/audio").is_dir())
         self.assertTrue((result.project / "assets/images").is_dir())
+        editor_config = json.loads((result.project / ".luaurc").read_text())
+        self.assertEqual(editor_config, {"aliases": {"cubacadabra": ".cubacadabra/sdk"}})
+        self.assertTrue((result.project / ".cubacadabra/sdk/shared-state.luau").is_file())
         source = (result.project / "src/main.luau").read_text()
         self.assertIn("api.session:start(\"the-wild-west\"", source)
         for control in (
@@ -68,6 +72,10 @@ class GameBuilderTests(unittest.TestCase):
 
         with self.assertRaises(GameCreateError):
             create_game(title="The Wild West", path=games)
+
+    def test_create_game_rejects_a_title_that_produces_a_short_id(self) -> None:
+        with self.assertRaisesRegex(GameCreateError, "between 3 and 64"):
+            create_game(title="A", path=self.project / "games")
 
     def test_create_game_cli_flag(self) -> None:
         games = self.project / "games"
@@ -137,6 +145,9 @@ class GameBuilderTests(unittest.TestCase):
         self.assertTrue((output / "assets/logo.txt").exists())
         package = json.loads((output / "package.json").read_text())
         self.assertEqual(package["files"], ["assets/logo.txt", "game.luau", "manifest.json"])
+        for name in package["files"]:
+            digest = hashlib.sha256((output / name).read_bytes()).hexdigest()
+            self.assertEqual(package["sha256"][name], digest)
         with zipfile.ZipFile(archive) as zip_file:
             self.assertEqual(sorted(zip_file.namelist()), [
                 "assets/logo.txt",
@@ -389,12 +400,76 @@ class GameBuilderTests(unittest.TestCase):
             )
 
     def test_rejects_output_inside_source(self) -> None:
-        with self.assertRaisesRegex(GameBuildError, "cannot be inside"):
+        with self.assertRaisesRegex(GameBuildError, "cannot overlap"):
             build_game(
                 source_root=self.project / "src",
                 manifest_path=self.project / "manifest.json",
                 output=self.project / "src/output",
             )
+
+    def test_rejects_output_containing_source(self) -> None:
+        with self.assertRaisesRegex(GameBuildError, "cannot overlap"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project,
+            )
+
+    def test_refuses_to_replace_an_unowned_output_directory(self) -> None:
+        output = self.project / "build/package"
+        output.mkdir(parents=True)
+        sentinel = output / "do-not-delete.txt"
+        sentinel.write_text("keep me", encoding="utf-8")
+
+        with self.assertRaisesRegex(GameBuildError, "without a Cubacadabra build marker"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=output,
+            )
+
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep me")
+
+    def test_failed_build_preserves_the_previous_package(self) -> None:
+        output = self.project / "build/package"
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+        previous_script = (output / "game.luau").read_text(encoding="utf-8")
+
+        (self.project / "src/main.luau").write_text(
+            'return require("./missing")\n', encoding="utf-8"
+        )
+        with self.assertRaisesRegex(GameBuildError, "required module not found"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=output,
+            )
+
+        self.assertEqual((output / "game.luau").read_text(encoding="utf-8"), previous_script)
+
+    def test_replaces_a_previous_package_with_a_builder_marker(self) -> None:
+        output = self.project / "build/package"
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+        (self.project / "src/main.luau").write_text(
+            'return { rebuilt = true }\n', encoding="utf-8"
+        )
+
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+
+        self.assertIn("rebuilt = true", (output / "game.luau").read_text(encoding="utf-8"))
+        self.assertTrue((output / ".cubacadabra-build").exists())
 
     def test_accepts_a_semantic_release_version(self) -> None:
         (self.project / "manifest.json").write_text(

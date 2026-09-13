@@ -90,6 +90,17 @@ Luau-aware editors can navigate and type-check the same module graph that the
 builder bundles. Require paths must be static strings and must start with
 `./`, `../`, or `@cubacadabra/`.
 
+Game IDs use the package-wide contract of 3–64 lowercase letters, numbers, and
+single dashes. `create-game`, `build-game`, Studio, the browser, and mobile
+clients reject IDs outside that contract. Newly created projects include a
+local `.cubacadabra/sdk` copy and `.luaurc` alias so editor navigation works
+after the project is moved away from this repository.
+
+Every generated package also contains `package.json`, whose SHA-256 map binds
+the manifest, script, and asset files to that package release. Clients should
+validate those hashes before executing or caching a remote package. See
+[preview licensing](docs/licensing.md) for the current reuse policy.
+
 `CubaSharedState` v1 owns bounded intent queuing, compare-and-set retries,
 conflict rebasing, and reconnect snapshots. Games provide their own initial
 state, validator, reducer, and optional change callback, so neither the SDK nor

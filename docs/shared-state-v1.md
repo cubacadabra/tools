@@ -121,3 +121,17 @@ The SDK automatically serializes queued intents, rebases them after conflicts,
 drops intents already satisfied by another player, and resumes from retained
 state after reconnecting. It remains a cooperative contract: clients still
 author proposed state, so it is not a cheat-resistant competitive authority.
+
+## Trust boundary
+
+The server orders and retains snapshots; it does not decide whether a game rule
+allowed the transition. A modified client can therefore propose an impossible
+score, reward, inventory change, or completion and still win the compare-and-set
+race if the game accepts that proposal locally.
+
+Use this helper for cooperative presentation state only. Competitive scores,
+valuable inventory, progression, trading, and rewards need a trusted command
+handler that validates an action against authoritative state and then emits the
+next state and events. The Rust `AuthorityBoundary` provides that generic
+command-to-event contract for a trusted host; it does not replace the
+game-owned rules or connect itself to the current WebSocket service.

@@ -10,6 +10,8 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+from .package_contract import is_valid_game_id
+
 
 class GameCreateError(ValueError):
     """The requested game cannot be created safely."""
@@ -56,6 +58,8 @@ def _game_id(title: str) -> str:
     game_id = re.sub(r"[^a-z0-9]+", "-", normalized.lower()).strip("-")
     if not game_id:
         raise GameCreateError("title must contain at least one letter or number")
+    if not is_valid_game_id(game_id):
+        raise GameCreateError("title must produce a game id between 3 and 64 characters")
     return game_id
 
 
@@ -214,6 +218,12 @@ def create_game(*, title: str, path: Path) -> GameCreateResult:
         (project / "src").mkdir()
         (project / "assets/audio").mkdir(parents=True)
         (project / "assets/images").mkdir(parents=True)
+        sdk_destination = project / ".cubacadabra/sdk"
+        shutil.copytree(Path(__file__).with_name("sdk"), sdk_destination)
+        (project / ".luaurc").write_text(
+            json.dumps({"aliases": {"cubacadabra": ".cubacadabra/sdk"}}, indent=2) + "\n",
+            encoding="utf-8",
+        )
         (project / "manifest.json").write_text(
             json.dumps(_manifest(title, game_id), indent=2) + "\n",
             encoding="utf-8",

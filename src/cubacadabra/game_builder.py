@@ -11,15 +11,20 @@ package.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import os
 import posixpath
 import re
 import shutil
+import tempfile
 import wave
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+
+from .package_contract import is_valid_game_id
 
 
 INCLUDE_RE = re.compile(r'^\s*--\s*@include(?:\s|$)')
@@ -57,8 +62,9 @@ MAX_AUDIO_ASSET_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_ASSETS = 16
 MAX_IMAGE_ASSET_BYTES = 8 * 1024 * 1024
 MATERIAL_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
-CUBE_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 PREVIEW_SDK_VERSION = "0.3.0"
+BUILD_MARKER = ".cubacadabra-build"
+BUILD_MARKER_CONTENT = "cubacadabra-game-package-v1\n"
 
 
 class GameBuildError(ValueError):
@@ -445,13 +451,87 @@ def _resolve_effects_source(
 
 
 def _validate_output(output: Path, source_root: Path) -> None:
-    """Prevent a package output from deleting the source tree."""
+    """Prevent a package output from deleting or containing the source tree."""
 
     try:
         output.relative_to(source_root)
     except ValueError:
+        try:
+            source_root.relative_to(output)
+        except ValueError:
+            return
+    raise GameBuildError(
+        "output directory cannot overlap the source directory in either direction: "
+        f"{output}"
+    )
+
+
+def _validate_existing_output(output: Path) -> None:
+    """Only allow replacement of a directory previously written by this builder."""
+
+    if not output.exists():
         return
-    raise GameBuildError(f"output directory cannot be inside the source directory: {output}")
+    if not output.is_dir():
+        raise GameBuildError(f"output exists and is not a directory: {output}")
+    marker = output / BUILD_MARKER
+    try:
+        marker_content = marker.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise GameBuildError(
+            "refusing to replace existing output without a Cubacadabra build marker: "
+            f"{output}"
+        ) from error
+    if marker_content != BUILD_MARKER_CONTENT:
+        raise GameBuildError(
+            "refusing to replace existing output with an invalid Cubacadabra build "
+            f"marker: {output}"
+        )
+
+
+def _temporary_directory(parent: Path, prefix: str) -> Path:
+    """Create a temporary directory beside a final output path."""
+
+    return Path(tempfile.mkdtemp(prefix=prefix, dir=parent))
+
+
+def _replace_output(staging: Path, output: Path) -> None:
+    """Install a complete staging directory while retaining rollback coverage."""
+
+    backup: Path | None = None
+    try:
+        if output.exists():
+            backup = _temporary_directory(output.parent, f".{output.name}.old-")
+            backup.rmdir()
+            output.rename(backup)
+        staging.rename(output)
+    except OSError:
+        if backup is not None and not output.exists() and backup.exists():
+            backup.rename(output)
+        raise
+    else:
+        if backup is not None:
+            shutil.rmtree(backup)
+
+
+def _write_archive(output: Path, zip_path: Path) -> Path:
+    """Write an archive beside its destination so the destination stays intact."""
+
+    if zip_path.exists() and zip_path.is_dir():
+        raise GameBuildError(f"zip path exists and is a directory: {zip_path}")
+    archive_fd, archive_name = tempfile.mkstemp(
+        prefix=f".{zip_path.name}.", suffix=".tmp", dir=zip_path.parent
+    )
+    os.close(archive_fd)
+    archive_temp = Path(archive_name)
+    try:
+        with zipfile.ZipFile(archive_temp, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(output.rglob("*")):
+                if path.is_file() and path.name != BUILD_MARKER:
+                    archive.write(path, path.relative_to(output).as_posix())
+    except BaseException:
+        archive_temp.unlink(missing_ok=True)
+        raise
+    return archive_temp
 
 
 def _validate_audio_assets(manifest: dict[str, object], project_root: Path) -> None:
@@ -624,6 +704,14 @@ def _validate_world_materials(manifest: dict[str, object]) -> None:
                     raise GameBuildError("world.blocks.material must reference a declared material")
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def build_game(
     *,
     source_root: Path,
@@ -657,7 +745,7 @@ def build_game(
 
     game_id = _manifest_value(manifest, "id")
     version = _manifest_value(manifest, "version")
-    if not isinstance(game_id, str) or not CUBE_ID_RE.fullmatch(game_id):
+    if not is_valid_game_id(game_id):
         raise GameBuildError(
             "manifest.id must use lowercase letters, numbers, and single dashes"
         )
@@ -697,57 +785,72 @@ def build_game(
     _validate_image_assets(manifest, manifest_path.parent)
     _validate_world_materials(manifest)
 
-    if output.exists():
-        if not output.is_dir():
-            raise GameBuildError(f"output exists and is not a directory: {output}")
-        shutil.rmtree(output)
-    output.mkdir(parents=True)
-
-    generated_script = (
-        "-- GENERATED FILE: do not edit; edit src/ and run cubacadabra build-game.\n"
-        f"-- game: {game_id}\n"
-        f"-- version: {version}\n\n"
-        + _bundle_luau_modules(entry, source_root)
-        + "\n"
-    )
-    (output / "game.luau").write_text(generated_script, encoding="utf-8")
-    (output / "manifest.json").write_text(
-        json.dumps(manifest, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-    assets = manifest_path.parent / "assets"
-    if assets.is_dir():
-        shutil.copytree(assets, output / "assets")
-
-    payload_files = sorted(
-        path.relative_to(output).as_posix()
-        for path in output.rglob("*")
-        if path.is_file()
-    )
-    package_info = {
-        "formatVersion": package.get("formatVersion", 3),
-        "id": game_id,
-        "version": version,
-        "entry": "game.luau",
-        "manifest": "manifest.json",
-        "files": payload_files,
-    }
-    (output / "package.json").write_text(
-        json.dumps(package_info, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
     resolved_zip = zip_path.resolve() if zip_path is not None else None
     if resolved_zip is not None:
+        if resolved_zip.is_relative_to(output):
+            raise GameBuildError("zip path cannot be inside the package output directory")
+        if resolved_zip.is_relative_to(source_root):
+            raise GameBuildError("zip path cannot be inside the source directory")
         resolved_zip.parent.mkdir(parents=True, exist_ok=True)
-        if resolved_zip.exists():
-            resolved_zip.unlink()
-        with zipfile.ZipFile(resolved_zip, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            for path in sorted(output.rglob("*")):
-                if path.is_file():
-                    archive.write(path, path.relative_to(output).as_posix())
 
+    _validate_existing_output(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staging: Path | None = _temporary_directory(output.parent, f".{output.name}.staging-")
+    archive_temp: Path | None = None
+    try:
+        generated_script = (
+            "-- GENERATED FILE: do not edit; edit src/ and run cubacadabra build-game.\n"
+            f"-- game: {game_id}\n"
+            f"-- version: {version}\n\n"
+            + _bundle_luau_modules(entry, source_root)
+            + "\n"
+        )
+        (staging / "game.luau").write_text(generated_script, encoding="utf-8")
+        (staging / "manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        assets = manifest_path.parent / "assets"
+        if assets.is_dir():
+            shutil.copytree(assets, staging / "assets")
+
+        payload_files = sorted(
+            path.relative_to(staging).as_posix()
+            for path in staging.rglob("*")
+            if path.is_file()
+        )
+        package_info = {
+            "formatVersion": package.get("formatVersion", 3),
+            "id": game_id,
+            "version": version,
+            "entry": "game.luau",
+            "manifest": "manifest.json",
+            "files": payload_files,
+            "sha256": {
+                name: _sha256_file(staging / name)
+                for name in payload_files
+            },
+        }
+        (staging / "package.json").write_text(
+            json.dumps(package_info, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (staging / BUILD_MARKER).write_text(BUILD_MARKER_CONTENT, encoding="utf-8")
+
+        if resolved_zip is not None:
+            archive_temp = _write_archive(staging, resolved_zip)
+
+        _replace_output(staging, output)
+        staging = None
+        if archive_temp is not None:
+            os.replace(archive_temp, resolved_zip)
+            archive_temp = None
+    finally:
+        if staging is not None and staging.exists():
+            shutil.rmtree(staging)
+        if archive_temp is not None:
+            archive_temp.unlink(missing_ok=True)
     return GameBuildResult(
         game_id=game_id,
         version=version,
