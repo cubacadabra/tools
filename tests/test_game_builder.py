@@ -156,6 +156,25 @@ class GameBuilderTests(unittest.TestCase):
                 "package.json",
             ])
 
+    def test_build_ignores_macos_directory_metadata(self) -> None:
+        (self.project / "assets/.DS_Store").write_bytes(b"Finder metadata")
+        nested_assets = self.project / "assets/images"
+        nested_assets.mkdir()
+        (nested_assets / ".DS_Store").write_bytes(b"nested Finder metadata")
+        output = self.project / "build/package"
+
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+        )
+
+        package = json.loads((output / "package.json").read_text())
+        self.assertNotIn("assets/.DS_Store", package["files"])
+        self.assertNotIn("assets/images/.DS_Store", package["files"])
+        self.assertFalse((output / "assets/.DS_Store").exists())
+        self.assertFalse((output / "assets/images/.DS_Store").exists())
+
     def test_bundles_a_cubacadabra_sdk_module(self) -> None:
         (self.project / "src/main.luau").write_text(
             'local CubaSharedState = require("@cubacadabra/shared-state")\n'

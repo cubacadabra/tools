@@ -845,7 +845,11 @@ def build_game(
 
         assets = manifest_path.parent / "assets"
         if assets.is_dir():
-            shutil.copytree(assets, staging / "assets")
+            shutil.copytree(
+                assets,
+                staging / "assets",
+                ignore=shutil.ignore_patterns(".DS_Store"),
+            )
 
         payload_files = sorted(
             path.relative_to(staging).as_posix()
