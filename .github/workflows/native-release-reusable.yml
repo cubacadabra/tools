@@ -47,6 +47,14 @@ on:
         required: false
         type: string
         default: main
+      game_repository:
+        required: false
+        type: string
+        default: ""
+      game_ref:
+        required: false
+        type: string
+        default: main
 
 jobs:
   build:
@@ -90,6 +98,14 @@ jobs:
           repository: ${{ inputs.tools_repository }}
           ref: ${{ inputs.tools_ref }}
           path: tools
+
+      - name: Check out bundled game
+        if: inputs.game_repository != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.game_repository }}
+          ref: ${{ inputs.game_ref }}
+          path: first-game
 
       - name: Validate release tag
         shell: bash
