@@ -10,7 +10,24 @@ from cubacadabra.game_builder import build_game
 
 
 ROOT = Path(__file__).resolve().parents[2]
-GUIDE = ROOT / "tools/docs/cubacadabra-game-developer-guide-preview-0.3.md"
+DOCS = ROOT / "docs"
+CONTRACT_PATHS = (
+    "contracts/creator-guide.md",
+    "contracts/lifecycle.md",
+    "contracts/world-manifest.md",
+    "contracts/luau-api.md",
+    "contracts/ui.md",
+    "contracts/network.md",
+    "contracts/audio.md",
+    "contracts/effects.md",
+    "contracts/tasks.md",
+    "contracts/sdk/shared-state.md",
+    "contracts/sdk/disclosure.md",
+    "contracts/sdk/survival.md",
+    "contracts/sdk/obby.md",
+    "contracts/sdk/cycle.md",
+)
+CONTRACT_TEXT = "\n".join((DOCS / path).read_text(encoding="utf-8") for path in CONTRACT_PATHS)
 
 
 class PreviewConformanceTests(unittest.TestCase):
@@ -49,7 +66,7 @@ class PreviewConformanceTests(unittest.TestCase):
         game = ROOT / "third-game"
         source = (game / "src/main.luau").read_text(encoding="utf-8")
         manifest_source = (game / "manifest.json").read_text(encoding="utf-8")
-        guide = GUIDE.read_text(encoding="utf-8")
+        contract_text = CONTRACT_TEXT
 
         documented_and_exercised = [
             "function Game.on_start",
@@ -97,7 +114,7 @@ class PreviewConformanceTests(unittest.TestCase):
 
         for marker in documented_and_exercised:
             self.assertIn(marker, source + generated + manifest_source, marker)
-            self.assertIn(marker, guide, marker)
+            self.assertIn(marker, contract_text, marker)
 
         manifest = json.loads((game / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(
@@ -129,14 +146,14 @@ class PreviewConformanceTests(unittest.TestCase):
 
     def test_shared_operations_and_round_actions_are_explicitly_scoped(self) -> None:
         sdk = (ROOT / "tools/src/cubacadabra/sdk/shared-state.luau").read_text()
-        docs = (ROOT / "tools/docs/shared-state-v1.md").read_text()
+        shared_state_docs = (DOCS / "contracts/sdk/shared-state.md").read_text()
         self.assertIn('local DISTINCT_MODE = "distinct"', sdk)
         self.assertIn("config.operationStatus", sdk)
         self.assertIn("config.intentExpired", sdk)
         self.assertIn("expiredIntents", sdk)
         self.assertIn("intent.operationId", sdk)
         for status in ("pending", "accepted", "rejected", "expired"):
-            self.assertIn(status, docs)
+            self.assertIn(status, shared_state_docs)
 
         first_round = (ROOT / "first-game/src/round.luau").read_text()
         second_relay = (ROOT / "second-game/src/relay.luau").read_text()

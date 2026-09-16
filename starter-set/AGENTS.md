@@ -64,7 +64,7 @@ platform matrix are in [README.md](README.md#mac-gpu-debugging).
 
 ## Mobile payload limits
 
-Read `../docs/size_problem.md` before changing starter geometry. The pre-launch
+Read the central [performance and resource budgets](https://github.com/cubacadabra/docs/blob/main/verification/performance.md) before changing starter geometry. The pre-launch
 first-preview target is **2–4 MB for the complete loadout** and **30k–50k
 composed Near triangles**. Keep the richer Blender source meshes, but deliver
 the following per-part Near ceilings from `artwork/build_starters.py`:

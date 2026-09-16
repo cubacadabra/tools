@@ -102,7 +102,7 @@ Every generated package also contains `package.json`, whose SHA-256 map binds
 the manifest, script, and asset files to that package release. It also records
 the reachable SDK helper modules and their source hashes. Clients should
 validate those hashes before executing or caching a remote package. See
-[preview licensing](docs/licensing.md) for the current reuse policy.
+[preview licensing](https://github.com/cubacadabra/docs/blob/main/platform/licensing.md) for the current reuse policy.
 
 `CubaSharedState` v1 owns bounded intent queuing, compare-and-set retries,
 conflict rebasing, and reconnect snapshots. Games provide their own initial
@@ -115,9 +115,9 @@ objectives, inventory, and presentation stay in the game script. `CubaCycle`
 v1 provides a small reusable day/night or calm/storm clock for games that need
 repeating pressure.
 
-See [Shared state SDK v1](docs/shared-state-v1.md) for the reducer contract and
-lifecycle API. [Disclosure SDK v1](docs/disclosure-v1.md) provides a generic
-tap-to-reveal controller, and [Survival SDK v1](docs/survival-v1.md) provides a
+See [Shared state SDK v1](https://github.com/cubacadabra/docs/blob/main/contracts/sdk/shared-state.md) for the reducer contract and
+lifecycle API. [Disclosure SDK v1](https://github.com/cubacadabra/docs/blob/main/contracts/sdk/disclosure.md) provides a generic
+tap-to-reveal controller, and [Survival SDK v1](https://github.com/cubacadabra/docs/blob/main/contracts/sdk/survival.md) provides a
 reusable health/death/respawn lifecycle while each game continues to own its
 HUD composition. See the game guide for the cycle and safe-zone contracts.
 
@@ -139,7 +139,7 @@ and examples repositories. For a coordinated change, run the tools workflow
 manually and provide explicit refs for the participating repositories.
 
 The complete preview contract is in the
-[Cubacadabra Game Developer Guide](docs/cubacadabra-game-developer-guide-preview-0.3.md).
+[Cubacadabra creator guide](https://github.com/cubacadabra/docs/blob/main/contracts/creator-guide.md).
 
 One-shot game audio is declared under `assets.audio` with an id, path, and
 optional volume. The builder validates up to 64 package-local WAV files as
