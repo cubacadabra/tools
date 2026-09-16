@@ -141,6 +141,18 @@ manually and provide explicit refs for the participating repositories.
 The complete preview contract is in the
 [Cubacadabra creator guide](https://github.com/cubacadabra/docs/blob/main/contracts/creator-guide.md).
 
+## Git hooks
+
+Enable the repository's pre-commit hook once per checkout:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+When a commit includes Rust source, the hook runs `cargo fmt --all` and
+auto-stages formatting changes for Rust files that were already staged. Files
+with separate unstaged changes must be staged or discarded before committing.
+
 One-shot game audio is declared under `assets.audio` with an id, path, and
 optional volume. The builder validates up to 64 package-local WAV files as
 48 kHz, 16-bit PCM with one or two channels and a maximum size of 4 MiB each.
