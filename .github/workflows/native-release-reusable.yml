@@ -111,26 +111,26 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install Python
-        if: inputs.bundle_builder
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Build native application
         env:
           CUBACADABRA_BACKEND_URL: https://api.cubacadabra.com/
         run: cargo build --release --manifest-path "${{ inputs.cargo_manifest }}" --bin "${{ inputs.binary_name }}" --target "${{ matrix.target }}"
 
-      - name: Build bundled game builder
+      - name: Build bundled native game builder
         if: inputs.bundle_builder
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p staging
-          python3 -m zipapp tools/src \
-            --main cubacadabra.cli:main \
-            --output staging/cubacadabra.pyz
+          cargo build --release \
+            --manifest-path tools/Cargo.toml \
+            --bin cubacadabra \
+            --target "${{ matrix.target }}"
+          if [[ "${{ matrix.platform }}" == "windows" ]]; then
+            cp "tools/target/${{ matrix.target }}/release/cubacadabra.exe" staging/cubacadabra.exe
+          else
+            cp "tools/target/${{ matrix.target }}/release/cubacadabra" staging/cubacadabra
+          fi
 
       - name: Package macOS application
         if: matrix.platform == 'macos'
@@ -154,7 +154,7 @@ jobs:
           cp "${APP_DIRECTORY}/target/${TARGET}/release/${BINARY_NAME}" "${app_root}/Contents/MacOS/${BINARY_NAME}"
           cp rust/assets/images/logo.png "${app_root}/Contents/Resources/logo.png"
           if [[ "${BUNDLE_BUILDER}" == "true" ]]; then
-            cp staging/cubacadabra.pyz "${app_root}/Contents/Resources/cubacadabra.pyz"
+            cp staging/cubacadabra "${app_root}/Contents/Resources/cubacadabra"
           fi
           iconset="staging/logo.iconset"
           mkdir -p "${iconset}"
@@ -189,7 +189,7 @@ jobs:
           mkdir -p "${staging}" dist
           cp "${APP_DIRECTORY}/target/${TARGET}/release/${BINARY_NAME}.exe" "${staging}/${BINARY_NAME}.exe"
           if [[ "${BUNDLE_BUILDER}" == "true" ]]; then
-            cp staging/cubacadabra.pyz "${staging}/cubacadabra.pyz"
+            cp staging/cubacadabra.exe "${staging}/cubacadabra.exe"
           fi
           cp "${APP_DIRECTORY}/LICENSE" "${APP_DIRECTORY}/COPYRIGHT" "${staging}/"
           (cd staging && 7z a -tzip "../dist/${archive}" "$(basename "${staging}")")
@@ -211,7 +211,7 @@ jobs:
           mkdir -p "${staging}" dist
           cp "${APP_DIRECTORY}/target/${TARGET}/release/${BINARY_NAME}" "${staging}/${BINARY_NAME}"
           if [[ "${BUNDLE_BUILDER}" == "true" ]]; then
-            cp staging/cubacadabra.pyz "${staging}/cubacadabra.pyz"
+            cp staging/cubacadabra "${staging}/cubacadabra"
           fi
           cp "${APP_DIRECTORY}/LICENSE" "${APP_DIRECTORY}/COPYRIGHT" "${staging}/"
           tar -C staging -czf "dist/${archive}" "$(basename "${staging}")"

@@ -1,0 +1,10 @@
+[package]
+name = "cubacadabra-project"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+unicode-normalization = "0.1"
+

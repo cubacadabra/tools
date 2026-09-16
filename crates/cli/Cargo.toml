@@ -1,0 +1,14 @@
+[package]
+name = "cubacadabra-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "cubacadabra"
+path = "src/main.rs"
+
+[dependencies]
+cubacadabra-builder = { path = "../builder" }
+cubacadabra-project = { path = "../project" }
+
