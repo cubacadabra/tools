@@ -33,8 +33,10 @@ PYTHONPATH=tools/src python3 -m cubacadabra build-game first-game \
 ```
 
 The builder follows normal static-string Luau `require()` calls, bundles local
-and reserved SDK modules, validates the manifest and assets, inlines an effects
-source file, and writes `game.luau`, `manifest.json`, and `package.json`.
+and reserved SDK modules from the canonical toolchain, validates the manifest
+and assets, inlines an effects source file, and writes `game.luau`,
+`manifest.json`, and `package.json`. It bundles only SDK modules that the game
+actually imports.
 Local modules must stay below `src/`; cycles, invalid UTF-8, unsafe paths, and
 ambiguous module paths are rejected. Each module has its own scope and returns
 its exported value normally.
@@ -55,7 +57,15 @@ contract the source expects. The `version` fields inside effect and game state
 payloads are game-owned schemas and may remain at `1`.
 
 When `sdkVersion` is present, the preview builder requires the exact supported
-value `0.3.0`; this prevents a package from silently using an unknown SDK.
+value `0.3.0`; this prevents a package from silently using an unknown runtime
+API. The generated `package.json` records the canonical SDK modules included
+in the bundle and their source hashes.
+
+`.luaurc` is editor/type-checker configuration only. It is not consulted by
+the release builder. In a workspace, put the shared alias at the workspace
+root. `create-game` therefore does not copy SDK source into every project.
+For a standalone offline project, use `create-game --vendor-sdk`; this is an
+explicit editor convenience and is not a production dependency override.
 
 ## 2. Game lifecycle
 

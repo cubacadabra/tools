@@ -99,29 +99,29 @@ Checksums establish consistency with the descriptor; they should not be confused
 
 **Priority: High. Confirmed in source.**
 
-`create_game()` copies the SDK into:
+`create_game()` used to copy the SDK into:
 
 ```text
 <project>/.cubacadabra/sdk
 ```
 
-It then writes `.luaurc` so the editor’s `@cubacadabra` alias resolves to that project-local copy.
+It then wrote `.luaurc` so the editor’s `@cubacadabra` alias resolved to that project-local copy.
 
-But `_read_sdk_module()` in `game_builder.py` resolves SDK imports from:
+The builder now resolves SDK imports from:
 
 ```text
 <installed CLI package>/sdk
 ```
 
-It does not use the project’s copied SDK.
+It does not use a project-local copy or `.luaurc`.
 
-Consequently, upgrading the CLI can change what gets bundled while the editor continues to show the old implementation. Editing the project-local SDK can also change what the developer reads without changing what runs.
+The default project no longer contains a copied SDK, so this split cannot occur for newly created games. `.luaurc` remains editor-only; the generated package records the exact canonical SDK modules and source hashes used by the build.
 
-**What a developer experiences:** “Go to definition shows one implementation, but my game behaves like another.”
+**What a developer experiences:** the workspace alias and the builder both point at the toolchain’s canonical SDK.
 
 This is especially damaging when debugging a helper such as shared state: the developer may be investigating code that is not actually in their package.
 
-**What I would change:** Make the editor and builder consume the **same resolved dependency snapshot**. A project lockfile could identify the exact SDK release and content hash, with an explicit update operation. Alternatively, stop copying executable SDK source and generate editor metadata from the same locked SDK resolution the builder uses.
+**What remains for a future package registry:** a project lockfile can identify an SDK release independently of the toolchain. The preview’s immediate protection is canonical resolution plus dependency source hashes in `package.json`.
 
 The important requirement is not a particular package-manager design. It is:
 
@@ -293,4 +293,3 @@ My overall judgment is that **the individual components are progressing faster t
 The bundle contains the three queue cases and the require-scanner case. They use extracted methods and test doubles; they are diagnostic reproductions, not a full platform test suite or a proposed patch.
 
 [1]: https://luau.org/syntax/?utm_source=chatgpt.com "Luau syntax by example | Luau"
-

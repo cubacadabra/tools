@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import __version__
+
 DEFAULT_REVIEW_EMAIL = "play-review@cubacadabra.com"
 DEFAULT_REVIEW_PASSWORD = "testing"
 DEFAULT_BACKEND_URL = "http://127.0.0.1:8787"
@@ -115,6 +117,7 @@ class BackendClient:
             headers={
                 "Accept": "application/json",
                 "Content-Type": content_type,
+                "User-Agent": f"cubacadabra-tools/{__version__}",
             },
         )
         if self._session_cookie is not None:

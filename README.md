@@ -44,6 +44,7 @@ and empty `assets/audio/` and `assets/images/` directories:
 ```sh
 cubacadabra --create-game --title "The Wild West" --path ~/games
 # or: cubacadabra create-game --title "The Wild West" --path ~/games
+# standalone/offline editor copy: add --vendor-sdk
 ```
 
 Build any compatible game repository from its project directory:
@@ -87,17 +88,19 @@ local CubaCycle = require("@cubacadabra/cycle")
 
 The checked-in workspaces map that alias to the SDK source with `.luaurc`, so
 Luau-aware editors can navigate and type-check the same module graph that the
-builder bundles. Require paths must be static strings and must start with
-`./`, `../`, or `@cubacadabra/`.
+builder bundles. `.luaurc` is editor configuration only; the builder always
+uses the canonical SDK shipped with the toolchain. Require paths must be static
+strings and must start with `./`, `../`, or `@cubacadabra/`.
 
 Game IDs use the package-wide contract of 3–64 lowercase letters, numbers, and
 single dashes. `create-game`, `build-game`, Studio, the browser, and mobile
-clients reject IDs outside that contract. Newly created projects include a
-local `.cubacadabra/sdk` copy and `.luaurc` alias so editor navigation works
-after the project is moved away from this repository.
+clients reject IDs outside that contract. Newly created projects do not copy
+the SDK; use `--vendor-sdk` only when an offline standalone editor copy is
+needed.
 
 Every generated package also contains `package.json`, whose SHA-256 map binds
-the manifest, script, and asset files to that package release. Clients should
+the manifest, script, and asset files to that package release. It also records
+the reachable SDK helper modules and their source hashes. Clients should
 validate those hashes before executing or caching a remote package. See
 [preview licensing](docs/licensing.md) for the current reuse policy.
 

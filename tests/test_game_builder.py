@@ -51,9 +51,8 @@ class GameBuilderTests(unittest.TestCase):
         self.assertTrue((result.project / "assets").is_dir())
         self.assertTrue((result.project / "assets/audio").is_dir())
         self.assertTrue((result.project / "assets/images").is_dir())
-        editor_config = json.loads((result.project / ".luaurc").read_text())
-        self.assertEqual(editor_config, {"aliases": {"cubacadabra": ".cubacadabra/sdk"}})
-        self.assertTrue((result.project / ".cubacadabra/sdk/shared-state.luau").is_file())
+        self.assertFalse((result.project / ".luaurc").exists())
+        self.assertFalse((result.project / ".cubacadabra").exists())
         source = (result.project / "src/main.luau").read_text()
         self.assertIn("api.session:start(\"the-wild-west\"", source)
         for control in (
@@ -85,6 +84,17 @@ class GameBuilderTests(unittest.TestCase):
             0,
         )
         self.assertTrue((games / "the-wild-west" / "manifest.json").exists())
+
+    def test_create_game_can_explicitly_vendor_sdk_for_offline_editing(self) -> None:
+        result = create_game(
+            title="The Wild West",
+            path=self.project / "games",
+            vendor_sdk=True,
+        )
+
+        editor_config = json.loads((result.project / ".luaurc").read_text())
+        self.assertEqual(editor_config, {"aliases": {"cubacadabra": ".cubacadabra/sdk"}})
+        self.assertTrue((result.project / ".cubacadabra/sdk/shared-state.luau").is_file())
 
     def test_created_game_builds_from_its_project_directory(self) -> None:
         games = self.project / "games"
@@ -145,6 +155,9 @@ class GameBuilderTests(unittest.TestCase):
         self.assertTrue((output / "assets/logo.txt").exists())
         package = json.loads((output / "package.json").read_text())
         self.assertEqual(package["files"], ["assets/logo.txt", "game.luau", "manifest.json"])
+        self.assertEqual(package["runtime"], {"api": "0.3.0"})
+        self.assertEqual(package["dependencies"], {})
+        self.assertEqual(package["dependencyPolicy"], "canonical-toolchain")
         for name in package["files"]:
             digest = hashlib.sha256((output / name).read_bytes()).hexdigest()
             self.assertEqual(package["sha256"][name], digest)
@@ -196,8 +209,18 @@ class GameBuilderTests(unittest.TestCase):
         )
         self.assertIn("local CubaSharedState = {}", script)
         self.assertIn("return CubaSharedState", script)
+        package = json.loads((output / "package.json").read_text())
+        dependency = package["dependencies"]["@cubacadabra/shared-state"]
+        self.assertEqual(dependency["source"], "cubacadabra-preview-sdk")
+        self.assertEqual(
+            dependency["sha256"],
+            hashlib.sha256(
+                (Path(__file__).parents[1] / "src/cubacadabra/sdk/shared-state.luau")
+                .read_bytes()
+            ).hexdigest(),
+        )
 
-    def test_builder_uses_the_project_sdk_alias(self) -> None:
+    def test_builder_ignores_project_sdk_alias(self) -> None:
         sdk_root = self.project / ".cubacadabra/sdk"
         sdk_root.mkdir(parents=True)
         (self.project / ".luaurc").write_text(
@@ -220,9 +243,10 @@ class GameBuilderTests(unittest.TestCase):
             output=output,
         )
 
-        self.assertIn("local ProjectSdk = {}", (output / "game.luau").read_text())
+        self.assertNotIn("local ProjectSdk = {}", (output / "game.luau").read_text())
+        self.assertIn("local CubaDisclosure = {}", (output / "game.luau").read_text())
 
-    def test_builder_rejects_a_missing_configured_project_sdk(self) -> None:
+    def test_builder_does_not_require_a_project_sdk_copy(self) -> None:
         (self.project / ".luaurc").write_text(
             json.dumps({"aliases": {"cubacadabra": ".cubacadabra/sdk"}}),
             encoding="utf-8",
@@ -232,12 +256,11 @@ class GameBuilderTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        with self.assertRaisesRegex(GameBuildError, "does not point to an SDK directory"):
-            build_game(
-                source_root=self.project / "src",
-                manifest_path=self.project / "manifest.json",
-                output=self.project / "build/package",
-            )
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=self.project / "build/package",
+        )
 
     def test_bundles_the_disclosure_sdk_module(self) -> None:
         (self.project / "src/main.luau").write_text(

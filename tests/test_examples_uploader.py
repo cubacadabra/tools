@@ -31,6 +31,7 @@ class ExampleUploadTests(unittest.TestCase):
                 (project / "src/main.luau").write_text("return {}\n", encoding="utf-8")
 
             requests: list[tuple[str, str | None, dict[str, object]]] = []
+            user_agents: list[str | None] = []
 
             class Handler(BaseHTTPRequestHandler):
                 def log_message(self, format: str, *args: object) -> None:
@@ -39,6 +40,7 @@ class ExampleUploadTests(unittest.TestCase):
                 def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
                     length = int(self.headers["Content-Length"] or 0)
                     body = self.rfile.read(length)
+                    user_agents.append(self.headers.get("User-Agent"))
                     if self.path == "/auth/email":
                         self.send_response(200)
                         self.send_header(
@@ -86,6 +88,7 @@ class ExampleUploadTests(unittest.TestCase):
                 [request[1] for request in requests],
                 ["cubacadabra_session=test-session"] * 3,
             )
+            self.assertEqual(user_agents, ["cubacadabra-tools/0.3.0"] * 4)
             self.assertEqual(
                 json.loads((examples / "the-wild-west/manifest.json").read_text())["version"],
                 "0.3.7",

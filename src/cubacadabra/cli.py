@@ -57,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--title", help=argparse.SUPPRESS)
     parser.add_argument("--path", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--vendor-sdk",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
 
     commands = parser.add_subparsers(
         dest="command",
@@ -293,6 +298,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DIR",
         help="Directory in which to create the game directory.",
     )
+    create_parser.add_argument(
+        "--vendor-sdk",
+        action="store_true",
+        help=(
+            "Copy SDK source into the project for offline editor use; normally "
+            "the installed toolchain supplies it."
+        ),
+    )
     create_parser.set_defaults(handler=_run_create_game)
     return parser
 
@@ -358,7 +371,11 @@ def _run_build_game(args: argparse.Namespace) -> int:
 
 def _run_create_game(args: argparse.Namespace) -> int:
     try:
-        result = create_game(title=args.title, path=args.path)
+        result = create_game(
+            title=args.title,
+            path=args.path,
+            vendor_sdk=getattr(args, "vendor_sdk", False),
+        )
     except (GameCreateError, OSError) as error:
         print(f"cubacadabra create-game failed: {error}", file=sys.stderr)
         return 1

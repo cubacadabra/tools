@@ -63,6 +63,7 @@ MAX_IMAGE_ASSETS = 16
 MAX_IMAGE_ASSET_BYTES = 8 * 1024 * 1024
 MATERIAL_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 PREVIEW_SDK_VERSION = "0.3.0"
+SDK_SOURCE_ID = "cubacadabra-preview-sdk"
 BUILD_MARKER = ".cubacadabra-build"
 BUILD_MARKER_CONTENT = "cubacadabra-game-package-v1\n"
 
@@ -71,38 +72,17 @@ class GameBuildError(ValueError):
     """An input project cannot be turned into a valid game package."""
 
 
-def _resolve_sdk_root(source_root: Path) -> Path:
-    """Resolve the SDK from the same alias configuration used by editors."""
+def _canonical_sdk_root() -> Path:
+    """Return the SDK shipped with this version of the build tools.
 
-    fallback = Path(__file__).with_name("sdk").resolve()
-    config_path = source_root.parent / ".luaurc"
-    if not config_path.is_file():
-        return fallback
-    try:
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-    except UnicodeDecodeError as error:
-        raise GameBuildError(f".luaurc is not valid UTF-8: {config_path}") from error
-    except json.JSONDecodeError as error:
-        raise GameBuildError(f".luaurc is not valid JSON: {error.msg}") from error
-    if not isinstance(config, dict):
-        raise GameBuildError(".luaurc must contain a JSON object")
-    aliases = config.get("aliases", {})
-    if not isinstance(aliases, dict):
-        raise GameBuildError(".luaurc aliases must be an object")
-    alias = aliases.get("cubacadabra")
-    if alias is None:
-        return fallback
-    if not isinstance(alias, str) or not alias.strip():
-        raise GameBuildError(".luaurc aliases.cubacadabra must be a non-empty path")
-    sdk_root = (config_path.parent / alias).resolve()
-    if not sdk_root.is_dir():
-        raise GameBuildError(
-            f".luaurc aliases.cubacadabra does not point to an SDK directory: {sdk_root}"
-        )
-    return sdk_root
+    ``.luaurc`` is intentionally not consulted here. It is an editor/type
+    checking configuration file, not a release dependency resolver.
+    """
+
+    return Path(__file__).with_name("sdk").resolve()
 
 
-def _read_sdk_module(module_name: str, sdk_root: Path) -> str:
+def _read_sdk_module(module_name: str) -> str:
     if not SDK_REQUIRE_RE.fullmatch(module_name):
         raise GameBuildError(
             "Cubacadabra SDK requires must use "
@@ -111,7 +91,7 @@ def _read_sdk_module(module_name: str, sdk_root: Path) -> str:
     sdk_file = SDK_MODULES.get(module_name)
     if sdk_file is None:
         raise GameBuildError(f"unknown Cubacadabra SDK module: {module_name}")
-    sdk_path = sdk_root / sdk_file
+    sdk_path = _canonical_sdk_root() / sdk_file
 
     try:
         source = sdk_path.read_text(encoding="utf-8")
@@ -320,16 +300,25 @@ def _resolve_local_module(
     return match
 
 
-def _bundle_luau_modules(entry: Path, source_root: Path) -> str:
+def _bundle_luau_modules(
+    entry: Path,
+    source_root: Path,
+    sdk_dependencies: dict[str, dict[str, str]] | None = None,
+) -> str:
     modules: dict[str, _LuauModule] = {}
-    sdk_root = _resolve_sdk_root(source_root)
 
     def visit_local(path: Path, stack: tuple[str, ...]) -> str:
         module_id = path.relative_to(source_root).as_posix()
         return visit(module_id, _read_luau_source(path, source_root), path, stack)
 
     def visit_sdk(module_id: str, stack: tuple[str, ...]) -> str:
-        return visit(module_id, _read_sdk_module(module_id, sdk_root), None, stack)
+        source = _read_sdk_module(module_id)
+        if sdk_dependencies is not None:
+            sdk_dependencies[module_id] = {
+                "source": SDK_SOURCE_ID,
+                "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+            }
+        return visit(module_id, source, None, stack)
 
     def visit(
         module_id: str,
@@ -830,11 +819,12 @@ def build_game(
     staging: Path | None = _temporary_directory(output.parent, f".{output.name}.staging-")
     archive_temp: Path | None = None
     try:
+        sdk_dependencies: dict[str, dict[str, str]] = {}
         generated_script = (
             "-- GENERATED FILE: do not edit; edit src/ and run cubacadabra build-game.\n"
             f"-- game: {game_id}\n"
             f"-- version: {version}\n\n"
-            + _bundle_luau_modules(entry, source_root)
+            + _bundle_luau_modules(entry, source_root, sdk_dependencies)
             + "\n"
         )
         (staging / "game.luau").write_text(generated_script, encoding="utf-8")
@@ -860,6 +850,9 @@ def build_game(
             "formatVersion": package.get("formatVersion", 3),
             "id": game_id,
             "version": version,
+            "runtime": {"api": PREVIEW_SDK_VERSION},
+            "dependencies": sdk_dependencies,
+            "dependencyPolicy": "canonical-toolchain",
             "entry": "game.luau",
             "manifest": "manifest.json",
             "files": payload_files,

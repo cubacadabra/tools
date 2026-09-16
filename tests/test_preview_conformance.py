@@ -19,6 +19,7 @@ class PreviewConformanceTests(unittest.TestCase):
         ROOT / "second-game",
         ROOT / "third-game",
         ROOT / "examples/adventure-101",
+        ROOT / "examples/maze-101",
         ROOT / "examples/survival-101",
         ROOT / "examples/the-wild-west",
     )
@@ -120,6 +121,11 @@ class PreviewConformanceTests(unittest.TestCase):
             self.assertEqual(sdk_root, (ROOT / "tools/src/cubacadabra/sdk").resolve())
             for module in ("shared-state", "disclosure", "survival", "cycle", "obby"):
                 self.assertTrue((sdk_root / f"{module}.luau").is_file())
+
+    def test_created_games_do_not_vendor_the_sdk_by_default(self) -> None:
+        maze = ROOT / "examples/maze-101"
+        self.assertFalse((maze / ".luaurc").exists())
+        self.assertFalse((maze / ".cubacadabra").exists())
 
     def test_shared_operations_and_round_actions_are_explicitly_scoped(self) -> None:
         sdk = (ROOT / "tools/src/cubacadabra/sdk/shared-state.luau").read_text()

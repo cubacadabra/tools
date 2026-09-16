@@ -159,7 +159,7 @@ Also distinguish “no game specified” from “an explicitly requested game is
 
 Studio expects sibling `rust` and `tools` repositories. Mobile setup instructions similarly assume a multi-repository workspace and a sibling backend. That backend is not among the 11 public repositories listed in the organization. 
 
-There is also a smaller version of the same problem around your module fix: the checked-in example workspaces receive SDK alias configuration, but `create_game()` writes the manifest, main script, and asset directories without generating `.luaurc`. A newly created project therefore does not automatically receive the same editor setup as your examples. ([GitHub][3])
+There is also a smaller version of the same problem around the SDK module fix: the editor alias is workspace configuration, while release builds must resolve the canonical SDK from the toolchain. `create_game()` therefore does not copy executable SDK source into every project. Standalone offline projects can opt into a project-local copy explicitly. ([GitHub][3])
 
 **What I would change:** Separate two journeys.
 
@@ -207,4 +207,3 @@ That means one project build pipeline, one package-validation contract, one cohe
 [3]: https://github.com/cubacadabra/tools/commit/662c18a43deafb5b8f814d61697e0d62eb167e22 "fixing include term to proper luau · cubacadabra/tools@662c18a · GitHub"
 [4]: https://github.com/cubacadabra/ios_app/blob/main/cubacadabra/GamePackage.swift "ios_app/cubacadabra/GamePackage.swift at main · cubacadabra/ios_app · GitHub"
 [5]: https://github.com/cubacadabra/examples "GitHub - cubacadabra/examples: Small Cubacadabra game projects for learning and testing the platform, including Adventure 101, Survival 101, and The Wild West. Demonstrates the portable manifests, Luau source, assets, and project structure consumed by Studio and the build tools. · GitHub"
-

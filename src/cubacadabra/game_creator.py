@@ -199,8 +199,12 @@ def _source(title: str, game_id: str) -> str:
     )
 
 
-def create_game(*, title: str, path: Path) -> GameCreateResult:
-    """Create a starter game below *path* without overwriting existing files."""
+def create_game(*, title: str, path: Path, vendor_sdk: bool = False) -> GameCreateResult:
+    """Create a starter game without copying the SDK by default.
+
+    The installed toolchain is the build-time SDK source. ``vendor_sdk`` is
+    an explicit escape hatch for offline/editor-only standalone projects.
+    """
 
     if not isinstance(title, str) or not title.strip():
         raise GameCreateError("title is required")
@@ -218,12 +222,13 @@ def create_game(*, title: str, path: Path) -> GameCreateResult:
         (project / "src").mkdir()
         (project / "assets/audio").mkdir(parents=True)
         (project / "assets/images").mkdir(parents=True)
-        sdk_destination = project / ".cubacadabra/sdk"
-        shutil.copytree(Path(__file__).with_name("sdk"), sdk_destination)
-        (project / ".luaurc").write_text(
-            json.dumps({"aliases": {"cubacadabra": ".cubacadabra/sdk"}}, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        if vendor_sdk:
+            sdk_destination = project / ".cubacadabra/sdk"
+            shutil.copytree(Path(__file__).with_name("sdk"), sdk_destination)
+            (project / ".luaurc").write_text(
+                json.dumps({"aliases": {"cubacadabra": ".cubacadabra/sdk"}}, indent=2) + "\n",
+                encoding="utf-8",
+            )
         (project / "manifest.json").write_text(
             json.dumps(_manifest(title, game_id), indent=2) + "\n",
             encoding="utf-8",
