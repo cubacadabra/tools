@@ -56,10 +56,12 @@ Use SemVer for game and SDK compatibility:
 contract the source expects. The `version` fields inside effect and game state
 payloads are game-owned schemas and may remain at `1`.
 
-When `sdkVersion` is present, the preview builder requires the exact supported
-value `0.3.0`; this prevents a package from silently using an unknown runtime
-API. The generated `package.json` records the canonical SDK modules included
-in the bundle and their source hashes.
+When `sdkVersion` is present, the preview builder accepts the supported
+contracts `0.3.0` and `0.4.0`; this prevents a package from silently using an
+unknown runtime API. Terrain operations require `0.4.0`, and runtimes that do
+not recognize that version reject the package. The generated `package.json`
+records the package's runtime API alongside its bundled SDK modules and source
+hashes.
 
 `.luaurc` is editor/type-checker configuration only. It is not consulted by
 the release builder. In a workspace, put the shared alias at the workspace
@@ -450,6 +452,51 @@ Use tileable PNGs for alpha-capable or painted surfaces and JPGs for opaque
 photographic surfaces. Billboards remain the right choice for a single poster
 or sign; materials are for a surface that should repeat across many parts.
 
+Terrain is a separate, engine-provided surface system with engine-owned material
+art; game packages do not carry copies of those textures. Worlds can declare
+ordered block/ball fills, carves, and material-paint operations using semantic
+IDs `builtin:grass`, `builtin:ground`, `builtin:rock`, `builtin:sand`,
+`builtin:mud`, and `builtin:snow` (bare names are also accepted):
+
+```json
+{
+  "worlds": {
+    "island": {
+      "terrain": {
+        "cellSize": 1,
+        "hideDefaultGround": true,
+        "materialArt": true,
+        "operations": [
+          {
+            "operation": "fill",
+            "shape": "block",
+            "position": [0, -1, 0],
+            "size": [32, 2, 32],
+            "material": "builtin:grass"
+          },
+          {
+            "operation": "carve",
+            "shape": "ball",
+            "position": [0, 0, 0],
+            "radius": 3
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+Terrain is a `0.4.0` runtime capability. `grass` shades upward-facing surfaces
+with the built-in grass tile and steep sides with the soil tile; other built-ins
+use world-space tiled maps. A procedural color fallback remains available when
+terrain art is disabled with `materialArt: false`. Set `hideDefaultGround` when
+the terrain itself supplies the walkable floor; otherwise the legacy flat
+ground remains available below it. Terrain is
+currently static package content, chunked and bounded at load. Luau terrain
+editing, streaming edits, and saving modified terrain are not part of this
+preview yet.
+
 Keep state schemas and interaction IDs stable within a package version. Use
 small, semantic IDs such as `node-1`, `objective`, and `round-state`; they are
 the bridge between manifest, Luau, and retained presentation.
@@ -457,8 +504,8 @@ the bridge between manifest, Luau, and retained presentation.
 ### Procedural maze worlds
 
 Maze 101 uses the bounded `maze` declaration. The tools carve a deterministic
-perfect maze during the build, then emit ordinary blocks, interactions, and
-checkpoints into the package consumed by every runtime:
+perfect maze during the build, then emit built-in terrain fills, interactions,
+and checkpoints into the package consumed by every runtime:
 
 ```json
 {

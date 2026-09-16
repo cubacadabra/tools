@@ -62,8 +62,16 @@ MAX_AUDIO_ASSETS = 64
 MAX_AUDIO_ASSET_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_ASSETS = 16
 MAX_IMAGE_ASSET_BYTES = 8 * 1024 * 1024
+TERRAIN_CHUNK_CELLS = 16
+MAX_TERRAIN_OPERATIONS = 512
+MAX_TERRAIN_CHUNKS = 512
+MAX_TERRAIN_SAMPLES = 2_000_000
+MAX_TERRAIN_COORDINATE = 4096
+BUILTIN_TERRAIN_MATERIALS = {"grass", "ground", "dirt", "rock", "sand", "mud", "snow"}
 MATERIAL_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 PREVIEW_SDK_VERSION = "0.3.0"
+TERRAIN_SDK_VERSION = "0.4.0"
+SUPPORTED_SDK_VERSIONS = frozenset((PREVIEW_SDK_VERSION, TERRAIN_SDK_VERSION))
 SDK_SOURCE_ID = "cubacadabra-preview-sdk"
 BUILD_MARKER = ".cubacadabra-build"
 BUILD_MARKER_CONTENT = "cubacadabra-game-package-v1\n"
@@ -726,6 +734,145 @@ def _validate_world_materials(manifest: dict[str, object]) -> None:
                     raise GameBuildError("world.blocks.material must reference a declared material")
 
 
+def _validate_world_terrain(manifest: dict[str, object]) -> None:
+    worlds = manifest.get("worlds", {})
+    world_definitions = [manifest]
+    if isinstance(worlds, dict):
+        world_definitions.extend(world for world in worlds.values() if isinstance(world, dict))
+
+    terrain_operations_found = False
+    for world in world_definitions:
+        terrain = world.get("terrain")
+        if terrain is None:
+            continue
+        if not isinstance(terrain, dict):
+            raise GameBuildError("world.terrain must be an object")
+        cell_size = terrain.get("cellSize", 0.5)
+        if (
+            isinstance(cell_size, bool)
+            or not isinstance(cell_size, (int, float))
+            or not math.isfinite(cell_size)
+            or not 0.5 <= cell_size <= 8
+        ):
+            raise GameBuildError("world.terrain.cellSize must be between 0.5 and 8")
+        operations = terrain.get("operations", [])
+        if not isinstance(operations, list):
+            raise GameBuildError("world.terrain.operations must be an array")
+        if len(operations) > MAX_TERRAIN_OPERATIONS:
+            raise GameBuildError(
+                f"world.terrain.operations cannot contain more than {MAX_TERRAIN_OPERATIONS} operations"
+            )
+        if not isinstance(terrain.get("hideDefaultGround", False), bool):
+            raise GameBuildError("world.terrain.hideDefaultGround must be a boolean")
+        if not isinstance(terrain.get("materialArt", True), bool):
+            raise GameBuildError("world.terrain.materialArt must be a boolean")
+        if not operations:
+            continue
+        terrain_operations_found = True
+
+        parsed_operations = []
+        for index, operation in enumerate(operations):
+            field = f"world.terrain.operations[{index}]"
+            if not isinstance(operation, dict):
+                raise GameBuildError(f"{field} must be an object")
+            mode = operation.get("operation", "fill")
+            shape = operation.get("shape", "block")
+            if mode not in ("fill", "carve", "paint"):
+                raise GameBuildError(f"{field}.operation must be fill, carve, or paint")
+            if shape not in ("block", "box", "ball", "sphere"):
+                raise GameBuildError(f"{field}.shape must be block or ball")
+            material = operation.get("material", "")
+            if mode in ("fill", "paint") and (
+                not isinstance(material, str)
+                or material.removeprefix("builtin:").lower() not in BUILTIN_TERRAIN_MATERIALS
+            ):
+                raise GameBuildError(f"{field}.material must be a built-in terrain material")
+            position = operation.get("position")
+            if (
+                not isinstance(position, list)
+                or len(position) != 3
+                or any(
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    or abs(value) > MAX_TERRAIN_COORDINATE
+                    for value in position
+                )
+            ):
+                raise GameBuildError(f"{field}.position must contain three finite in-bounds numbers")
+            if shape in ("block", "box"):
+                size = operation.get("size")
+                if (
+                    not isinstance(size, list)
+                    or len(size) != 3
+                    or any(
+                        isinstance(value, bool)
+                        or not isinstance(value, (int, float))
+                        or not math.isfinite(value)
+                        or value <= 0
+                        for value in size
+                    )
+                ):
+                    raise GameBuildError(f"{field}.size must contain three positive finite numbers")
+                bounds = [
+                    [position[axis] - size[axis] / 2 for axis in range(3)],
+                    [position[axis] + size[axis] / 2 for axis in range(3)],
+                ]
+            else:
+                radius = operation.get("radius")
+                if (
+                    isinstance(radius, bool)
+                    or not isinstance(radius, (int, float))
+                    or not math.isfinite(radius)
+                    or radius <= 0
+                ):
+                    raise GameBuildError(f"{field}.radius must be positive and finite")
+                bounds = [
+                    [position[axis] - radius for axis in range(3)],
+                    [position[axis] + radius for axis in range(3)],
+                ]
+                minimum_feature = radius * 2
+            if shape in ("block", "box"):
+                minimum_feature = min(size)
+            if minimum_feature < cell_size:
+                raise GameBuildError(f"{field} feature size must be at least terrain.cellSize")
+            if any(abs(value) > MAX_TERRAIN_COORDINATE for side in bounds for value in side):
+                raise GameBuildError(f"{field} bounds exceed the supported terrain world limits")
+            parsed_operations.append((mode, bounds))
+
+        chunks = set()
+        chunk_world_size = cell_size * TERRAIN_CHUNK_CELLS
+        for mode, bounds in parsed_operations:
+            if mode != "fill":
+                continue
+            first = [
+                math.floor((bounds[0][axis] - cell_size) / chunk_world_size)
+                for axis in range(3)
+            ]
+            end = [
+                math.ceil((bounds[1][axis] + cell_size) / chunk_world_size)
+                for axis in range(3)
+            ]
+            for z in range(first[2], end[2]):
+                for y in range(first[1], end[1]):
+                    for x in range(first[0], end[0]):
+                        chunks.add((x, y, z))
+                        if len(chunks) > MAX_TERRAIN_CHUNKS:
+                            raise GameBuildError(
+                                f"world.terrain exceeds the {MAX_TERRAIN_CHUNKS}-chunk limit"
+                            )
+        sample_count = len(chunks) * (TERRAIN_CHUNK_CELLS + 1) ** 3
+        if sample_count > MAX_TERRAIN_SAMPLES:
+            raise GameBuildError(
+                f"world.terrain exceeds the {MAX_TERRAIN_SAMPLES}-sample limit"
+            )
+
+    if terrain_operations_found and manifest.get("sdkVersion") != TERRAIN_SDK_VERSION:
+        raise GameBuildError(
+            f"world.terrain requires manifest.sdkVersion {TERRAIN_SDK_VERSION}"
+        )
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -802,14 +949,15 @@ def build_game(
     if sdk_version is not None:
         if not isinstance(sdk_version, str) or SEMVER_RE.fullmatch(sdk_version) is None:
             raise GameBuildError("manifest.sdkVersion must be a SemVer string")
-        if sdk_version != PREVIEW_SDK_VERSION:
+        if sdk_version not in SUPPORTED_SDK_VERSIONS:
             raise GameBuildError(
                 f"manifest.sdkVersion {sdk_version!r} is unsupported; "
-                f"this builder supports {PREVIEW_SDK_VERSION}"
+                f"this builder supports {', '.join(sorted(SUPPORTED_SDK_VERSIONS))}"
             )
     _validate_audio_assets(manifest, manifest_path.parent)
     _validate_image_assets(manifest, manifest_path.parent)
     _validate_world_materials(manifest)
+    _validate_world_terrain(manifest)
 
     resolved_zip = zip_path.resolve() if zip_path is not None else None
     if resolved_zip is not None:
@@ -855,7 +1003,7 @@ def build_game(
             "formatVersion": package.get("formatVersion", 3),
             "id": game_id,
             "version": version,
-            "runtime": {"api": PREVIEW_SDK_VERSION},
+            "runtime": {"api": sdk_version or PREVIEW_SDK_VERSION},
             "dependencies": sdk_dependencies,
             "dependencyPolicy": "canonical-toolchain",
             "entry": "game.luau",

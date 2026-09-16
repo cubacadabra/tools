@@ -1,8 +1,7 @@
 """Expand bounded procedural maze declarations into package world content.
 
-The generated package remains ordinary Cubacadabra content: blocks, interaction
-zones, and checkpoints. This keeps the Rust runtime deterministic and small
-while giving game authors a useful equivalent of Maze World's generator.
+Maze walls and ground are emitted as built-in terrain fills; interactions and
+checkpoints remain ordinary Cubacadabra world content.
 """
 
 from __future__ import annotations
@@ -17,6 +16,7 @@ from typing import Any
 MAX_MAZE_WIDTH = 12
 MAX_MAZE_HEIGHT = 12
 MAX_MAZE_CELLS = MAX_MAZE_WIDTH * MAX_MAZE_HEIGHT
+TERRAIN_MATERIALS = {"grass", "ground", "dirt", "rock", "sand", "mud", "snow"}
 
 _DIRECTIONS = (
     ("north", 0, -1, "south"),
@@ -231,21 +231,49 @@ def _expand_world(world: dict[str, Any]) -> bool:
     cells = _carve(width, height, seed)
     route = _path(cells, start, finish)
 
-    wall_color = config.get("wallColor", "groundEdge")
-    if not isinstance(wall_color, str) or not wall_color:
-        raise MazeBuildError("manifest.maze.wallColor must be a non-empty string")
+    terrain_config = config.get("terrain", {})
+    if not isinstance(terrain_config, dict):
+        raise MazeBuildError("manifest.maze.terrain must be an object")
+    terrain_cell_size = _number(terrain_config, "cellSize", 0.5, minimum=0.5, maximum=8)
+    wall_material = terrain_config.get("wallMaterial", "grass")
+    floor_material = terrain_config.get("floorMaterial", "ground")
+    for key, material in (("wallMaterial", wall_material), ("floorMaterial", floor_material)):
+        if not isinstance(material, str) or material.removeprefix("builtin:").lower() not in TERRAIN_MATERIALS:
+            raise MazeBuildError(
+                f"manifest.maze.terrain.{key} must be a built-in terrain material"
+            )
+    wall_material = wall_material.removeprefix("builtin:").lower()
+    floor_material = floor_material.removeprefix("builtin:").lower()
+
     blocks = list(world.get("blocks", []))
+    terrain = world.get("terrain", {})
+    if not isinstance(terrain, dict):
+        raise MazeBuildError("manifest.worlds.<id>.terrain must be an object")
+    operations = list(terrain.get("operations", []))
+    terrain["cellSize"] = terrain_cell_size
+    terrain["hideDefaultGround"] = True
+    operations.append({
+        "operation": "fill",
+        "shape": "block",
+        "position": [
+            origin[0] + width * cell_size / 2,
+            origin[1] - 1.0,
+            origin[2] + height * cell_size / 2,
+        ],
+        "size": [width * cell_size, 2.0, height * cell_size],
+        "material": floor_material.lower(),
+    })
     for (x, y), cell in cells.items():
         cell_x = origin[0] + x * cell_size
         cell_z = origin[2] + y * cell_size
         if cell["north"]:
-            blocks.append({"position": [cell_x + cell_size / 2, origin[1] + wall_height / 2, cell_z], "size": [cell_size + wall_thickness, wall_height, wall_thickness], "color": wall_color, "outline": False})
+            operations.append({"operation": "fill", "shape": "block", "position": [cell_x + cell_size / 2, origin[1] + wall_height / 2, cell_z], "size": [cell_size + wall_thickness, wall_height, wall_thickness], "material": wall_material.lower()})
         if cell["west"]:
-            blocks.append({"position": [cell_x, origin[1] + wall_height / 2, cell_z + cell_size / 2], "size": [wall_thickness, wall_height, cell_size + wall_thickness], "color": wall_color, "outline": False})
+            operations.append({"operation": "fill", "shape": "block", "position": [cell_x, origin[1] + wall_height / 2, cell_z + cell_size / 2], "size": [wall_thickness, wall_height, cell_size + wall_thickness], "material": wall_material.lower()})
         if x == width - 1 and cell["east"]:
-            blocks.append({"position": [cell_x + cell_size, origin[1] + wall_height / 2, cell_z + cell_size / 2], "size": [wall_thickness, wall_height, cell_size + wall_thickness], "color": wall_color, "outline": False})
+            operations.append({"operation": "fill", "shape": "block", "position": [cell_x + cell_size, origin[1] + wall_height / 2, cell_z + cell_size / 2], "size": [wall_thickness, wall_height, cell_size + wall_thickness], "material": wall_material.lower()})
         if y == height - 1 and cell["south"]:
-            blocks.append({"position": [cell_x + cell_size / 2, origin[1] + wall_height / 2, cell_z + cell_size], "size": [cell_size + wall_thickness, wall_height, wall_thickness], "color": wall_color, "outline": False})
+            operations.append({"operation": "fill", "shape": "block", "position": [cell_x + cell_size / 2, origin[1] + wall_height / 2, cell_z + cell_size], "size": [cell_size + wall_thickness, wall_height, wall_thickness], "material": wall_material.lower()})
 
     interactions = list(world.get("interactions", []))
     finish_id = str(config.get("finishId", "maze-finish"))
@@ -288,6 +316,8 @@ def _expand_world(world: dict[str, Any]) -> bool:
                 "radius": min(cell_size * 0.35, 2.7),
             })
     world["blocks"] = blocks
+    terrain["operations"] = operations
+    world["terrain"] = terrain
     world["interactions"] = interactions
     world["checkpoints"] = checkpoints
     settings = dict(world.get("world", {}))

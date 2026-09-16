@@ -592,7 +592,7 @@ class GameBuilderTests(unittest.TestCase):
             json.dumps({
                 "id": "test-game",
                 "version": "0.3.0",
-                "sdkVersion": "0.4.0",
+                "sdkVersion": "0.5.0",
             }),
             encoding="utf-8",
         )
@@ -603,6 +603,38 @@ class GameBuilderTests(unittest.TestCase):
                 manifest_path=self.project / "manifest.json",
                 output=self.project / "build/package",
             )
+
+    def test_accepts_terrain_sdk_version(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "terrain-game",
+                "version": "0.4.0",
+                "sdkVersion": "0.4.0",
+                "worlds": {
+                    "test": {
+                        "terrain": {
+                            "operations": [{
+                                "shape": "block",
+                                "operation": "fill",
+                                "position": [0, 0, 0],
+                                "size": [2, 2, 2],
+                                "material": "builtin:grass",
+                            }]
+                        }
+                    }
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        result = build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=self.project / "build/package",
+        )
+
+        package_info = json.loads((result.output / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(package_info["runtime"]["api"], "0.4.0")
 
     def test_copies_declared_audio_assets(self) -> None:
         audio = self.project / "assets/audio/chime.wav"
