@@ -209,11 +209,11 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
     fs::create_dir_all(output.parent().unwrap_or(Path::new(".")))
         .map_err(io_error("could not create package parent"))?;
     let staging = unique_sibling(&output, "staging")?;
-    let archive_temp = zip_path.as_ref().map(|path| unique_sibling(path, "archive"));
+    let archive_temp = zip_path.as_ref().map(|path| unique_file_path(path, "archive"));
     let archive_temp = archive_temp.transpose()?;
 
     let result = (|| {
-        let mut dependencies = BTreeMap::new();
+        let mut dependencies = Map::new();
         let generated = format!(
             "-- GENERATED FILE: do not edit; edit src/ and run cubacadabra build-game.\n-- game: {game_id}\n-- version: {}\n\n{}\n",
             json_scalar(&version),
@@ -222,7 +222,7 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
         write_text(&staging.join("game.luau"), &generated)?;
 
         if authority_source.is_file() {
-            let mut authority_dependencies = BTreeMap::new();
+            let mut authority_dependencies = Map::new();
             let authority = format!(
                 "-- GENERATED FILE: do not edit; edit src/server.luau and run cubacadabra build-game.\n-- game: {game_id}\n-- version: {}\n\n{}\n",
                 json_scalar(&version),
@@ -244,7 +244,7 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
         let hashes = payload_files.iter().map(|name| {
             Ok((name.clone(), Value::String(sha256_file(&staging.join(name))?)))
         }).collect::<Result<Map<String, Value>>>()?;
-        let package_info = json!({
+        let mut package_info = json!({
             "formatVersion": package_format_version,
             "id": game_id,
             "version": version,
@@ -255,8 +255,10 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
             "manifest": "manifest.json",
             "files": payload_files,
             "sha256": hashes,
-            "authorityEntry": authority_source.is_file().then_some("authority.luau"),
         });
+        if authority_source.is_file() {
+            package_info["authorityEntry"] = Value::String("authority.luau".to_owned());
+        }
         let rendered_package = pretty_json(&package_info)?;
         write_text(&staging.join("package.json"), &rendered_package)?;
         write_text(&staging.join(BUILD_MARKER), BUILD_MARKER_CONTENT)?;
@@ -281,10 +283,28 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
 }
 
 fn absolute_path(path: &Path) -> Result<PathBuf> {
-    if path.is_absolute() { return Ok(path.to_path_buf()); }
-    let base = path.parent().unwrap_or(Path::new("."));
-    let parent = fs::canonicalize(base).map_err(io_error("could not resolve path"))?;
-    Ok(parent.join(path.file_name().unwrap_or_default()))
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(io_error("could not resolve current directory"))?
+            .join(path)
+    };
+    if candidate.exists() {
+        return fs::canonicalize(candidate).map_err(io_error("could not resolve path"));
+    }
+    let mut missing = Vec::new();
+    let mut existing = candidate.as_path();
+    while !existing.exists() {
+        let name = existing.file_name().ok_or_else(|| BuildError(format!("could not resolve path: {}", path.display())))?;
+        missing.push(name.to_owned());
+        existing = existing.parent().ok_or_else(|| BuildError(format!("could not resolve path: {}", path.display())))?;
+    }
+    let mut resolved = fs::canonicalize(existing).map_err(io_error("could not resolve path"))?;
+    for component in missing.iter().rev() {
+        resolved.push(component);
+    }
+    Ok(resolved)
 }
 
 fn required_string<'a>(object: &'a Map<String, Value>, key: &str) -> Result<&'a str> {
@@ -346,7 +366,9 @@ fn read_json(path: &Path) -> Result<Value> {
 }
 
 fn pretty_json(value: &Value) -> Result<String> { serde_json::to_string_pretty(value).map(|value| value + "\n").map_err(|error| BuildError(format!("could not serialize JSON: {error}"))) }
-fn json_scalar(value: &Value) -> String { value.to_string() }
+fn json_scalar(value: &Value) -> String {
+    value.as_str().map(str::to_owned).unwrap_or_else(|| value.to_string())
+}
 fn write_text(path: &Path, text: &str) -> Result<()> { if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(io_error("could not create output directory"))?; } fs::write(path, text).map_err(io_error("could not write output file")) }
 fn io_error(context: &'static str) -> impl FnOnce(io::Error) -> BuildError { move |error| BuildError(format!("{context}: {error}")) }
 
@@ -372,6 +394,17 @@ fn unique_sibling(path: &Path, label: &str) -> Result<PathBuf> {
         if !candidate.exists() { fs::create_dir_all(&candidate).map_err(io_error("could not create staging directory"))?; return Ok(candidate); }
     }
     Err(BuildError(format!("could not create temporary sibling for {}", path.display())))
+}
+
+fn unique_file_path(path: &Path, label: &str) -> Result<PathBuf> {
+    let parent = path.parent().unwrap_or(Path::new("."));
+    fs::create_dir_all(parent).map_err(io_error("could not create temporary file parent"))?;
+    for attempt in 0..100u32 {
+        let suffix = SystemTime::now().duration_since(UNIX_EPOCH).map(|duration| duration.as_nanos()).unwrap_or_default();
+        let candidate = parent.join(format!(".{}.{}-{}-{}", path.file_name().unwrap_or_default().to_string_lossy(), label, std::process::id(), suffix + attempt as u128));
+        if !candidate.exists() { return Ok(candidate); }
+    }
+    Err(BuildError(format!("could not create temporary file beside {}", path.display())))
 }
 
 fn install_staging(staging: &Path, output: &Path) -> Result<()> {
@@ -438,9 +471,7 @@ fn write_zip(source: &Path, destination: &Path) -> Result<()> {
 }
 
 fn sdk_source(module: &str) -> Option<&'static str> { SDK_MODULES.iter().find(|(name, _, _)| *name == module).map(|(_, _, source)| *source) }
-fn sdk_filename(module: &str) -> Option<&'static str> { SDK_MODULES.iter().find(|(name, _, _)| *name == module).map(|(_, filename, _)| *filename) }
-
-fn bundle_modules(entry: &Path, source_root: &Path, dependencies: &mut BTreeMap<String, Value>) -> Result<String> {
+fn bundle_modules(entry: &Path, source_root: &Path, dependencies: &mut Map<String, Value>) -> Result<String> {
     let mut modules = BTreeMap::new();
     visit_local(entry, source_root, &mut modules, &mut Vec::new(), dependencies)?;
     let entry_id = entry.strip_prefix(source_root).map_err(|_| BuildError("entry point must be inside source directory".to_owned()))?.to_string_lossy().replace('\\', "/");
@@ -465,20 +496,30 @@ fn bundle_modules(entry: &Path, source_root: &Path, dependencies: &mut BTreeMap<
     output.extend([
         "local function __require(module_id)".to_owned(),
         "    local cached = __cache[module_id]".to_owned(),
-        "    if cached ~= nil then return cached end".to_owned(),
-        "    if __loading[module_id] then error(\"cyclic bundled require: \" .. module_id) end".to_owned(),
+        "    if cached ~= nil then".to_owned(),
+        "        return cached".to_owned(),
+        "    end".to_owned(),
+        "    if __loading[module_id] then".to_owned(),
+        "        error(\"cyclic bundled require: \" .. module_id)".to_owned(),
+        "    end".to_owned(),
         "    local loader = __modules[module_id]".to_owned(),
-        "    if loader == nil then error(\"bundled module not found: \" .. module_id) end".to_owned(),
+        "    if loader == nil then".to_owned(),
+        "        error(\"bundled module not found: \" .. module_id)".to_owned(),
+        "    end".to_owned(),
         "    local routes = __routes[module_id]".to_owned(),
         "    local function module_require(path)".to_owned(),
         "        local dependency_id = routes[path]".to_owned(),
-        "        if dependency_id == nil then error(\"undeclared bundled require from \" .. module_id .. \": \" .. tostring(path)) end".to_owned(),
+        "        if dependency_id == nil then".to_owned(),
+        "            error(\"undeclared bundled require from \" .. module_id .. \": \" .. tostring(path))".to_owned(),
+        "        end".to_owned(),
         "        return __require(dependency_id)".to_owned(),
         "    end".to_owned(),
         "    __loading[module_id] = true".to_owned(),
         "    local result = loader(module_require)".to_owned(),
         "    __loading[module_id] = nil".to_owned(),
-        "    if result == nil then error(\"bundled module returned nil: \" .. module_id) end".to_owned(),
+        "    if result == nil then".to_owned(),
+        "        error(\"bundled module returned nil: \" .. module_id)".to_owned(),
+        "    end".to_owned(),
         "    __cache[module_id] = result".to_owned(),
         "    return result".to_owned(),
         "end".to_owned(),
@@ -488,13 +529,13 @@ fn bundle_modules(entry: &Path, source_root: &Path, dependencies: &mut BTreeMap<
     Ok(output.join("\n"))
 }
 
-fn visit_local(path: &Path, source_root: &Path, modules: &mut BTreeMap<String, Module>, stack: &mut Vec<String>, dependencies: &mut BTreeMap<String, Value>) -> Result<String> {
+fn visit_local(path: &Path, source_root: &Path, modules: &mut BTreeMap<String, Module>, stack: &mut Vec<String>, dependencies: &mut Map<String, Value>) -> Result<String> {
     let module_id = path.strip_prefix(source_root).map_err(|_| BuildError("required module must stay inside src/".to_owned()))?.to_string_lossy().replace('\\', "/");
     let source = fs::read_to_string(path).map_err(io_error("could not read Luau source"))?;
     visit(module_id, source, Some(path), source_root, modules, stack, dependencies)
 }
 
-fn visit(module_id: String, source: String, path: Option<&Path>, source_root: &Path, modules: &mut BTreeMap<String, Module>, stack: &mut Vec<String>, dependencies: &mut BTreeMap<String, Value>) -> Result<String> {
+fn visit(module_id: String, source: String, path: Option<&Path>, source_root: &Path, modules: &mut BTreeMap<String, Module>, stack: &mut Vec<String>, dependencies: &mut Map<String, Value>) -> Result<String> {
     if stack.iter().any(|item| item == &module_id) { stack.push(module_id.clone()); return Err(BuildError(format!("cyclic Luau require: {}", stack.join(" -> ")))); }
     if modules.contains_key(&module_id) { return Ok(module_id); }
     for (line, value) in source.lines().enumerate() { if value.trim_start().starts_with("-- @include") { return Err(BuildError(format!("{module_id}:{}: @include is no longer supported; use a Luau require()", line + 1))); } }
@@ -532,15 +573,20 @@ fn require_specifiers(source: &str, module_id: &str) -> Result<Vec<String>> {
     let mut result = Vec::new();
     let bytes = source.as_bytes();
     let mut cursor = 0;
+    let mut previous_token = String::new();
     while cursor < bytes.len() {
         if source[cursor..].starts_with("--") { cursor = skip_comment(source, cursor); continue; }
         let character = bytes[cursor] as char;
-        if matches!(character, '\'' | '"' | '`') { cursor = skip_quoted(source, cursor, character); continue; }
+        if matches!(character, '\'' | '"' | '`') { cursor = skip_quoted(source, cursor, character); previous_token = "string".to_owned(); continue; }
         if character.is_ascii_alphabetic() || character == '_' {
             let start = cursor;
             cursor += 1;
             while cursor < bytes.len() && ((bytes[cursor] as char).is_ascii_alphanumeric() || bytes[cursor] as char == '_') { cursor += 1; }
-            if &source[start..cursor] != "require" { continue; }
+            let identifier = &source[start..cursor];
+            if identifier != "require" || previous_token == "." || previous_token == ":" {
+                previous_token = identifier.to_owned();
+                continue;
+            }
             let open = skip_space_comments(source, cursor);
             if open >= bytes.len() || bytes[open] as char != '(' { continue; }
             let argument = skip_space_comments(source, open + 1);
@@ -553,8 +599,12 @@ fn require_specifiers(source: &str, module_id: &str) -> Result<Vec<String>> {
             if close >= bytes.len() || bytes[close] as char != ')' { return Err(BuildError(format!("{module_id}: require must contain exactly one string path"))); }
             let specifier = source[argument + 1..end].to_owned();
             if !result.contains(&specifier) { result.push(specifier); }
+            previous_token = ")".to_owned();
             cursor = close + 1;
-        } else { cursor += 1; }
+        } else {
+            if !character.is_ascii_whitespace() { previous_token = character.to_string(); }
+            cursor += 1;
+        }
     }
     Ok(result)
 }

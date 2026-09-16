@@ -1,27 +1,28 @@
-# Cubacadabra Tools — Developer Preview 0.3
+# Cubacadabra Tools — Developer Preview 0.4
 
-`cubacadabra` is the shared command-line toolbox for Cubacadabra projects.
-It is intentionally small at the start and organized so new commands can be
-added without putting build logic back into individual game repositories.
+`cubacadabra` is the native Rust command-line toolbox for Cubacadabra projects.
+The project and package builder libraries are shared directly with Studio, so
+raw-project builds do not require Python.
 
 ## Run
 
-PYTHONPATH=src python3 -m cubacadabra --help
+cargo run --release --bin cubacadabra -- --help
 
-PYTHONPATH=src python3 -m cubacadabra create-game --title "The Wild West" --path /Users/aa/cubacadabra/examples
+cargo run --release --bin cubacadabra -- create-game --title "The Wild West" --path /Users/aa/cubacadabra/examples
 
-PYTHONPATH=src python3 -m cubacadabra build-game --source /Users/aa/cubacadabra/examples/the-wild-west --output /tmp/foo --zip ../the-wild-west.zip
+cargo run --release --bin cubacadabra -- build-game --source /Users/aa/cubacadabra/examples/the-wild-west --output /tmp/foo --zip ../the-wild-west.zip
 
 ## Install
 
-From this repository, install the CLI in an environment you control:
+Build the native CLI from this repository:
 
 ```sh
-python3 -m pip install -e .
+cargo install --path crates/cli --locked
 ```
 
-The command is then available as `cubacadabra`. Without installing, use
-`PYTHONPATH=src python3 -m cubacadabra` from this repository.
+The command is then available as `cubacadabra`. Maintainer-only commands that
+have not migrated yet remain in the legacy Python modules, but they are not
+required by Studio or by `build-game` / `create-game`.
 
 ## Commands
 
@@ -31,10 +32,9 @@ cubacadabra [--version] COMMAND
 Commands:
   create-game Create a new starter game.
   build-game  Build a portable game package from a game project.
-  upload-examples Bump, build, and upload both example games.
-  setup-local  Build and install the Morph catalog in local R2/D1.
-  morph build  Compile authored Morph source into an ignored release directory.
-  morph publish Upload immutable Morph packs, then update the production catalog.
+  upload-examples Bump, build, and upload both example games. (legacy Python)
+  setup-local  Build and install the Morph catalog in local R2/D1. (legacy Python)
+  morph ...     Morph release commands. (legacy Python)
 ```
 
 Create a new game from a title and a parent directory. The command creates a
@@ -190,8 +190,8 @@ parent directory, and uploads them with the review account. Set
 ## Development
 
 ```sh
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-PYTHONPATH=src python3 -m cubacadabra --help
+cargo test --workspace
+cargo run --release --bin cubacadabra -- --help
 ```
 ### Licensing
 

@@ -41,11 +41,25 @@ fn build_command(args: &[String]) -> Result<(), String> {
         index += 1;
     }
     let project = project.canonicalize().map_err(|error| format!("could not resolve project {}: {error}", project.display()))?;
-    let source_root = source.map(|source| if source.is_absolute() { source } else { project.join(source) }).unwrap_or_else(|| project.join("src"));
-    let manifest_path = if manifest.is_absolute() { manifest } else { project.join(manifest) };
+    let source_root = source
+        .map(|source| if source.is_absolute() { source } else { project.join(source) })
+        .unwrap_or_else(|| project.join("src"));
+    let source_root = if !source_root.join("main.luau").is_file() && source_root.join("src/main.luau").is_file() {
+        source_root.join("src")
+    } else {
+        source_root
+    };
+    let manifest_path = if manifest.is_absolute() {
+        manifest
+    } else if project.join(&manifest).is_file() {
+        project.join(manifest)
+    } else {
+        source_root.parent().unwrap_or(&project).join(manifest)
+    };
     let output = output.unwrap_or_else(|| project.join("build/package"));
     let result = build_game(&BuildOptions { source_root, manifest_path, output, zip_path: zip }).map_err(|error| error.to_string())?;
-    println!("Built {} v{} -> {}", result.game_id, result.version, result.output.display());
+    let version = result.version.as_str().map(str::to_owned).unwrap_or_else(|| result.version.to_string());
+    println!("Built {} v{} -> {}", result.game_id, version, result.output.display());
     if let Some(zip) = result.zip_path { println!("Wrote package archive -> {}", zip.display()); }
     Ok(())
 }
