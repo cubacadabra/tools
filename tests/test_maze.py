@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -105,6 +106,31 @@ class MazeExpansionTests(unittest.TestCase):
             self.assertIn("maze-coin", built["effects"]["templates"])
             package_info = json.loads((output / "package.json").read_text(encoding="utf-8"))
             self.assertEqual(package_info["runtime"]["api"], "0.4.0")
+
+    def test_maze_101_packages_trusted_rules_as_a_separate_hashed_entry(self) -> None:
+        project = Path(__file__).parents[2] / "examples" / "maze-101"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "package"
+            build_game(
+                source_root=project / "src",
+                manifest_path=project / "manifest.json",
+                output=output,
+            )
+
+            manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+            package = json.loads((output / "package.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["package"]["entry"], "game.luau")
+            self.assertEqual(manifest["package"]["authorityEntry"], "authority.luau")
+            self.assertEqual(package["authorityEntry"], "authority.luau")
+            self.assertIn("authority.luau", package["files"])
+            self.assertEqual(
+                package["sha256"]["authority.luau"],
+                hashlib.sha256((output / "authority.luau").read_bytes()).hexdigest(),
+            )
+            self.assertIn(
+                "function Rules.validate_command",
+                (output / "authority.luau").read_text(encoding="utf-8"),
+            )
 
     def test_builder_rejects_terrain_with_an_older_sdk_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

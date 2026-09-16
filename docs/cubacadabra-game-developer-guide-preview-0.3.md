@@ -56,6 +56,16 @@ Use SemVer for game and SDK compatibility:
 contract the source expects. The `version` fields inside effect and game state
 payloads are game-owned schemas and may remain at `1`.
 
+An experimental trusted-rules entry can live at `src/server.luau`. The builder
+bundles it separately as `authority.luau`, records
+`package.authorityEntry: "authority.luau"` in the JSON manifest, and hashes it
+in `package.json`. It implements `validate_command(state, command)` and
+`simulate_command(state, command)`; it must not require client SDK helpers.
+This is a server rules artifact, not a secret, and it is **not yet executed by
+the live Durable Object or client runtime**. Do not use it to claim production
+server authority until a trusted host connects authenticated identity,
+validated world state, persistence, and event publication.
+
 When `sdkVersion` is present, the preview builder accepts the supported
 contracts `0.3.0` and `0.4.0`; this prevents a package from silently using an
 unknown runtime API. Terrain operations require `0.4.0`, and runtimes that do

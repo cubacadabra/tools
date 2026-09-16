@@ -62,6 +62,7 @@ MAX_AUDIO_ASSETS = 64
 MAX_AUDIO_ASSET_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_ASSETS = 16
 MAX_IMAGE_ASSET_BYTES = 8 * 1024 * 1024
+MAX_AUTHORITY_SOURCE_BYTES = 1024 * 1024
 TERRAIN_CHUNK_CELLS = 16
 MAX_TERRAIN_OPERATIONS = 512
 MAX_TERRAIN_CHUNKS = 512
@@ -930,6 +931,23 @@ def build_game(
     elif not isinstance(package, dict) or package.get("entry") != "game.luau":
         raise GameBuildError("manifest.package.entry must be 'game.luau'")
 
+    authority_source = source_root / "server.luau"
+    authority_entry = package.get("authorityEntry")
+    if authority_entry not in (None, "authority.luau"):
+        raise GameBuildError(
+            "manifest.package.authorityEntry must be 'authority.luau'"
+        )
+    if authority_source.is_file():
+        try:
+            authority_source.resolve().relative_to(source_root)
+        except ValueError as error:
+            raise GameBuildError("src/server.luau must stay inside src/") from error
+        package["authorityEntry"] = "authority.luau"
+    elif authority_entry is not None:
+        raise GameBuildError(
+            "manifest.package.authorityEntry requires src/server.luau"
+        )
+
     display_name = manifest.get("displayName")
     if display_name is None:
         manifest["displayName"] = game_id
@@ -981,6 +999,31 @@ def build_game(
             + "\n"
         )
         (staging / "game.luau").write_text(generated_script, encoding="utf-8")
+        if authority_source.is_file():
+            authority_dependencies: dict[str, dict[str, str]] = {}
+            generated_authority = (
+                "-- GENERATED FILE: do not edit; edit src/server.luau and run cubacadabra build-game.\n"
+                f"-- game: {game_id}\n"
+                f"-- version: {version}\n\n"
+                + _bundle_luau_modules(
+                    authority_source,
+                    source_root,
+                    authority_dependencies,
+                )
+                + "\n"
+            )
+            if len(generated_authority.encode("utf-8")) > MAX_AUTHORITY_SOURCE_BYTES:
+                raise GameBuildError(
+                    "bundled trusted authority rules exceed the 1 MiB limit"
+                )
+            if authority_dependencies:
+                raise GameBuildError(
+                    "trusted authority rules cannot require client Cubacadabra SDK modules"
+                )
+            (staging / "authority.luau").write_text(
+                generated_authority,
+                encoding="utf-8",
+            )
         (staging / "manifest.json").write_text(
             json.dumps(manifest, indent=2) + "\n",
             encoding="utf-8",
@@ -1014,6 +1057,8 @@ def build_game(
                 for name in payload_files
             },
         }
+        if authority_source.is_file():
+            package_info["authorityEntry"] = "authority.luau"
         (staging / "package.json").write_text(
             json.dumps(package_info, indent=2) + "\n",
             encoding="utf-8",

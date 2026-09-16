@@ -169,6 +169,71 @@ class GameBuilderTests(unittest.TestCase):
                 "package.json",
             ])
 
+    def test_bundles_optional_trusted_authority_entry_separately(self) -> None:
+        (self.project / "src/server.luau").write_text(
+            'local Rules = require("./authority/rules")\n'
+            'return Rules\n',
+            encoding="utf-8",
+        )
+        (self.project / "src/authority").mkdir()
+        (self.project / "src/authority/rules.luau").write_text(
+            "return { validate_command = function() end }\n", encoding="utf-8"
+        )
+        output = self.project / "build/package"
+        archive = self.project / "build/test-game.zip"
+
+        build_game(
+            source_root=self.project / "src",
+            manifest_path=self.project / "manifest.json",
+            output=output,
+            zip_path=archive,
+        )
+
+        built_manifest = json.loads((output / "manifest.json").read_text())
+        self.assertEqual(
+            built_manifest["package"]["authorityEntry"], "authority.luau"
+        )
+        authority = (output / "authority.luau").read_text()
+        self.assertIn("begin module: authority/rules.luau", authority)
+        self.assertIn('return __require("server.luau")', authority)
+        package = json.loads((output / "package.json").read_text())
+        self.assertEqual(package["authorityEntry"], "authority.luau")
+        self.assertIn("authority.luau", package["files"])
+        self.assertEqual(
+            package["sha256"]["authority.luau"],
+            hashlib.sha256((output / "authority.luau").read_bytes()).hexdigest(),
+        )
+        with zipfile.ZipFile(archive) as zip_file:
+            self.assertIn("authority.luau", zip_file.namelist())
+
+    def test_rejects_undeclared_or_missing_authority_source(self) -> None:
+        manifest = json.loads((self.project / "manifest.json").read_text())
+        manifest["package"] = {
+            "formatVersion": 3,
+            "entry": "game.luau",
+            "authorityEntry": "authority.luau",
+        }
+        (self.project / "manifest.json").write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(GameBuildError, "requires src/server.luau"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
+    def test_authority_rules_cannot_bundle_client_sdk_helpers(self) -> None:
+        (self.project / "src/server.luau").write_text(
+            'local Shared = require("@cubacadabra/shared-state")\n'
+            'return { validate_command = function() end, simulate_command = function() end }\n',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(GameBuildError, "cannot require client"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
     def test_build_ignores_macos_directory_metadata(self) -> None:
         (self.project / "assets/.DS_Store").write_bytes(b"Finder metadata")
         nested_assets = self.project / "assets/images"
