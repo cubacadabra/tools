@@ -87,7 +87,9 @@ return Game
 ```
 
 `on_start` runs once after the package loads. `on_tick` receives elapsed seconds.
-Interaction events contain `id`, `phase` (`"enter"` or `"exit"`), and `players`.
+Interaction events contain `id`, `phase` (`"enter"` or `"exit"`), `players`, and
+the interaction's world `position` as a three-number array. Use that position
+for spatial effects or game logic instead of duplicating manifest coordinates.
 UI events contain `node_id`, `action`, and `phase`; sliders and toggles also
 contain `value`. Launch events contain `pad_id` and `player_ids`.
 Player events contain `type: "player"` and `kind` (`"spawn"`,
@@ -451,6 +453,37 @@ or sign; materials are for a surface that should repeat across many parts.
 Keep state schemas and interaction IDs stable within a package version. Use
 small, semantic IDs such as `node-1`, `objective`, and `round-state`; they are
 the bridge between manifest, Luau, and retained presentation.
+
+### Procedural maze worlds
+
+Maze 101 uses the bounded `maze` declaration. The tools carve a deterministic
+perfect maze during the build, then emit ordinary blocks, interactions, and
+checkpoints into the package consumed by every runtime:
+
+```json
+{
+  "worlds": {
+    "starter-world": {
+      "maze": {
+        "width": 10,
+        "height": 10,
+        "cellSize": 8,
+        "wallHeight": 7,
+        "seed": 101,
+        "start": [0, 0],
+        "finish": [9, 9],
+        "checkpointEvery": 12,
+        "collectibles": { "count": 12, "color": "butter" }
+      }
+    }
+  }
+}
+```
+
+The preview bounds mazes to 12×12 cells and 64 collectibles. The generated
+world remains deterministic for a given seed and stays within the engine’s
+bounded content limits. Change the seed when authoring a new release to create
+a new layout; the release itself does not depend on runtime randomness.
 
 ## 6. Backend API available to clients
 

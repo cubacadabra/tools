@@ -24,6 +24,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from .maze import MazeBuildError, expand_manifest_mazes
 from .package_contract import is_valid_game_id
 
 
@@ -762,6 +763,10 @@ def build_game(
         raise GameBuildError(f"manifest is not valid JSON: {error.msg}") from error
     if not isinstance(manifest, dict):
         raise GameBuildError("manifest must contain a JSON object")
+    try:
+        manifest = expand_manifest_mazes(manifest)
+    except MazeBuildError as error:
+        raise GameBuildError(str(error)) from error
     manifest = _resolve_effects_source(manifest, manifest_path.parent)
 
     game_id = _manifest_value(manifest, "id")
