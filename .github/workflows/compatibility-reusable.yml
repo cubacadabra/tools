@@ -39,6 +39,10 @@ on:
         required: false
         type: string
         default: main
+      desktop_ref:
+        required: false
+        type: string
+        default: main
 
 jobs:
   game-packages:
@@ -84,6 +88,11 @@ jobs:
           repository: cubacadabra/studio
           ref: ${{ inputs.studio_ref }}
           path: studio
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/desktop
+          ref: ${{ inputs.desktop_ref }}
+          path: desktop
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -94,3 +103,4 @@ jobs:
       - run: sh rust/scripts/build_web_renderer.sh --debug
       - run: PYTHONPATH=tools/src python3 tools/scripts/check_workspace_compatibility.py
       - run: cargo test --manifest-path studio/Cargo.toml --no-default-features
+      - run: cargo test --manifest-path desktop/Cargo.toml

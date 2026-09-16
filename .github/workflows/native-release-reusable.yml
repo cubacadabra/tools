@@ -1,0 +1,253 @@
+name: Native application release runner
+
+on:
+  workflow_call:
+    inputs:
+      app_repository:
+        required: true
+        type: string
+      app_ref:
+        required: true
+        type: string
+      app_directory:
+        required: true
+        type: string
+      app_name:
+        required: true
+        type: string
+      display_name:
+        required: true
+        type: string
+      archive_prefix:
+        required: true
+        type: string
+      cargo_manifest:
+        required: true
+        type: string
+      binary_name:
+        required: true
+        type: string
+      bundle_builder:
+        required: false
+        type: boolean
+        default: true
+      rust_repository:
+        required: false
+        type: string
+        default: cubacadabra/rust
+      rust_ref:
+        required: false
+        type: string
+        default: main
+      tools_repository:
+        required: false
+        type: string
+        default: cubacadabra/tools
+      tools_ref:
+        required: false
+        type: string
+        default: main
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            arch: arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+          - platform: windows
+            arch: x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - platform: linux
+            arch: x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+    steps:
+      - name: Check out application
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.app_repository }}
+          ref: ${{ inputs.app_ref }}
+          path: ${{ inputs.app_directory }}
+
+      - name: Check out shared Rust engine
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.rust_repository }}
+          ref: ${{ inputs.rust_ref }}
+          path: rust
+
+      - name: Check out shared tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.tools_repository }}
+          ref: ${{ inputs.tools_ref }}
+          path: tools
+
+      - name: Validate release tag
+        shell: bash
+        env:
+          APP_DIRECTORY: ${{ inputs.app_directory }}
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+[.][0-9]+[.][0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          tag_version="${GITHUB_REF_NAME#v}"
+          manifest_version="$(awk -F'"' '/^version = / { print $2; exit }' "${APP_DIRECTORY}/Cargo.toml")"
+          [[ -n "${manifest_version}" ]]
+          if [[ "${tag_version}" != "${manifest_version}" && "${tag_version}" != "${manifest_version}"-* ]]; then
+            echo "Release tag ${GITHUB_REF_NAME} must match ${APP_DIRECTORY} Cargo version ${manifest_version} or add a -suffix." >&2
+            exit 1
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Python
+        if: inputs.bundle_builder
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build native application
+        env:
+          CUBACADABRA_BACKEND_URL: https://api.cubacadabra.com/
+        run: cargo build --release --manifest-path "${{ inputs.cargo_manifest }}" --bin "${{ inputs.binary_name }}" --target "${{ matrix.target }}"
+
+      - name: Build bundled game builder
+        if: inputs.bundle_builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          python3 -m zipapp tools/src \
+            --main cubacadabra.cli:main \
+            --output staging/cubacadabra.pyz
+
+      - name: Package macOS application
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+          APP_DIRECTORY: ${{ inputs.app_directory }}
+          APP_NAME: ${{ inputs.app_name }}
+          DISPLAY_NAME: ${{ inputs.display_name }}
+          ARCHIVE_PREFIX: ${{ inputs.archive_prefix }}
+          BINARY_NAME: ${{ inputs.binary_name }}
+          BUNDLE_BUILDER: ${{ inputs.bundle_builder }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          app_bundle="${DISPLAY_NAME}.app"
+          app_root="staging/${app_bundle}"
+          archive="${ARCHIVE_PREFIX}-${GITHUB_REF_NAME}-macos-${ARCH}.zip"
+          mkdir -p "${app_root}/Contents/MacOS" "${app_root}/Contents/Resources" dist
+          cp "${APP_DIRECTORY}/target/${TARGET}/release/${BINARY_NAME}" "${app_root}/Contents/MacOS/${BINARY_NAME}"
+          cp rust/assets/images/logo.png "${app_root}/Contents/Resources/logo.png"
+          if [[ "${BUNDLE_BUILDER}" == "true" ]]; then
+            cp staging/cubacadabra.pyz "${app_root}/Contents/Resources/cubacadabra.pyz"
+          fi
+          iconset="staging/logo.iconset"
+          mkdir -p "${iconset}"
+          for size in 16 32 128 256 512; do
+            sips -z "${size}" "${size}" rust/assets/images/logo.png --out "${iconset}/icon_${size}x${size}.png" >/dev/null
+            doubled=$((size * 2))
+            sips -z "${doubled}" "${doubled}" rust/assets/images/logo.png --out "${iconset}/icon_${size}x${size}@2x.png" >/dev/null
+          done
+          iconutil -c icns "${iconset}" -o "${app_root}/Contents/Resources/logo.icns"
+          sed "s/__VERSION__/${version}/g; s/Cubacadabra Desktop/${DISPLAY_NAME}/g; s/<string>desktop<\/string>/<string>${BINARY_NAME}<\/string>/g; s/com.cubacadabra.desktop/com.cubacadabra.${APP_NAME}/g" \
+            "${APP_DIRECTORY}/packaging/macos/Info.plist" > "${app_root}/Contents/Info.plist"
+          chmod +x "${app_root}/Contents/MacOS/${BINARY_NAME}"
+          codesign --force --sign - --timestamp=none "${app_root}/Contents/MacOS/${BINARY_NAME}"
+          codesign --force --sign - --timestamp=none "${app_root}"
+          codesign --verify --deep --strict --verbose=2 "${app_root}"
+          ditto -c -k --sequesterRsrc --keepParent "${app_root}" "dist/${archive}"
+
+      - name: Package Windows application
+        if: matrix.platform == 'windows'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+          APP_DIRECTORY: ${{ inputs.app_directory }}
+          ARCHIVE_PREFIX: ${{ inputs.archive_prefix }}
+          BINARY_NAME: ${{ inputs.binary_name }}
+          BUNDLE_BUILDER: ${{ inputs.bundle_builder }}
+        run: |
+          set -euo pipefail
+          archive="${ARCHIVE_PREFIX}-${GITHUB_REF_NAME}-windows-${ARCH}.zip"
+          staging="staging/${ARCHIVE_PREFIX}-${GITHUB_REF_NAME}-windows-${ARCH}"
+          mkdir -p "${staging}" dist
+          cp "${APP_DIRECTORY}/target/${TARGET}/release/${BINARY_NAME}.exe" "${staging}/${BINARY_NAME}.exe"
+          if [[ "${BUNDLE_BUILDER}" == "true" ]]; then
+            cp staging/cubacadabra.pyz "${staging}/cubacadabra.pyz"
+          fi
+          cp "${APP_DIRECTORY}/LICENSE" "${APP_DIRECTORY}/COPYRIGHT" "${staging}/"
+          (cd staging && 7z a -tzip "../dist/${archive}" "$(basename "${staging}")")
+
+      - name: Package Linux application
+        if: matrix.platform == 'linux'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+          APP_DIRECTORY: ${{ inputs.app_directory }}
+          ARCHIVE_PREFIX: ${{ inputs.archive_prefix }}
+          BINARY_NAME: ${{ inputs.binary_name }}
+          BUNDLE_BUILDER: ${{ inputs.bundle_builder }}
+        run: |
+          set -euo pipefail
+          archive="${ARCHIVE_PREFIX}-${GITHUB_REF_NAME}-linux-${ARCH}.tar.gz"
+          staging="staging/${ARCHIVE_PREFIX}-${GITHUB_REF_NAME}-linux-${ARCH}"
+          mkdir -p "${staging}" dist
+          cp "${APP_DIRECTORY}/target/${TARGET}/release/${BINARY_NAME}" "${staging}/${BINARY_NAME}"
+          if [[ "${BUNDLE_BUILDER}" == "true" ]]; then
+            cp staging/cubacadabra.pyz "${staging}/cubacadabra.pyz"
+          fi
+          cp "${APP_DIRECTORY}/LICENSE" "${APP_DIRECTORY}/COPYRIGHT" "${staging}/"
+          tar -C staging -czf "dist/${archive}" "$(basename "${staging}")"
+
+      - name: Upload packaged build
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+      - name: Create checksums
+        working-directory: release
+        run: sha256sum -- * > SHA256SUMS
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPLAY_NAME: ${{ inputs.display_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" release/* --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" release/* --repo "${GITHUB_REPOSITORY}" --title "${DISPLAY_NAME} ${GITHUB_REF_NAME}" --generate-notes
+          fi

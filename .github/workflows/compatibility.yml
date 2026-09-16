@@ -39,6 +39,10 @@ on:
         description: "Studio ref to test"
         required: false
         default: main
+      desktop_ref:
+        description: "Desktop ref to test"
+        required: false
+        default: main
 
 jobs:
   compatibility:
@@ -53,3 +57,4 @@ jobs:
       third_game_ref: ${{ inputs.third_game_ref || 'main' }}
       examples_ref: ${{ inputs.examples_ref || 'main' }}
       studio_ref: ${{ inputs.studio_ref || 'main' }}
+      desktop_ref: ${{ inputs.desktop_ref || 'main' }}
