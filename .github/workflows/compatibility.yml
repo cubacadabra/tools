@@ -43,6 +43,14 @@ on:
         description: "Desktop ref to test"
         required: false
         default: main
+      ios_app_ref:
+        description: "iOS app ref to test"
+        required: false
+        default: main
+      android_app_ref:
+        description: "Android app ref to test"
+        required: false
+        default: main
 
 jobs:
   compatibility:
@@ -58,3 +66,5 @@ jobs:
       examples_ref: ${{ inputs.examples_ref || 'main' }}
       studio_ref: ${{ inputs.studio_ref || 'main' }}
       desktop_ref: ${{ inputs.desktop_ref || 'main' }}
+      ios_app_ref: ${{ inputs.ios_app_ref || 'main' }}
+      android_app_ref: ${{ inputs.android_app_ref || 'main' }}

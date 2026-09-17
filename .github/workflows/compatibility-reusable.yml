@@ -43,6 +43,14 @@ on:
         required: false
         type: string
         default: main
+      ios_app_ref:
+        required: false
+        type: string
+        default: main
+      android_app_ref:
+        required: false
+        type: string
+        default: main
 
 jobs:
   game-packages:
@@ -93,6 +101,16 @@ jobs:
           repository: cubacadabra/desktop
           ref: ${{ inputs.desktop_ref }}
           path: desktop
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/ios_app
+          ref: ${{ inputs.ios_app_ref }}
+          path: ios_app
+      - uses: actions/checkout@v4
+        with:
+          repository: cubacadabra/android_app
+          ref: ${{ inputs.android_app_ref }}
+          path: android_app
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -102,5 +120,6 @@ jobs:
       - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
       - run: sh rust/scripts/build_web_renderer.sh --debug
       - run: PYTHONPATH=tools/src python3 tools/scripts/check_workspace_compatibility.py
+      - run: python3 tools/scripts/check_world_model_hosts.py
       - run: cargo test --manifest-path studio/Cargo.toml --no-default-features
       - run: cargo test --manifest-path desktop/Cargo.toml
