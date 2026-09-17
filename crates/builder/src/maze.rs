@@ -152,9 +152,9 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         origin[1],
         origin[2] + extent_z * 0.5,
     ];
-    // Build the island as a tapered stack instead of one deep rectangular
-    // slab. The top remains a precise maze plateau; a small shoulder flares
-    // under its edge, then each lower layer narrows toward the underside.
+    // Build the island from a precise maze plateau and reusable rounded
+    // volumes. The upper shoulder is broad enough to support the maze, while
+    // each lower ellipsoid narrows toward an irregular-looking underside.
     operations.push(json!({
         "operation": "fill", "shape": "block",
         "position": [center[0], origin[1] - 0.7, center[2]],
@@ -162,53 +162,33 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         "material": floor_material
     }));
     operations.push(json!({
-        "operation": "fill", "shape": "block",
-        "position": [center[0], origin[1] - 2.0, center[2]],
+        "operation": "fill", "shape": "ellipsoid",
+        "position": [center[0], origin[1] - 2.2, center[2]],
         "size": [
-            (extent_x - 2.0).max(4.0), 2.0,
-            (extent_z - 2.0).max(4.0)
+            extent_x + 7.0, 4.4, extent_z + 7.0
         ],
         "material": floor_material
     }));
     operations.push(json!({
-        "operation": "fill", "shape": "block",
-        "position": [center[0], origin[1] - 3.8, center[2]],
+        "operation": "fill", "shape": "ellipsoid",
+        "position": [center[0], origin[1] - 5.0, center[2]],
         "size": [
-            (extent_x - 8.0).max(4.0), 1.6,
-            (extent_z - 8.0).max(4.0)
+            (extent_x - 3.0).max(5.0), 5.2, (extent_z - 3.0).max(5.0)
         ],
         "material": floor_material
     }));
     operations.push(json!({
-        "operation": "fill", "shape": "block",
-        "position": [center[0], origin[1] - 5.25, center[2]],
+        "operation": "fill", "shape": "ellipsoid",
+        "position": [center[0], origin[1] - 7.6, center[2]],
         "size": [
-            (extent_x - 18.0).max(3.5), 1.3,
-            (extent_z - 18.0).max(3.5)
+            (extent_x - 14.0).max(4.5), 3.4, (extent_z - 14.0).max(4.5)
         ],
         "material": floor_material
     }));
-    let half_x = extent_x * 0.5 + 3.0;
-    let half_z = extent_z * 0.5 + 3.0;
-    for (x, z, radius) in [
-        (center[0] - half_x, center[2] - half_z, 3.2),
-        (center[0] + half_x, center[2] - half_z, 3.5),
-        (center[0] - half_x, center[2] + half_z, 3.4),
-        (center[0] + half_x, center[2] + half_z, 3.3),
-        (center[0], center[2] - half_z, 2.5),
-        (center[0], center[2] + half_z, 2.7),
-        (center[0] - half_x, center[2], 2.6),
-        (center[0] + half_x, center[2], 2.8),
-    ] {
-        operations.push(json!({
-            "operation": "fill", "shape": "ball",
-            "position": [x, origin[1] - 3.7, z],
-            "radius": radius,
-            "material": floor_material
-        }));
-    }
     // Background islands are intentionally simple silhouettes. They create
-    // depth and scale without becoming additional playable maze worlds.
+    // depth and scale without becoming additional playable maze worlds. Use
+    // the same rounded-volume grammar as the playable island so they read as
+    // distant landforms rather than perfect balls with square caps.
     let background_islands = [
         (
             center[0] - extent_x * 0.92,
@@ -228,30 +208,33 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
             center[2] + extent_z * 0.95,
             5.0,
         ),
+        (
+            center[0] - extent_x * 0.72,
+            origin[1] - 4.0,
+            center[2] + extent_z * 1.05,
+            3.6,
+        ),
+        (
+            center[0] + extent_x * 1.18,
+            origin[1] - 1.8,
+            center[2] + extent_z * 0.72,
+            3.2,
+        ),
     ];
     for (x, y, z, radius) in background_islands {
         operations.push(json!({
-            "operation": "fill", "shape": "ball",
-            "position": [x, y, z], "radius": radius, "material": floor_material
+            "operation": "fill", "shape": "ellipsoid",
+            "position": [x, y, z],
+            "size": [radius * 2.4, 3.8, radius * 2.0],
+            "material": floor_material
         }));
         operations.push(json!({
             "operation": "fill", "shape": "block",
-            "position": [x, origin[1] + 0.35, z],
-            "size": [radius * 1.15, 0.7, radius * 1.15],
+            "position": [x, origin[1] + 0.1, z],
+            "size": [radius * 1.45, 0.45, radius * 1.2],
             "material": wall_material
         }));
     }
-    operations.push(json!({
-        "operation": "fill",
-        "shape": "block",
-        "position": [
-            origin[0] + width as f64 * cell_size / 2.0,
-            origin[1] - 1.0,
-            origin[2] + height as f64 * cell_size / 2.0
-        ],
-        "size": [width as f64 * cell_size, 2.0, height as f64 * cell_size],
-        "material": floor_material
-    }));
     for y in 0..height {
         for x in 0..width {
             let cell = cells[y * width + x];
@@ -387,6 +370,43 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
                 "yaw": yaw, "variant": variant
             }));
         }
+
+        // A few nearby companions turn isolated props into readable clusters
+        // without making every cell busy. The offset is deterministic and
+        // stays close to the same wall-side pocket as the primary prop.
+        if family >= 20 && dressing_rng.randbelow(100) < 34 {
+            let cluster_offset = (dressing_rng.unit() * 2.0 - 1.0) * cell_size * 0.22;
+            let cluster_position = [
+                decoration_position[0] + cluster_offset,
+                decoration_position[1],
+                decoration_position[2] + (dressing_rng.unit() * 2.0 - 1.0) * cell_size * 0.18,
+            ];
+            let cluster_scale = scale * (0.58 + dressing_rng.unit() * 0.24);
+            if family < 62 {
+                let mut cluster = json!({
+                    "id": format!("maze-rock-cluster-{id:02}"),
+                    "kind": "rock",
+                    "position": cluster_position,
+                    "scale": cluster_scale,
+                    "yaw": dressing_rng.unit() * std::f64::consts::TAU,
+                    "variant": dressing_rng.randbelow(3)
+                });
+                if let Some(asset) = rock_asset {
+                    cluster["kind"] = json!("mesh");
+                    cluster["asset"] = json!(asset);
+                }
+                decorations.push(cluster);
+            } else {
+                decorations.push(json!({
+                    "id": format!("maze-grass-cluster-{id:02}"),
+                    "kind": "grass-clump",
+                    "position": cluster_position,
+                    "scale": cluster_scale,
+                    "yaw": dressing_rng.unit() * std::f64::consts::TAU,
+                    "variant": dressing_rng.randbelow(3)
+                }));
+            }
+        }
     }
     // Give the distant silhouettes a small amount of readable scale and
     // repetition without turning them into playable content.
@@ -398,6 +418,15 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
             "yaw": index as f64 * 1.4,
             "variant": index % 2
         }));
+        if index % 2 == 0 {
+            decorations.push(json!({
+                "id": format!("maze-background-grass-{index:02}"), "kind": "grass-clump",
+                "position": [*x + 0.9, origin[1] + 0.8, *z - 0.6],
+                "scale": 0.45 + index as f64 * 0.05,
+                "yaw": index as f64 * 0.8,
+                "variant": (index + 1) % 3
+            }));
+        }
     }
     decorations.push(json!({
         "id": "maze-bridge", "kind": "bridge",
@@ -974,6 +1003,14 @@ mod tests {
         expand_manifest_mazes(&mut manifest).unwrap();
         let world = manifest["worlds"]["maze"].as_object().unwrap();
         let operations = world["terrain"]["operations"].as_array().unwrap();
+        let island_shapes: Vec<&str> = operations[..4]
+            .iter()
+            .map(|operation| operation["shape"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            island_shapes,
+            ["block", "ellipsoid", "ellipsoid", "ellipsoid"]
+        );
         let widths: Vec<f64> = operations[..4]
             .iter()
             .map(|operation| operation["size"][0].as_f64().unwrap())
