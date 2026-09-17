@@ -148,6 +148,9 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         .clone();
     let extent_x = width as f64 * cell_size;
     let extent_z = height as f64 * cell_size;
+    // Keep the playable top at origin.y, but make the floor thicker than one
+    // terrain sample interval so voxelization always captures an interior.
+    let floor_thickness = terrain_cell_size * 2.0;
     // The maze owns its playable floor and walls. Authored environments belong
     // to the package that uses this generic expansion, so a maze declaration
     // does not silently inherit a particular island or art direction.
@@ -155,10 +158,10 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         "operation": "fill", "shape": "block",
         "position": [
             origin[0] + extent_x * 0.5,
-            origin[1] - terrain_cell_size * 0.5,
+            origin[1] - floor_thickness * 0.5,
             origin[2] + extent_z * 0.5
         ],
-        "size": [extent_x, terrain_cell_size, extent_z],
+        "size": [extent_x, floor_thickness, extent_z],
         "material": floor_material
     }));
     for y in 0..height {
@@ -807,6 +810,6 @@ mod tests {
         .clone();
         expand_manifest_mazes(&mut manifest).unwrap();
         let operations = &manifest["worlds"]["maze"]["terrain"]["operations"];
-        assert_eq!(operations[0]["size"][1], json!(1.0));
+        assert_eq!(operations[0]["size"][1], json!(2.0));
     }
 }
