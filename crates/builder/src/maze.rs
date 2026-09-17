@@ -141,6 +141,69 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         .as_array()
         .ok_or_else(|| BuildError("world.terrain.operations must be an array".to_owned()))?
         .clone();
+    let extent_x = width as f64 * cell_size;
+    let extent_z = height as f64 * cell_size;
+    let center = [
+        origin[0] + extent_x * 0.5,
+        origin[1],
+        origin[2] + extent_z * 0.5,
+    ];
+    // A lower rounded volume gives the playable maze the floating earthen
+    // silhouette seen in the source game without changing its walkable grid.
+    operations.push(json!({
+        "operation": "fill", "shape": "block",
+        "position": [center[0], origin[1] - 3.0, center[2]],
+        "size": [extent_x + 12.0, 6.0, extent_z + 12.0],
+        "material": floor_material
+    }));
+    let half_x = extent_x * 0.5 + 6.0;
+    let half_z = extent_z * 0.5 + 6.0;
+    for (x, z) in [
+        (center[0] - half_x, center[2] - half_z),
+        (center[0] + half_x, center[2] - half_z),
+        (center[0] - half_x, center[2] + half_z),
+        (center[0] + half_x, center[2] + half_z),
+    ] {
+        operations.push(json!({
+            "operation": "fill", "shape": "ball",
+            "position": [x, origin[1] - 3.7, z],
+            "radius": 5.5,
+            "material": floor_material
+        }));
+    }
+    // Background islands are intentionally simple silhouettes. They create
+    // depth and scale without becoming additional playable maze worlds.
+    for (x, y, z, radius) in [
+        (
+            center[0] - extent_x * 0.92,
+            origin[1] - 2.4,
+            center[2] - extent_z * 0.72,
+            5.5,
+        ),
+        (
+            center[0] + extent_x * 0.98,
+            origin[1] - 3.2,
+            center[2] - extent_z * 0.30,
+            4.5,
+        ),
+        (
+            center[0] + extent_x * 0.68,
+            origin[1] - 2.8,
+            center[2] + extent_z * 0.95,
+            5.0,
+        ),
+    ] {
+        operations.push(json!({
+            "operation": "fill", "shape": "ball",
+            "position": [x, y, z], "radius": radius, "material": floor_material
+        }));
+        operations.push(json!({
+            "operation": "fill", "shape": "block",
+            "position": [x, origin[1] + 0.35, z],
+            "size": [radius * 1.35, 0.7, radius * 1.35],
+            "material": wall_material
+        }));
+    }
     operations.push(json!({
         "operation": "fill",
         "shape": "block",
@@ -196,6 +259,52 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
     terrain.insert("operations".to_owned(), Value::Array(operations));
 
     let mut interactions = array_clone(world, "interactions")?;
+    let mut decorations = array_clone(world, "decorations")?;
+    decorations.push(json!({
+        "id": "maze-start-gate", "kind": "gate",
+        "position": position(origin, cell_size, start, 1.4),
+        "scale": 1.0, "color": "signal"
+    }));
+    decorations.push(json!({
+        "id": "maze-finish-gate", "kind": "finish",
+        "position": position(origin, cell_size, finish, 1.4),
+        "scale": 1.15, "color": "hot"
+    }));
+    // Seeded route dressing keeps navigation readable while ensuring every
+    // generated maze receives recognizable landmarks and vegetation.
+    for (index, cell) in route.iter().copied().enumerate() {
+        if cell == start || cell == finish {
+            continue;
+        }
+        let decoration_position = position(origin, cell_size, cell, 0.55);
+        if index % 7 == 0 {
+            decorations.push(json!({
+                "id": format!("maze-palm-{index:02}"), "kind": "palm",
+                "position": decoration_position,
+                "scale": 0.9 + (index % 3) as f64 * 0.12,
+                "yaw": (index % 6) as f64 * 0.7, "variant": index % 2
+            }));
+        } else if index % 5 == 0 {
+            decorations.push(json!({
+                "id": format!("maze-rock-{index:02}"), "kind": "rock",
+                "position": decoration_position,
+                "scale": 0.8 + (index % 4) as f64 * 0.12,
+                "yaw": (index % 8) as f64 * 0.4, "variant": index % 3
+            }));
+        } else if index % 3 == 0 {
+            decorations.push(json!({
+                "id": format!("maze-grass-{index:02}"), "kind": "grass-clump",
+                "position": decoration_position,
+                "scale": 0.8 + (index % 2) as f64 * 0.2,
+                "variant": index % 2
+            }));
+        }
+    }
+    decorations.push(json!({
+        "id": "maze-bridge", "kind": "bridge",
+        "position": [center[0], origin[1] + 1.0, origin[2] - 7.0],
+        "scale": 1.2, "yaw": 0.0
+    }));
     let finish_id = config
         .get("finishId")
         .and_then(Value::as_str)
@@ -292,6 +401,7 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
     world.insert("terrain".to_owned(), Value::Object(terrain));
     world.insert("interactions".to_owned(), Value::Array(interactions));
     world.insert("checkpoints".to_owned(), Value::Array(checkpoints));
+    world.insert("decorations".to_owned(), Value::Array(decorations));
     world.insert("world".to_owned(), Value::Object(settings));
     world.remove("maze");
     Ok(true)

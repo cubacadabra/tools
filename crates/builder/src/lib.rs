@@ -23,6 +23,7 @@ const BUILD_MARKER_CONTENT: &str = "cubacadabra-game-package-v1\n";
 const MAX_AUTHORITY_SOURCE_BYTES: usize = 1024 * 1024;
 const MAX_IMAGE_ASSET_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_AUDIO_ASSET_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_MODEL_ASSET_BYTES: u64 = 16 * 1024 * 1024;
 
 const SDK_MODULES: &[(&str, &str, &str)] = &[
     (
@@ -456,6 +457,12 @@ fn validate_assets(manifest: &Map<String, Value>, project_root: &Path) -> Result
             MAX_IMAGE_ASSET_BYTES,
         ),
         ("audio", 64usize, &["wav"][..], MAX_AUDIO_ASSET_BYTES),
+        (
+            "models",
+            64usize,
+            &["glb", "gltf"][..],
+            MAX_MODEL_ASSET_BYTES,
+        ),
     ] {
         let Some(entries) = assets.get(kind) else {
             continue;
