@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -23,10 +24,30 @@ SEMVER_RE = re.compile(
     r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
     r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
+TOOLS_ROOT = Path(__file__).resolve().parents[2]
 
 
 class ExampleUploadError(RuntimeError):
     """The example build or upload workflow could not be completed."""
+
+
+def _native_build(plan: "ExamplePlan") -> None:
+    result = subprocess.run(
+        [
+            "cargo", "run", "--quiet", "--bin", "cubacadabra", "--",
+            "build-game", "--source", str(plan.project),
+            "--output", str(plan.output), "--zip", str(plan.zip_path),
+        ],
+        cwd=TOOLS_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise ExampleUploadError(
+            f"could not build {plan.game_id} with the native builder:\n"
+            f"{result.stdout}{result.stderr}"
+        )
 
 
 @dataclass(frozen=True)
@@ -254,16 +275,9 @@ def upload_examples(
             manifest["version"] = plan.version
             _write_manifest(plan.manifest, manifest)
 
-    from .game_builder import build_game
-
     for plan in plans:
         try:
-            build_game(
-                source_root=plan.project / "src",
-                manifest_path=plan.manifest,
-                output=plan.output,
-                zip_path=plan.zip_path,
-            )
+            _native_build(plan)
         except (OSError, ValueError) as error:
             raise ExampleUploadError(f"could not build {plan.game_id}: {error}") from error
 

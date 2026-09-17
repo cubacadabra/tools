@@ -24,7 +24,6 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from .maze import MazeBuildError, expand_manifest_mazes
 from .package_contract import is_valid_game_id
 
 
@@ -481,6 +480,16 @@ def _resolve_effects_source(
     return resolved_manifest
 
 
+def _contains_maze_declaration(manifest: dict[str, object]) -> bool:
+    if isinstance(manifest.get("maze"), dict):
+        return True
+    worlds = manifest.get("worlds")
+    return isinstance(worlds, dict) and any(
+        isinstance(world, dict) and isinstance(world.get("maze"), dict)
+        for world in worlds.values()
+    )
+
+
 def _validate_output(output: Path, source_root: Path) -> None:
     """Prevent a package output from deleting or containing the source tree."""
 
@@ -911,10 +920,11 @@ def build_game(
         raise GameBuildError(f"manifest is not valid JSON: {error.msg}") from error
     if not isinstance(manifest, dict):
         raise GameBuildError("manifest must contain a JSON object")
-    try:
-        manifest = expand_manifest_mazes(manifest)
-    except MazeBuildError as error:
-        raise GameBuildError(str(error)) from error
+    if _contains_maze_declaration(manifest):
+        raise GameBuildError(
+            "maze declarations require the native Rust builder; "
+            "use `cubacadabra build-game --source ...`"
+        )
     manifest = _resolve_effects_source(manifest, manifest_path.parent)
 
     game_id = _manifest_value(manifest, "id")

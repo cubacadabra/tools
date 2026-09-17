@@ -153,31 +153,52 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         origin[2] + extent_z * 0.5,
     ];
     // Build the island as a tapered stack instead of one deep rectangular
-    // slab. The top remains a precise maze plateau, while the lower layers
-    // step inward and the rounded shoulder balls break up the silhouette.
+    // slab. The top remains a precise maze plateau; a small shoulder flares
+    // under its edge, then each lower layer narrows toward the underside.
     operations.push(json!({
         "operation": "fill", "shape": "block",
-        "position": [center[0], origin[1] - 4.2, center[2]],
-        "size": [extent_x + 10.0, 4.2, extent_z + 10.0],
+        "position": [center[0], origin[1] - 0.7, center[2]],
+        "size": [extent_x + 8.0, 1.4, extent_z + 8.0],
         "material": floor_material
     }));
     operations.push(json!({
         "operation": "fill", "shape": "block",
-        "position": [center[0], origin[1] - 1.5, center[2]],
-        "size": [extent_x + 5.0, 3.0, extent_z + 5.0],
+        "position": [center[0], origin[1] - 2.0, center[2]],
+        "size": [
+            (extent_x - 2.0).max(4.0), 2.0,
+            (extent_z - 2.0).max(4.0)
+        ],
         "material": floor_material
     }));
-    let half_x = extent_x * 0.5 + 5.0;
-    let half_z = extent_z * 0.5 + 5.0;
+    operations.push(json!({
+        "operation": "fill", "shape": "block",
+        "position": [center[0], origin[1] - 3.8, center[2]],
+        "size": [
+            (extent_x - 8.0).max(4.0), 1.6,
+            (extent_z - 8.0).max(4.0)
+        ],
+        "material": floor_material
+    }));
+    operations.push(json!({
+        "operation": "fill", "shape": "block",
+        "position": [center[0], origin[1] - 5.25, center[2]],
+        "size": [
+            (extent_x - 18.0).max(3.5), 1.3,
+            (extent_z - 18.0).max(3.5)
+        ],
+        "material": floor_material
+    }));
+    let half_x = extent_x * 0.5 + 3.0;
+    let half_z = extent_z * 0.5 + 3.0;
     for (x, z, radius) in [
-        (center[0] - half_x, center[2] - half_z, 5.0),
-        (center[0] + half_x, center[2] - half_z, 5.8),
-        (center[0] - half_x, center[2] + half_z, 5.6),
-        (center[0] + half_x, center[2] + half_z, 5.2),
-        (center[0], center[2] - half_z, 4.3),
-        (center[0], center[2] + half_z, 4.7),
-        (center[0] - half_x, center[2], 4.5),
-        (center[0] + half_x, center[2], 4.8),
+        (center[0] - half_x, center[2] - half_z, 3.2),
+        (center[0] + half_x, center[2] - half_z, 3.5),
+        (center[0] - half_x, center[2] + half_z, 3.4),
+        (center[0] + half_x, center[2] + half_z, 3.3),
+        (center[0], center[2] - half_z, 2.5),
+        (center[0], center[2] + half_z, 2.7),
+        (center[0] - half_x, center[2], 2.6),
+        (center[0] + half_x, center[2], 2.8),
     ] {
         operations.push(json!({
             "operation": "fill", "shape": "ball",
@@ -286,53 +307,85 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         "position": position(origin, cell_size, finish, 1.4),
         "scale": 1.15, "color": "hot"
     }));
-    // Dress quiet wall-side pockets, not the solution route. This keeps the
-    // path readable while putting props where the source game's environment
-    // art naturally accumulates: against walls and at the island perimeter.
+    // Dress quiet wall-side pockets, not the solution route. Shuffle a
+    // separate stream of candidates so the result is deterministic without
+    // looking like an index-based pattern. Spacing and edge weighting keep
+    // the route readable while producing small natural-looking clusters.
     let route_cells = route.clone();
-    let mut dressing_index = 0usize;
+    let mut candidates = Vec::new();
     for y in 0..height {
         for x in 0..width {
             let cell = (x, y);
-            if route_cells.contains(&cell) || cell == start || cell == finish {
-                continue;
+            if !route_cells.contains(&cell) && cell != start && cell != finish {
+                candidates.push((cell, cells[y * width + x]));
             }
-            let cell_data = cells[y * width + x];
-            let decoration_position = wall_side_position(origin, cell_size, cell, cell_data);
-            let index = dressing_index;
-            dressing_index += 1;
-            if index % 5 != 0 {
-                continue;
+        }
+    }
+    let mut dressing_rng = PythonRandom::new(seed ^ 0xD355_1A5E);
+    dressing_rng.shuffle(&mut candidates);
+    let mut placed = Vec::<[f64; 3]>::new();
+    let min_spacing = (cell_size * 0.72).max(3.5);
+    for (cell, cell_data) in candidates {
+        let edge = cell.0 == 0 || cell.1 == 0 || cell.0 + 1 == width || cell.1 + 1 == height;
+        let mut chance = if edge { 48 } else { 31 };
+        let decoration_position = wall_side_position(
+            origin,
+            cell_size,
+            cell,
+            cell_data,
+            dressing_rng.unit() * 2.0 - 1.0,
+        );
+        let distance_to_cluster = placed
+            .iter()
+            .map(|other| {
+                let dx = other[0] - decoration_position[0];
+                let dz = other[2] - decoration_position[2];
+                (dx * dx + dz * dz).sqrt()
+            })
+            .fold(f64::INFINITY, f64::min);
+        if distance_to_cluster < min_spacing {
+            continue;
+        }
+        if distance_to_cluster < cell_size * 2.0 {
+            chance += 12;
+        }
+        if dressing_rng.randbelow(100) >= chance {
+            continue;
+        }
+        placed.push(decoration_position);
+        let id = placed.len();
+        let family = dressing_rng.randbelow(100);
+        let scale = 0.78 + dressing_rng.unit() * 0.38;
+        let yaw = dressing_rng.unit() * std::f64::consts::TAU;
+        let variant = dressing_rng.randbelow(3);
+        if family < 20 {
+            decorations.push(json!({
+                "id": format!("maze-palm-{id:02}"), "kind": "palm",
+                "position": decoration_position,
+                "scale": scale * 1.08,
+                "yaw": yaw, "variant": variant
+            }));
+        } else if family < 62 {
+            let mut rock = json!({
+                "id": format!("maze-rock-{id:02}"),
+                "kind": "rock",
+                "position": decoration_position,
+                "scale": scale,
+                "yaw": yaw,
+                "variant": variant
+            });
+            if let Some(asset) = rock_asset {
+                rock["kind"] = json!("mesh");
+                rock["asset"] = json!(asset);
             }
-            if index % 15 == 0 {
-                decorations.push(json!({
-                    "id": format!("maze-palm-{index:02}"), "kind": "palm",
-                    "position": decoration_position,
-                    "scale": 0.9 + (index % 3) as f64 * 0.12,
-                    "yaw": (index % 6) as f64 * 0.7, "variant": index % 2
-                }));
-            } else if index % 2 == 0 {
-                let mut rock = json!({
-                    "id": format!("maze-rock-{index:02}"),
-                    "kind": "rock",
-                    "position": decoration_position,
-                    "scale": 0.8 + (index % 4) as f64 * 0.12,
-                    "yaw": (index % 8) as f64 * 0.4,
-                    "variant": index % 3
-                });
-                if let Some(asset) = rock_asset {
-                    rock["kind"] = json!("mesh");
-                    rock["asset"] = json!(asset);
-                }
-                decorations.push(rock);
-            } else {
-                decorations.push(json!({
-                    "id": format!("maze-grass-{index:02}"), "kind": "grass-clump",
-                    "position": decoration_position,
-                    "scale": 0.8 + (index % 2) as f64 * 0.2,
-                    "variant": index % 2
-                }));
-            }
+            decorations.push(rock);
+        } else {
+            decorations.push(json!({
+                "id": format!("maze-grass-{id:02}"), "kind": "grass-clump",
+                "position": decoration_position,
+                "scale": scale,
+                "yaw": yaw, "variant": variant
+            }));
         }
     }
     // Give the distant silhouettes a small amount of readable scale and
@@ -611,20 +664,33 @@ fn wall_side_position(
     cell_size: f64,
     cell: (usize, usize),
     walls: Cell,
-) -> Value {
+    jitter: f64,
+) -> [f64; 3] {
     let center_x = origin[0] + (cell.0 as f64 + 0.5) * cell_size;
     let center_z = origin[2] + (cell.1 as f64 + 0.5) * cell_size;
     let inset = (cell_size * 0.22).max(0.9);
     let (x, z) = if walls.north {
-        (center_x, center_z - cell_size * 0.5 + inset)
+        (
+            center_x + jitter * cell_size * 0.22,
+            center_z - cell_size * 0.5 + inset,
+        )
     } else if walls.west {
-        (center_x - cell_size * 0.5 + inset, center_z)
+        (
+            center_x - cell_size * 0.5 + inset,
+            center_z + jitter * cell_size * 0.22,
+        )
     } else if walls.south {
-        (center_x, center_z + cell_size * 0.5 - inset)
+        (
+            center_x + jitter * cell_size * 0.22,
+            center_z + cell_size * 0.5 - inset,
+        )
     } else {
-        (center_x + cell_size * 0.5 - inset, center_z)
+        (
+            center_x + cell_size * 0.5 - inset,
+            center_z + jitter * cell_size * 0.22,
+        )
     };
-    json!([x, origin[1] + 0.55, z])
+    [x, origin[1] + 0.55, z]
 }
 
 fn carve(width: usize, height: usize, seed: u32) -> Vec<Cell> {
@@ -854,6 +920,10 @@ impl PythonRandom {
         }
     }
 
+    fn unit(&mut self) -> f64 {
+        self.next_u32() as f64 / u32::MAX as f64
+    }
+
     fn shuffle<T>(&mut self, values: &mut [T]) {
         for index in (1..values.len()).rev() {
             values.swap(index, self.randbelow(index + 1));
@@ -888,6 +958,31 @@ mod tests {
         expand_manifest_mazes(&mut first).unwrap();
         expand_manifest_mazes(&mut second).unwrap();
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn native_presentation_tapers_downward_and_uses_seeded_mesh_dressing() {
+        let mut manifest = serde_json::from_value::<Map<String, Value>>(json!({
+            "worlds": {"maze": {"maze": {
+                "width": 10,
+                "height": 10,
+                "seed": 101,
+                "rockAsset": "maze-rock-01"
+            }}}
+        }))
+        .unwrap();
+        expand_manifest_mazes(&mut manifest).unwrap();
+        let world = manifest["worlds"]["maze"].as_object().unwrap();
+        let operations = world["terrain"]["operations"].as_array().unwrap();
+        let widths: Vec<f64> = operations[..4]
+            .iter()
+            .map(|operation| operation["size"][0].as_f64().unwrap())
+            .collect();
+        assert!(widths.windows(2).all(|pair| pair[0] > pair[1]));
+        let decorations = world["decorations"].as_array().unwrap();
+        assert!(decorations.iter().any(|decoration| {
+            decoration["kind"] == "mesh" && decoration["asset"] == "maze-rock-01"
+        }));
     }
 
     #[test]

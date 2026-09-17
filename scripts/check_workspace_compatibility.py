@@ -13,9 +13,6 @@ TOOLS_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = TOOLS_ROOT.parent
 sys.path.insert(0, str(TOOLS_ROOT / "src"))
 
-from cubacadabra.game_builder import build_game  # noqa: E402
-
-
 PROJECTS = (
     WORKSPACE_ROOT / "first-game",
     WORKSPACE_ROOT / "second-game",
@@ -24,6 +21,23 @@ PROJECTS = (
     WORKSPACE_ROOT / "examples/survival-101",
     WORKSPACE_ROOT / "examples/the-wild-west",
 )
+
+
+def native_build(project: Path, output: Path) -> None:
+    result = subprocess.run(
+        [
+            "cargo", "run", "--quiet", "--bin", "cubacadabra", "--",
+            "build-game", "--source", str(project), "--output", str(output),
+        ],
+        cwd=TOOLS_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        print(result.stdout, end="")
+        print(result.stderr, end="", file=sys.stderr)
+        raise RuntimeError(f"native build failed for {project.name}")
 
 
 def main() -> int:
@@ -53,20 +67,12 @@ def main() -> int:
         package_paths = []
         for project in PROJECTS:
             output = Path(directory) / project.name
-            build_game(
-                source_root=project / "src",
-                manifest_path=project / "manifest.json",
-                output=output,
-            )
+            native_build(project, output)
             package_paths.append(output)
 
         fixture = TOOLS_ROOT / "tests/fixtures/conformance-game"
         fixture_output = Path(directory) / "conformance-game"
-        build_game(
-            source_root=fixture / "src",
-            manifest_path=fixture / "manifest.json",
-            output=fixture_output,
-        )
+        native_build(fixture, fixture_output)
 
         native = subprocess.run(
             [

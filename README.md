@@ -22,7 +22,10 @@ cargo install --path crates/cli --locked
 
 The command is then available as `cubacadabra`. Maintainer-only commands that
 have not migrated yet remain in the legacy Python modules, but they are not
-required by Studio or by `build-game` / `create-game`.
+required by Studio or by `build-game` / `create-game`. The Python package
+builder no longer expands `maze` declarations; maze projects must use the
+native Rust `build-game` command so one source project cannot produce divergent
+packages.
 
 ## Commands
 

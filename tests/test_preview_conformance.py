@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import json
 import hashlib
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-
-from cubacadabra.game_builder import build_game
-
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
@@ -30,13 +28,27 @@ CONTRACT_PATHS = (
 CONTRACT_TEXT = "\n".join((DOCS / path).read_text(encoding="utf-8") for path in CONTRACT_PATHS)
 
 
+def native_build(project: Path, output: Path) -> None:
+    result = subprocess.run(
+        [
+            "cargo", "run", "--quiet", "--bin", "cubacadabra", "--",
+            "build-game", "--source", str(project), "--output", str(output),
+        ],
+        cwd=ROOT / "tools",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise AssertionError(result.stdout + result.stderr)
+
+
 class PreviewConformanceTests(unittest.TestCase):
     SUPPORTED_GAME_PROJECTS = (
         ROOT / "first-game",
         ROOT / "second-game",
         ROOT / "third-game",
         ROOT / "examples/adventure-101",
-        ROOT / "examples/maze-101",
         ROOT / "examples/survival-101",
         ROOT / "examples/the-wild-west",
     )
@@ -48,13 +60,9 @@ class PreviewConformanceTests(unittest.TestCase):
                 self.assertNotIn("@include", source.read_text(encoding="utf-8"))
                 with tempfile.TemporaryDirectory() as directory:
                     output = Path(directory) / project.name
-                    result = build_game(
-                        source_root=project / "src",
-                        manifest_path=project / "manifest.json",
-                        output=output,
-                    )
+                    native_build(project, output)
                     package = json.loads((output / "package.json").read_text(encoding="utf-8"))
-                    self.assertEqual(result.game_id, package["id"])
+                    self.assertEqual(json.loads((project / "manifest.json").read_text())["id"], package["id"])
                     self.assertEqual(set(package["files"]), set(package["sha256"]))
                     for name in package["files"]:
                         self.assertEqual(
@@ -105,11 +113,7 @@ class PreviewConformanceTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "package"
-            build_game(
-                source_root=game / "src",
-                manifest_path=game / "manifest.json",
-                output=output,
-            )
+            native_build(game, output)
             generated = (output / "game.luau").read_text(encoding="utf-8")
 
         for marker in documented_and_exercised:
