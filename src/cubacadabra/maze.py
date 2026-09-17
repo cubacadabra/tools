@@ -138,6 +138,26 @@ def _position(origin: tuple[float, float, float], cell_size: float, cell: tuple[
     ]
 
 
+def _wall_side_position(
+    origin: tuple[float, float, float],
+    cell_size: float,
+    cell: tuple[int, int],
+    walls: dict[str, bool],
+) -> list[float]:
+    center_x = origin[0] + (cell[0] + 0.5) * cell_size
+    center_z = origin[2] + (cell[1] + 0.5) * cell_size
+    inset = max(cell_size * 0.22, 0.9)
+    if walls["north"]:
+        x, z = center_x, center_z - cell_size * 0.5 + inset
+    elif walls["west"]:
+        x, z = center_x - cell_size * 0.5 + inset, center_z
+    elif walls["south"]:
+        x, z = center_x, center_z + cell_size * 0.5 - inset
+    else:
+        x, z = center_x + cell_size * 0.5 - inset, center_z
+    return [x, origin[1] + 0.55, z]
+
+
 def _maze_effects() -> dict[str, Any]:
     return {
         "version": 1,
@@ -244,12 +264,22 @@ def _expand_world(world: dict[str, Any]) -> bool:
             )
     wall_material = wall_material.removeprefix("builtin:").lower()
     floor_material = floor_material.removeprefix("builtin:").lower()
+    rock_asset = config.get("rockAsset")
+    if rock_asset is not None and (not isinstance(rock_asset, str) or not rock_asset.strip()):
+        raise MazeBuildError("manifest.maze.rockAsset must be a non-empty asset id")
 
     blocks = list(world.get("blocks", []))
     terrain = world.get("terrain", {})
     if not isinstance(terrain, dict):
         raise MazeBuildError("manifest.worlds.<id>.terrain must be an object")
     operations = list(terrain.get("operations", []))
+    extent_x = width * cell_size
+    extent_z = height * cell_size
+    center = [origin[0] + extent_x / 2, origin[1], origin[2] + extent_z / 2]
+    # The legacy Python builder deliberately keeps the terrain footprint to
+    # the playable island. The native builder adds the larger tapered body
+    # and background islands without exceeding this builder's chunk budget.
+    background_islands: list[tuple[float, float, float, float]] = []
     terrain["cellSize"] = terrain_cell_size
     terrain["hideDefaultGround"] = True
     operations.append({
@@ -276,6 +306,36 @@ def _expand_world(world: dict[str, Any]) -> bool:
             operations.append({"operation": "fill", "shape": "block", "position": [cell_x + cell_size / 2, origin[1] + wall_height / 2, cell_z + cell_size], "size": [cell_size + wall_thickness, wall_height, wall_thickness], "material": wall_material.lower()})
 
     interactions = list(world.get("interactions", []))
+    decorations = list(world.get("decorations", []))
+    decorations.extend([
+        {"id": "maze-start-gate", "kind": "gate", "position": _position(origin, cell_size, start, 1.4), "scale": 1.0, "color": "signal"},
+        {"id": "maze-finish-gate", "kind": "finish", "position": _position(origin, cell_size, finish, 1.4), "scale": 1.15, "color": "hot"},
+    ])
+    route_cells = set(route)
+    dressing_index = 0
+    for y in range(height):
+        for x in range(width):
+            cell = (x, y)
+            if cell in route_cells or cell in (start, finish):
+                continue
+            cell_data = cells[cell]
+            index = dressing_index
+            dressing_index += 1
+            if index % 5:
+                continue
+            decoration_position = _wall_side_position(origin, cell_size, cell, cell_data)
+            if index % 15 == 0:
+                decorations.append({"id": f"maze-palm-{index:02}", "kind": "palm", "position": decoration_position, "scale": 0.9 + (index % 3) * 0.12, "yaw": (index % 6) * 0.7, "variant": index % 2})
+            elif index % 2 == 0:
+                rock = {"id": f"maze-rock-{index:02}", "kind": "rock", "position": decoration_position, "scale": 0.8 + (index % 4) * 0.12, "yaw": (index % 8) * 0.4, "variant": index % 3}
+                if rock_asset:
+                    rock.update({"kind": "mesh", "asset": rock_asset})
+                decorations.append(rock)
+            else:
+                decorations.append({"id": f"maze-grass-{index:02}", "kind": "grass-clump", "position": decoration_position, "scale": 0.8 + (index % 2) * 0.2, "variant": index % 2})
+    for index, (x, _y, z, _radius) in enumerate(background_islands):
+        decorations.append({"id": f"maze-background-palm-{index:02}", "kind": "palm", "position": [x, origin[1] + 1.0, z], "scale": 0.55 + index * 0.08, "yaw": index * 1.4, "variant": index % 2})
+    decorations.append({"id": "maze-bridge", "kind": "bridge", "position": [center[0], origin[1] + 1.0, origin[2] - 7], "scale": 1.2, "yaw": 0.0})
     finish_id = str(config.get("finishId", "maze-finish"))
     interactions.append({
         "id": finish_id,
@@ -319,6 +379,7 @@ def _expand_world(world: dict[str, Any]) -> bool:
     terrain["operations"] = operations
     world["terrain"] = terrain
     world["interactions"] = interactions
+    world["decorations"] = decorations
     world["checkpoints"] = checkpoints
     settings = dict(world.get("world", {}))
     extent = max(width, height) * cell_size + cell_size * 2

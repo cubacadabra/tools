@@ -152,32 +152,43 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         origin[1],
         origin[2] + extent_z * 0.5,
     ];
-    // A lower rounded volume gives the playable maze the floating earthen
-    // silhouette seen in the source game without changing its walkable grid.
+    // Build the island as a tapered stack instead of one deep rectangular
+    // slab. The top remains a precise maze plateau, while the lower layers
+    // step inward and the rounded shoulder balls break up the silhouette.
     operations.push(json!({
         "operation": "fill", "shape": "block",
-        "position": [center[0], origin[1] - 3.0, center[2]],
-        "size": [extent_x + 12.0, 6.0, extent_z + 12.0],
+        "position": [center[0], origin[1] - 4.2, center[2]],
+        "size": [extent_x + 10.0, 4.2, extent_z + 10.0],
         "material": floor_material
     }));
-    let half_x = extent_x * 0.5 + 6.0;
-    let half_z = extent_z * 0.5 + 6.0;
-    for (x, z) in [
-        (center[0] - half_x, center[2] - half_z),
-        (center[0] + half_x, center[2] - half_z),
-        (center[0] - half_x, center[2] + half_z),
-        (center[0] + half_x, center[2] + half_z),
+    operations.push(json!({
+        "operation": "fill", "shape": "block",
+        "position": [center[0], origin[1] - 1.5, center[2]],
+        "size": [extent_x + 5.0, 3.0, extent_z + 5.0],
+        "material": floor_material
+    }));
+    let half_x = extent_x * 0.5 + 5.0;
+    let half_z = extent_z * 0.5 + 5.0;
+    for (x, z, radius) in [
+        (center[0] - half_x, center[2] - half_z, 5.0),
+        (center[0] + half_x, center[2] - half_z, 5.8),
+        (center[0] - half_x, center[2] + half_z, 5.6),
+        (center[0] + half_x, center[2] + half_z, 5.2),
+        (center[0], center[2] - half_z, 4.3),
+        (center[0], center[2] + half_z, 4.7),
+        (center[0] - half_x, center[2], 4.5),
+        (center[0] + half_x, center[2], 4.8),
     ] {
         operations.push(json!({
             "operation": "fill", "shape": "ball",
             "position": [x, origin[1] - 3.7, z],
-            "radius": 5.5,
+            "radius": radius,
             "material": floor_material
         }));
     }
     // Background islands are intentionally simple silhouettes. They create
     // depth and scale without becoming additional playable maze worlds.
-    for (x, y, z, radius) in [
+    let background_islands = [
         (
             center[0] - extent_x * 0.92,
             origin[1] - 2.4,
@@ -196,7 +207,8 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
             center[2] + extent_z * 0.95,
             5.0,
         ),
-    ] {
+    ];
+    for (x, y, z, radius) in background_islands {
         operations.push(json!({
             "operation": "fill", "shape": "ball",
             "position": [x, y, z], "radius": radius, "material": floor_material
@@ -204,7 +216,7 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         operations.push(json!({
             "operation": "fill", "shape": "block",
             "position": [x, origin[1] + 0.35, z],
-            "size": [radius * 1.35, 0.7, radius * 1.35],
+            "size": [radius * 1.15, 0.7, radius * 1.15],
             "material": wall_material
         }));
     }
@@ -274,42 +286,65 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         "position": position(origin, cell_size, finish, 1.4),
         "scale": 1.15, "color": "hot"
     }));
-    // Seeded route dressing keeps navigation readable while ensuring every
-    // generated maze receives recognizable landmarks and vegetation.
-    for (index, cell) in route.iter().copied().enumerate() {
-        if cell == start || cell == finish {
-            continue;
-        }
-        let decoration_position = position(origin, cell_size, cell, 0.55);
-        if index % 7 == 0 {
-            decorations.push(json!({
-                "id": format!("maze-palm-{index:02}"), "kind": "palm",
-                "position": decoration_position,
-                "scale": 0.9 + (index % 3) as f64 * 0.12,
-                "yaw": (index % 6) as f64 * 0.7, "variant": index % 2
-            }));
-        } else if index % 5 == 0 {
-            let mut rock = json!({
-                "id": format!("maze-rock-{index:02}"),
-                "kind": "rock",
-                "position": decoration_position,
-                "scale": 0.8 + (index % 4) as f64 * 0.12,
-                "yaw": (index % 8) as f64 * 0.4,
-                "variant": index % 3
-            });
-            if let Some(asset) = rock_asset {
-                rock["kind"] = json!("mesh");
-                rock["asset"] = json!(asset);
+    // Dress quiet wall-side pockets, not the solution route. This keeps the
+    // path readable while putting props where the source game's environment
+    // art naturally accumulates: against walls and at the island perimeter.
+    let route_cells = route.clone();
+    let mut dressing_index = 0usize;
+    for y in 0..height {
+        for x in 0..width {
+            let cell = (x, y);
+            if route_cells.contains(&cell) || cell == start || cell == finish {
+                continue;
             }
-            decorations.push(rock);
-        } else if index % 3 == 0 {
-            decorations.push(json!({
-                "id": format!("maze-grass-{index:02}"), "kind": "grass-clump",
-                "position": decoration_position,
-                "scale": 0.8 + (index % 2) as f64 * 0.2,
-                "variant": index % 2
-            }));
+            let cell_data = cells[y * width + x];
+            let decoration_position = wall_side_position(origin, cell_size, cell, cell_data);
+            let index = dressing_index;
+            dressing_index += 1;
+            if index % 5 != 0 {
+                continue;
+            }
+            if index % 15 == 0 {
+                decorations.push(json!({
+                    "id": format!("maze-palm-{index:02}"), "kind": "palm",
+                    "position": decoration_position,
+                    "scale": 0.9 + (index % 3) as f64 * 0.12,
+                    "yaw": (index % 6) as f64 * 0.7, "variant": index % 2
+                }));
+            } else if index % 2 == 0 {
+                let mut rock = json!({
+                    "id": format!("maze-rock-{index:02}"),
+                    "kind": "rock",
+                    "position": decoration_position,
+                    "scale": 0.8 + (index % 4) as f64 * 0.12,
+                    "yaw": (index % 8) as f64 * 0.4,
+                    "variant": index % 3
+                });
+                if let Some(asset) = rock_asset {
+                    rock["kind"] = json!("mesh");
+                    rock["asset"] = json!(asset);
+                }
+                decorations.push(rock);
+            } else {
+                decorations.push(json!({
+                    "id": format!("maze-grass-{index:02}"), "kind": "grass-clump",
+                    "position": decoration_position,
+                    "scale": 0.8 + (index % 2) as f64 * 0.2,
+                    "variant": index % 2
+                }));
+            }
         }
+    }
+    // Give the distant silhouettes a small amount of readable scale and
+    // repetition without turning them into playable content.
+    for (index, (x, _y, z, _)) in background_islands.iter().enumerate() {
+        decorations.push(json!({
+            "id": format!("maze-background-palm-{index:02}"), "kind": "palm",
+            "position": [*x, origin[1] + 1.0, *z],
+            "scale": 0.55 + index as f64 * 0.08,
+            "yaw": index as f64 * 1.4,
+            "variant": index % 2
+        }));
     }
     decorations.push(json!({
         "id": "maze-bridge", "kind": "bridge",
@@ -569,6 +604,27 @@ fn position(origin: [f64; 3], cell_size: f64, cell: (usize, usize), y: f64) -> V
         origin[1] + y,
         origin[2] + (cell.1 as f64 + 0.5) * cell_size
     ])
+}
+
+fn wall_side_position(
+    origin: [f64; 3],
+    cell_size: f64,
+    cell: (usize, usize),
+    walls: Cell,
+) -> Value {
+    let center_x = origin[0] + (cell.0 as f64 + 0.5) * cell_size;
+    let center_z = origin[2] + (cell.1 as f64 + 0.5) * cell_size;
+    let inset = (cell_size * 0.22).max(0.9);
+    let (x, z) = if walls.north {
+        (center_x, center_z - cell_size * 0.5 + inset)
+    } else if walls.west {
+        (center_x - cell_size * 0.5 + inset, center_z)
+    } else if walls.south {
+        (center_x, center_z + cell_size * 0.5 - inset)
+    } else {
+        (center_x + cell_size * 0.5 - inset, center_z)
+    };
+    json!([x, origin[1] + 0.55, z])
 }
 
 fn carve(width: usize, height: usize, seed: u32) -> Vec<Cell> {
