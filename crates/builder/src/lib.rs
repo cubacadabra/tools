@@ -457,12 +457,7 @@ fn validate_assets(manifest: &Map<String, Value>, project_root: &Path) -> Result
             MAX_IMAGE_ASSET_BYTES,
         ),
         ("audio", 64usize, &["wav"][..], MAX_AUDIO_ASSET_BYTES),
-        (
-            "models",
-            64usize,
-            &["glb", "gltf"][..],
-            MAX_MODEL_ASSET_BYTES,
-        ),
+        ("models", 64usize, &["glb"][..], MAX_MODEL_ASSET_BYTES),
     ] {
         let Some(entries) = assets.get(kind) else {
             continue;

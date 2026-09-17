@@ -115,6 +115,10 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
     let wall_height = number(config, "wallHeight", 7.0, 2.0, 24.0)?;
     let wall_thickness = number(config, "wallThickness", 0.7, 0.2, 3.0)?;
     let seed = integer(config, "seed", 1, 0, u32::MAX as usize)? as u32;
+    let rock_asset = config
+        .get("rockAsset")
+        .and_then(Value::as_str)
+        .filter(|asset| !asset.trim().is_empty());
     let start = cell(config, "start", (0, 0), width, height)?;
     let finish = cell(config, "finish", (width - 1, height - 1), width, height)?;
     let origin = origin(config, width, height, cell_size)?;
@@ -285,12 +289,19 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
                 "yaw": (index % 6) as f64 * 0.7, "variant": index % 2
             }));
         } else if index % 5 == 0 {
-            decorations.push(json!({
-                "id": format!("maze-rock-{index:02}"), "kind": "rock",
+            let mut rock = json!({
+                "id": format!("maze-rock-{index:02}"),
+                "kind": "rock",
                 "position": decoration_position,
                 "scale": 0.8 + (index % 4) as f64 * 0.12,
-                "yaw": (index % 8) as f64 * 0.4, "variant": index % 3
-            }));
+                "yaw": (index % 8) as f64 * 0.4,
+                "variant": index % 3
+            });
+            if let Some(asset) = rock_asset {
+                rock["kind"] = json!("mesh");
+                rock["asset"] = json!(asset);
+            }
+            decorations.push(rock);
         } else if index % 3 == 0 {
             decorations.push(json!({
                 "id": format!("maze-grass-{index:02}"), "kind": "grass-clump",
