@@ -153,8 +153,12 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
     // does not silently inherit a particular island or art direction.
     operations.push(json!({
         "operation": "fill", "shape": "block",
-        "position": [origin[0] + extent_x * 0.5, origin[1] - 0.25, origin[2] + extent_z * 0.5],
-        "size": [extent_x, 0.5, extent_z],
+        "position": [
+            origin[0] + extent_x * 0.5,
+            origin[1] - terrain_cell_size * 0.5,
+            origin[2] + extent_z * 0.5
+        ],
+        "size": [extent_x, terrain_cell_size, extent_z],
         "material": floor_material
     }));
     for y in 0..height {
@@ -803,6 +807,6 @@ mod tests {
         .clone();
         expand_manifest_mazes(&mut manifest).unwrap();
         let operations = &manifest["worlds"]["maze"]["terrain"]["operations"];
-        assert_eq!(operations[0]["size"][1], json!(0.5));
+        assert_eq!(operations[0]["size"][1], json!(1.0));
     }
 }
