@@ -12,10 +12,9 @@ const MAX_MAZE_WIDTH: usize = 12;
 const MAX_MAZE_HEIGHT: usize = 12;
 const TERRAIN_MATERIALS: &[&str] = &["grass", "ground", "dirt", "rock", "sand", "mud", "snow"];
 const BACKGROUND_ISLAND_BODY_HEIGHT: f64 = 3.8;
-// Must remain at least the maze terrain cell size (whose minimum is 0.5), or
-// the runtime correctly rejects the cap as an unrepresentable feature.
-const BACKGROUND_ISLAND_CAP_HEIGHT: f64 = 0.5;
-const BACKGROUND_ISLAND_CAP_OVERLAP: f64 = 0.1;
+const BACKGROUND_ISLAND_CAP_MIN_HEIGHT: f64 = 0.5;
+const BACKGROUND_ISLAND_CAP_MAX_HEIGHT: f64 = 1.0;
+const BACKGROUND_ISLAND_CAP_SURFACE_INSET: f64 = 0.1;
 const BACKGROUND_ISLAND_COUNT: usize = 3;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -139,6 +138,19 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         .as_object()
         .ok_or_else(|| BuildError("manifest.maze.terrain must be an object".to_owned()))?;
     let terrain_cell_size = number(terrain_config, "cellSize", 0.5, 0.5, 8.0)?;
+    if terrain_cell_size > wall_thickness {
+        return Err(BuildError(format!(
+            "maze.terrain.cellSize ({terrain_cell_size}) must not exceed maze.wallThickness ({wall_thickness})"
+        )));
+    }
+    if terrain_cell_size > BACKGROUND_ISLAND_CAP_MAX_HEIGHT {
+        return Err(BuildError(format!(
+            "maze.terrain.cellSize ({terrain_cell_size}) is too coarse for the generated island caps; use a value at most {BACKGROUND_ISLAND_CAP_MAX_HEIGHT}"
+        )));
+    }
+    // The cap follows the requested terrain resolution, but only within the
+    // small range that keeps it reading as a grass lip rather than a slab.
+    let background_cap_height = terrain_cell_size.max(BACKGROUND_ISLAND_CAP_MIN_HEIGHT);
     let wall_material = material(terrain_config, "wallMaterial", "grass")?;
     let floor_material = material(terrain_config, "floorMaterial", "ground")?;
 
@@ -158,39 +170,61 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         origin[1],
         origin[2] + extent_z * 0.5,
     ];
+    let primary_volumes = [
+        (
+            "block",
+            [center[0], origin[1] - 0.7, center[2]],
+            [extent_x + 8.0, 1.4, extent_z + 8.0],
+        ),
+        (
+            "ellipsoid",
+            [center[0] + 0.8, origin[1] - 2.2, center[2] - 0.6],
+            [extent_x + 7.0, 4.4, extent_z + 6.5],
+        ),
+        (
+            "ellipsoid",
+            [center[0] - 1.3, origin[1] - 5.0, center[2] + 0.9],
+            [(extent_x - 12.0).max(5.0), 5.2, (extent_z - 5.5).max(5.0)],
+        ),
+        (
+            "ellipsoid",
+            [center[0] + 2.0, origin[1] - 7.6, center[2] - 1.2],
+            [(extent_x - 15.0).max(4.5), 3.4, (extent_z - 10.0).max(4.5)],
+        ),
+    ];
+    let mut primary_min = [f64::INFINITY; 3];
+    let mut primary_max = [f64::NEG_INFINITY; 3];
+    for (_, position, size) in primary_volumes {
+        include_bounds(&mut primary_min, &mut primary_max, position, size);
+    }
     // Build the island from a precise maze plateau and reusable rounded
     // volumes. The upper shoulder is broad enough to support the maze, while
     // each lower ellipsoid narrows toward an irregular-looking underside.
-    operations.push(json!({
-        "operation": "fill", "shape": "block",
-        "position": [center[0], origin[1] - 0.7, center[2]],
-        "size": [extent_x + 8.0, 1.4, extent_z + 8.0],
-        "material": floor_material
-    }));
-    operations.push(json!({
-        "operation": "fill", "shape": "ellipsoid",
-        "position": [center[0], origin[1] - 2.2, center[2]],
-        "size": [
-            extent_x + 7.0, 4.4, extent_z + 7.0
-        ],
-        "material": floor_material
-    }));
-    operations.push(json!({
-        "operation": "fill", "shape": "ellipsoid",
-        "position": [center[0], origin[1] - 5.0, center[2]],
-        "size": [
-            (extent_x - 3.0).max(5.0), 5.2, (extent_z - 3.0).max(5.0)
-        ],
-        "material": floor_material
-    }));
-    operations.push(json!({
-        "operation": "fill", "shape": "ellipsoid",
-        "position": [center[0], origin[1] - 7.6, center[2]],
-        "size": [
-            (extent_x - 14.0).max(4.5), 3.4, (extent_z - 14.0).max(4.5)
-        ],
-        "material": floor_material
-    }));
+    for (shape, position, size) in primary_volumes {
+        operations.push(json!({
+            "operation": "fill", "shape": shape,
+            "position": position,
+            "size": size,
+            "material": floor_material
+        }));
+    }
+    // Cut shallow, rounded bites out of the four outer corners. The notches
+    // begin just beyond the maze boundary, leaving the playable floor and its
+    // perimeter walls intact while breaking the top-down square silhouette.
+    let plateau_half_x = (extent_x + 8.0) * 0.5;
+    let plateau_half_z = (extent_z + 8.0) * 0.5;
+    let notch_size = 4.0;
+    for (sign_x, sign_z) in [(1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)] {
+        operations.push(json!({
+            "operation": "carve", "shape": "ellipsoid",
+            "position": [
+                center[0] + sign_x * (plateau_half_x - notch_size * 0.5),
+                origin[1] - 1.7,
+                center[2] + sign_z * (plateau_half_z - notch_size * 0.5)
+            ],
+            "size": [notch_size, 3.4, notch_size]
+        }));
+    }
     // Background islands are intentionally simple silhouettes. They create
     // depth and scale without becoming additional playable maze worlds. Use
     // the same rounded-volume grammar as the playable island so they read as
@@ -220,8 +254,8 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
     ];
     for (x, y, z, radius) in background_islands {
         let body_top = y + BACKGROUND_ISLAND_BODY_HEIGHT * 0.5;
-        let cap_y = body_top + BACKGROUND_ISLAND_CAP_HEIGHT * 0.5
-            - BACKGROUND_ISLAND_CAP_OVERLAP;
+        let cap_y = body_top - BACKGROUND_ISLAND_CAP_SURFACE_INSET
+            - background_cap_height * 0.5;
         operations.push(json!({
             "operation": "fill", "shape": "ellipsoid",
             "position": [x, y, z],
@@ -231,7 +265,7 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         operations.push(json!({
             "operation": "fill", "shape": "block",
             "position": [x, cap_y, z],
-            "size": [radius * 1.45, BACKGROUND_ISLAND_CAP_HEIGHT, radius * 1.2],
+            "size": [radius * 1.45, background_cap_height, radius * 1.2],
             "material": wall_material
         }));
     }
@@ -290,6 +324,9 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         "position": position(origin, cell_size, finish, 1.4),
         "scale": 1.15, "color": "hot"
     }));
+    let mut primary_max_y = primary_max[1]
+        .max(origin[1] + wall_height)
+        .max(origin[1] + 1.4 + 3.2 * 1.15);
     // Dress quiet wall-side pockets, not the solution route. Shuffle a
     // separate stream of candidates so the result is deterministic without
     // looking like an index-based pattern. Spacing and edge weighting keep
@@ -339,6 +376,7 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         let id = placed.len();
         let family = dressing_rng.randbelow(100);
         let scale = 0.78 + dressing_rng.unit() * 0.38;
+        primary_max_y = primary_max_y.max(decoration_position[1] + 4.0 * scale);
         let yaw = dressing_rng.unit() * std::f64::consts::TAU;
         let variant = dressing_rng.randbelow(3);
         if family < 20 {
@@ -382,6 +420,7 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
                 decoration_position[2] + (dressing_rng.unit() * 2.0 - 1.0) * cell_size * 0.18,
             ];
             let cluster_scale = scale * (0.58 + dressing_rng.unit() * 0.24);
+            primary_max_y = primary_max_y.max(cluster_position[1] + 4.0 * cluster_scale);
             if family < 62 {
                 let mut cluster = json!({
                     "id": format!("maze-rock-cluster-{id:02}"),
@@ -413,9 +452,8 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
     for (index, (x, y, z, _)) in background_islands.iter().enumerate() {
         let cap_surface = y
             + BACKGROUND_ISLAND_BODY_HEIGHT * 0.5
-            + BACKGROUND_ISLAND_CAP_HEIGHT
-            - BACKGROUND_ISLAND_CAP_OVERLAP;
-        let decoration_y = cap_surface + 0.55;
+            - BACKGROUND_ISLAND_CAP_SURFACE_INSET;
+        let decoration_y = cap_surface + 0.02;
         decorations.push(json!({
             "id": format!("maze-background-palm-{index:02}"), "kind": "palm",
             "position": [*x, decoration_y, *z],
@@ -438,6 +476,7 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         "position": [center[0], origin[1] + 1.0, origin[2] - 7.0],
         "scale": 1.2, "yaw": 0.0
     }));
+    primary_max_y = primary_max_y.max(origin[1] + 1.0 + 1.2 * 0.72);
     let finish_id = config
         .get("finishId")
         .and_then(Value::as_str)
@@ -529,18 +568,11 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
     settings.insert("gridDivisions".to_owned(), json!(width.max(height) * 2));
     settings.insert("spawn".to_owned(), position(origin, cell_size, start, 1.5));
     settings.insert("showSpawnPad".to_owned(), json!(false));
+    primary_max[1] = primary_max_y;
     settings.entry("presentationBounds".to_owned()).or_insert_with(|| {
         json!({
-            "minimum": [
-                center[0] - (extent_x + 8.0) * 0.5,
-                origin[1] - 9.3,
-                center[2] - (extent_z + 8.0) * 0.5
-            ],
-            "maximum": [
-                center[0] + (extent_x + 8.0) * 0.5,
-                origin[1] + wall_height,
-                center[2] + (extent_z + 8.0) * 0.5
-            ]
+            "minimum": primary_min,
+            "maximum": primary_max
         })
     });
 
@@ -705,6 +737,18 @@ fn position(origin: [f64; 3], cell_size: f64, cell: (usize, usize), y: f64) -> V
         origin[1] + y,
         origin[2] + (cell.1 as f64 + 0.5) * cell_size
     ])
+}
+
+fn include_bounds(
+    minimum: &mut [f64; 3],
+    maximum: &mut [f64; 3],
+    position: [f64; 3],
+    size: [f64; 3],
+) {
+    for axis in 0..3 {
+        minimum[axis] = minimum[axis].min(position[axis] - size[axis] * 0.5);
+        maximum[axis] = maximum[axis].max(position[axis] + size[axis] * 0.5);
+    }
 }
 
 fn wall_side_position(
@@ -983,6 +1027,9 @@ impl PythonRandom {
 mod tests {
     use super::*;
 
+    const PRIMARY_VOLUME_COUNT: usize = 4;
+    const PLATEAU_NOTCH_COUNT: usize = 4;
+
     #[test]
     fn expands_maze_into_runtime_world_content() {
         let mut manifest = serde_json::from_value::<Map<String, Value>>(json!({
@@ -1022,7 +1069,7 @@ mod tests {
         expand_manifest_mazes(&mut manifest).unwrap();
         let world = manifest["worlds"]["maze"].as_object().unwrap();
         let operations = world["terrain"]["operations"].as_array().unwrap();
-        let island_shapes: Vec<&str> = operations[..4]
+        let island_shapes: Vec<&str> = operations[..PRIMARY_VOLUME_COUNT]
             .iter()
             .map(|operation| operation["shape"].as_str().unwrap())
             .collect();
@@ -1030,7 +1077,7 @@ mod tests {
             island_shapes,
             ["block", "ellipsoid", "ellipsoid", "ellipsoid"]
         );
-        let widths: Vec<f64> = operations[..4]
+        let widths: Vec<f64> = operations[..PRIMARY_VOLUME_COUNT]
             .iter()
             .map(|operation| operation["size"][0].as_f64().unwrap())
             .collect();
@@ -1040,7 +1087,15 @@ mod tests {
             decoration["kind"] == "mesh" && decoration["asset"] == "maze-rock-01"
         }));
 
-        for pair in operations[4..4 + BACKGROUND_ISLAND_COUNT * 2].chunks_exact(2) {
+        let background_start = PRIMARY_VOLUME_COUNT + PLATEAU_NOTCH_COUNT;
+        assert!(operations[PRIMARY_VOLUME_COUNT..background_start]
+            .iter()
+            .all(|operation| {
+                operation["operation"] == "carve" && operation["shape"] == "ellipsoid"
+            }));
+        for pair in operations[background_start..background_start + BACKGROUND_ISLAND_COUNT * 2]
+            .chunks_exact(2)
+        {
             let body = &pair[0];
             let cap = &pair[1];
             let body_top = body["position"][1].as_f64().unwrap()
@@ -1049,16 +1104,67 @@ mod tests {
                 - cap["size"][1].as_f64().unwrap() * 0.5;
             assert!(cap_bottom <= body_top);
             assert!(cap["size"][1].as_f64().unwrap() >= 0.5);
-            assert!((body_top - cap_bottom - BACKGROUND_ISLAND_CAP_OVERLAP).abs() < 1e-9);
+            assert!((body_top - cap_bottom
+                - (cap["size"][1].as_f64().unwrap() + BACKGROUND_ISLAND_CAP_SURFACE_INSET))
+                .abs()
+                < 1e-9);
         }
 
-        assert_eq!(
-            world["world"]["presentationBounds"],
-            json!({
-                "minimum": [-44.0, -9.3, -44.0],
-                "maximum": [44.0, 7.0, 44.0]
+        let decorations = world["decorations"].as_array().unwrap();
+        for index in 0..BACKGROUND_ISLAND_COUNT {
+            let cap = &operations[background_start + 1 + index * 2];
+            let cap_surface = cap["position"][1].as_f64().unwrap()
+                + cap["size"][1].as_f64().unwrap() * 0.5;
+            let id = format!("maze-background-palm-{index:02}");
+            let palm = decorations
+                .iter()
+                .find(|decoration| decoration["id"] == id)
+                .expect("each background island has a palm");
+            assert!((palm["position"][1].as_f64().unwrap() - (cap_surface + 0.02)).abs() < 1e-9);
+        }
+
+        let bounds = &world["world"]["presentationBounds"];
+        let expected_min_y = operations[..PRIMARY_VOLUME_COUNT]
+            .iter()
+            .map(|operation| {
+                operation["position"][1].as_f64().unwrap()
+                    - operation["size"][1].as_f64().unwrap() * 0.5
             })
-        );
+            .fold(f64::INFINITY, f64::min);
+        let expected_min_x = operations[..PRIMARY_VOLUME_COUNT]
+            .iter()
+            .map(|operation| {
+                operation["position"][0].as_f64().unwrap()
+                    - operation["size"][0].as_f64().unwrap() * 0.5
+            })
+            .fold(f64::INFINITY, f64::min);
+        let expected_max_x = operations[..PRIMARY_VOLUME_COUNT]
+            .iter()
+            .map(|operation| {
+                operation["position"][0].as_f64().unwrap()
+                    + operation["size"][0].as_f64().unwrap() * 0.5
+            })
+            .fold(f64::NEG_INFINITY, f64::max);
+        let expected_min_z = operations[..PRIMARY_VOLUME_COUNT]
+            .iter()
+            .map(|operation| {
+                operation["position"][2].as_f64().unwrap()
+                    - operation["size"][2].as_f64().unwrap() * 0.5
+            })
+            .fold(f64::INFINITY, f64::min);
+        let expected_max_z = operations[..PRIMARY_VOLUME_COUNT]
+            .iter()
+            .map(|operation| {
+                operation["position"][2].as_f64().unwrap()
+                    + operation["size"][2].as_f64().unwrap() * 0.5
+            })
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!((bounds["minimum"][1].as_f64().unwrap() - expected_min_y).abs() < 1e-9);
+        assert!((bounds["minimum"][0].as_f64().unwrap() - expected_min_x).abs() < 1e-9);
+        assert!((bounds["minimum"][2].as_f64().unwrap() - expected_min_z).abs() < 1e-9);
+        assert!((bounds["maximum"][0].as_f64().unwrap() - expected_max_x).abs() < 1e-9);
+        assert!((bounds["maximum"][2].as_f64().unwrap() - expected_max_z).abs() < 1e-9);
+        assert_eq!(bounds["maximum"][1], json!(7.0));
     }
 
     #[test]
@@ -1071,5 +1177,41 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("width must be an integer between 2 and 12"));
+    }
+
+    #[test]
+    fn rejects_terrain_resolution_that_cannot_represent_maze_walls() {
+        let mut manifest = json!({
+            "worlds": {"maze": {"maze": {
+                "width": 4,
+                "height": 4,
+                "wallThickness": 0.7,
+                "terrain": {"cellSize": 1.0}
+            }}}
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        let error = expand_manifest_mazes(&mut manifest).unwrap_err().to_string();
+        assert!(error.contains("cellSize (1") && error.contains("wallThickness (0.7)"));
+    }
+
+    #[test]
+    fn scales_background_caps_to_a_supported_terrain_resolution() {
+        let mut manifest = json!({
+            "worlds": {"maze": {"maze": {
+                "width": 4,
+                "height": 4,
+                "wallThickness": 1.0,
+                "terrain": {"cellSize": 1.0}
+            }}}
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        expand_manifest_mazes(&mut manifest).unwrap();
+        let operations = &manifest["worlds"]["maze"]["terrain"]["operations"];
+        let background_start = PRIMARY_VOLUME_COUNT + PLATEAU_NOTCH_COUNT;
+        assert_eq!(operations[background_start + 1]["size"][1], json!(1.0));
     }
 }
