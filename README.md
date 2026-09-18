@@ -35,10 +35,33 @@ cubacadabra [--version] COMMAND
 Commands:
   create-game Create a new starter game.
   build-game  Build a portable game package from a game project.
+  import-roblox-reference Extract a static visual-reference scene from Roblox XML.
   upload-examples Bump, build, and upload both example games. (legacy Python)
   setup-local  Build and install the Morph catalog in local R2/D1. (legacy Python)
   morph ...     Morph release commands. (legacy Python)
 ```
+
+## Roblox visual-reference import
+
+`import-roblox-reference` is a development tool for source-faithful renderer
+comparison. It reads Roblox XML place/model data with `rbx_xml` and writes a
+deterministic, tool-owned intermediate JSON scene. It does not emit a playable
+Cubacadabra package and does not define a runtime package contract.
+
+```sh
+cargo run --release --bin cubacadabra -- import-roblox-reference \
+  --place ../other-examples/maze-world/Place.rbxmx \
+  --terrain ../other-examples/maze-world/PlaceTerrain.rbxmx \
+  --project ../other-examples/maze-world/default.project.json \
+  --output /tmp/maze-world-reference-scene.json
+```
+
+The intermediate scene preserves source hierarchy paths, transforms, sizes,
+colors, material IDs and names, mesh and texture asset references, transparency,
+collision/shadow flags, local lights, cameras, text, spawn areas, project
+lighting and post-effect settings, computed visible bounds, and source hashes.
+Roblox smooth-terrain voxel blobs are recorded by size and SHA-256 but are not
+decoded yet; that limitation is explicit in the generated scene.
 
 Create a new game from a title and a parent directory. The command creates a
 directory named from the title, with a starter `manifest.json`, `src/main.luau`,

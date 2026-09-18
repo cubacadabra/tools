@@ -1,5 +1,6 @@
 use cubacadabra_builder::{BuildOptions, build_game};
 use cubacadabra_project::create_game;
+use cubacadabra_reference_import::{ImportOptions, import_reference};
 use std::{env, path::PathBuf, process::ExitCode};
 
 fn main() -> ExitCode {
@@ -25,8 +26,63 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "build-game" => build_command(&args[1..]),
         "create-game" => create_command(&args[1..]),
         "--create-game" => create_command(&args[1..]),
+        "import-roblox-reference" => import_roblox_reference_command(&args[1..]),
         command => Err(format!("unknown command {command:?}; use --help")),
     }
+}
+
+fn import_roblox_reference_command(args: &[String]) -> Result<(), String> {
+    let mut place = None;
+    let mut terrain = None;
+    let mut project = None;
+    let mut output = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--place" => {
+                index += 1;
+                place = Some(PathBuf::from(required_arg(args, index, "--place")?));
+            }
+            "--terrain" => {
+                index += 1;
+                terrain = Some(PathBuf::from(required_arg(args, index, "--terrain")?));
+            }
+            "--project" => {
+                index += 1;
+                project = Some(PathBuf::from(required_arg(args, index, "--project")?));
+            }
+            "--output" => {
+                index += 1;
+                output = Some(PathBuf::from(required_arg(args, index, "--output")?));
+            }
+            value => return Err(format!("unknown import-roblox-reference option {value}")),
+        }
+        index += 1;
+    }
+    let place = place.ok_or_else(|| "import-roblox-reference requires --place".to_owned())?;
+    let output = output.ok_or_else(|| "import-roblox-reference requires --output".to_owned())?;
+    let result = import_reference(&ImportOptions {
+        place_path: place,
+        terrain_path: terrain,
+        project_path: project,
+        output_path: output,
+    })?;
+    println!(
+        "Imported Roblox reference: {} geometry ({} visible), {} cameras, {} lights, {} textures, {} text nodes -> {}",
+        result.geometry_count,
+        result.visible_geometry_count,
+        result.camera_count,
+        result.light_count,
+        result.texture_count,
+        result.text_count,
+        result.output.display()
+    );
+    if result.has_terrain_payload {
+        println!(
+            "Recorded terrain payload metadata; voxel decoding remains a separate renderer/import step"
+        );
+    }
+    Ok(())
 }
 
 fn build_command(args: &[String]) -> Result<(), String> {
@@ -158,6 +214,6 @@ fn required_arg<'a>(args: &'a [String], index: usize, option: &str) -> Result<&'
 
 fn print_help() {
     println!(
-        "Cubacadabra creator tools\n\nCommands:\n  build-game   Build a portable game package\n  create-game  Create a starter project\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games"
+        "Cubacadabra creator tools\n\nCommands:\n  build-game                Build a portable game package\n  create-game               Create a starter project\n  import-roblox-reference   Extract a deterministic static reference scene from Roblox XML\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games\n  cubacadabra import-roblox-reference --place Place.rbxmx --terrain PlaceTerrain.rbxmx --project default.project.json --output /tmp/reference-scene.json"
     );
 }

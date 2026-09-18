@@ -11,4 +11,4 @@ path = "src/main.rs"
 [dependencies]
 cubacadabra-builder = { path = "../builder" }
 cubacadabra-project = { path = "../project" }
-
+cubacadabra-reference-import = { path = "../reference-import" }
