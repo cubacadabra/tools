@@ -96,7 +96,7 @@ struct Bounds {
 #[derive(Debug, Clone, Serialize)]
 struct Transform {
     position: [f32; 3],
-    /// Roblox CFrame basis vectors, stored as columns in source coordinates.
+    /// Roblox CFrame rotation matrix, stored as three source rows.
     rotation: [[f32; 3]; 3],
 }
 
