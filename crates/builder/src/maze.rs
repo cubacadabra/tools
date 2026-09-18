@@ -10,7 +10,16 @@ use crate::{BuildError, Result};
 
 const MAX_MAZE_WIDTH: usize = 12;
 const MAX_MAZE_HEIGHT: usize = 12;
-const TERRAIN_MATERIALS: &[&str] = &["grass", "ground", "dirt", "rock", "sand", "mud", "snow"];
+const TERRAIN_MATERIALS: &[&str] = &[
+    "grass",
+    "ground",
+    "dirt",
+    "rock",
+    "sand",
+    "mud",
+    "snow",
+    "leafygrass",
+];
 
 #[derive(Clone, Copy, Debug, Default)]
 struct Cell {
@@ -164,6 +173,11 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
         "size": [extent_x, floor_thickness, extent_z],
         "material": floor_material
     }));
+    // Joining exactly at an SDF zero plane leaves an air sheet between the
+    // sampled solids. Overlap one sample into the floor, preserving wall tops.
+    let wall_base = origin[1] - terrain_cell_size;
+    let solid_wall_height = wall_height + terrain_cell_size;
+    let wall_center_y = wall_base + solid_wall_height / 2.0;
     for y in 0..height {
         for x in 0..width {
             let cell = cells[y * width + x];
@@ -172,32 +186,32 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
             if cell.north {
                 operations.push(json!({
                     "operation": "fill", "shape": "block",
-                    "position": [cell_x + cell_size / 2.0, origin[1] + wall_height / 2.0, cell_z],
-                    "size": [cell_size + wall_thickness, wall_height, wall_thickness],
+                    "position": [cell_x + cell_size / 2.0, wall_center_y, cell_z],
+                    "size": [cell_size + wall_thickness, solid_wall_height, wall_thickness],
                     "material": wall_material
                 }));
             }
             if cell.west {
                 operations.push(json!({
                     "operation": "fill", "shape": "block",
-                    "position": [cell_x, origin[1] + wall_height / 2.0, cell_z + cell_size / 2.0],
-                    "size": [wall_thickness, wall_height, cell_size + wall_thickness],
+                    "position": [cell_x, wall_center_y, cell_z + cell_size / 2.0],
+                    "size": [wall_thickness, solid_wall_height, cell_size + wall_thickness],
                     "material": wall_material
                 }));
             }
             if x == width - 1 && cell.east {
                 operations.push(json!({
                     "operation": "fill", "shape": "block",
-                    "position": [cell_x + cell_size, origin[1] + wall_height / 2.0, cell_z + cell_size / 2.0],
-                    "size": [wall_thickness, wall_height, cell_size + wall_thickness],
+                    "position": [cell_x + cell_size, wall_center_y, cell_z + cell_size / 2.0],
+                    "size": [wall_thickness, solid_wall_height, cell_size + wall_thickness],
                     "material": wall_material
                 }));
             }
             if y == height - 1 && cell.south {
                 operations.push(json!({
                     "operation": "fill", "shape": "block",
-                    "position": [cell_x + cell_size / 2.0, origin[1] + wall_height / 2.0, cell_z + cell_size],
-                    "size": [cell_size + wall_thickness, wall_height, wall_thickness],
+                    "position": [cell_x + cell_size / 2.0, wall_center_y, cell_z + cell_size],
+                    "size": [cell_size + wall_thickness, solid_wall_height, wall_thickness],
                     "material": wall_material
                 }));
             }
@@ -811,5 +825,28 @@ mod tests {
         expand_manifest_mazes(&mut manifest).unwrap();
         let operations = &manifest["worlds"]["maze"]["terrain"]["operations"];
         assert_eq!(operations[0]["size"][1], json!(2.0));
+    }
+
+    #[test]
+    fn walls_overlap_the_floor_without_changing_their_top_height() {
+        let mut manifest = json!({"worlds": {"maze": {"maze": {
+            "width": 4, "height": 4, "wallHeight": 12.0,
+            "wallThickness": 2.0,
+            "terrain": {"cellSize": 1.0, "wallMaterial": "builtin:leafygrass"}
+        }}}})
+        .as_object()
+        .unwrap()
+        .clone();
+        expand_manifest_mazes(&mut manifest).unwrap();
+        let operations = manifest["worlds"]["maze"]["terrain"]["operations"]
+            .as_array()
+            .unwrap();
+        for wall in &operations[1..] {
+            let center = wall["position"][1].as_f64().unwrap();
+            let height = wall["size"][1].as_f64().unwrap();
+            assert_eq!(center - height / 2.0, -1.0);
+            assert_eq!(center + height / 2.0, 12.0);
+            assert_eq!(wall["material"], "leafygrass");
+        }
     }
 }

@@ -1020,13 +1020,15 @@ fn append_static_geometry(vertices: &mut Vec<StaticMeshVertex>, geometry: &Geome
         channel(1.0 - geometry.transparency),
     ];
     if geometry.class == "WedgePart" {
+        // Roblox wedges rise toward local +Z. Mirroring this puts the source
+        // island's adjoining triangular sheets on opposite sides of each seam.
         let points = [
-            world([-half[0], -half[1], -half[2]]),
-            world([half[0], -half[1], -half[2]]),
-            world([-half[0], half[1], -half[2]]),
-            world([half[0], half[1], -half[2]]),
             world([-half[0], -half[1], half[2]]),
             world([half[0], -half[1], half[2]]),
+            world([-half[0], half[1], half[2]]),
+            world([half[0], half[1], half[2]]),
+            world([-half[0], -half[1], -half[2]]),
+            world([half[0], -half[1], -half[2]]),
         ];
         for indices in [
             [0, 1, 3],
@@ -1134,23 +1136,19 @@ fn channel(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-fn material_base_color(name: &str) -> [f32; 4] {
+// This is an import approximation, not a renderer rule for arbitrary glTF names.
+// Keep the original identity in material extras; source Color3 stays in COLOR_0.
+fn export_material_name(name: &str) -> &str {
     match name.to_ascii_lowercase().as_str() {
-        "wood" => [0.54, 0.30, 0.13, 1.0],
-        "woodplanks" => [0.62, 0.37, 0.16, 1.0],
-        "brick" => [0.62, 0.25, 0.16, 1.0],
-        "concrete" => [0.62, 0.62, 0.58, 1.0],
-        "slate" => [0.56, 0.58, 0.55, 1.0],
-        "granite" => [0.58, 0.56, 0.51, 1.0],
-        "marble" => [0.86, 0.87, 0.84, 1.0],
-        "pebble" | "cobblestone" | "rock" => [0.62, 0.60, 0.54, 1.0],
-        "corrodedmetal" => [0.48, 0.38, 0.27, 1.0],
-        "diamondplate" | "foil" | "metal" => [0.72, 0.74, 0.73, 1.0],
-        "sand" => [1.0, 0.90, 0.62, 1.0],
-        "ice" => [0.76, 0.91, 1.0, 1.0],
-        "snow" => [1.0, 1.0, 1.0, 1.0],
-        "fabric" => [0.78, 0.78, 0.76, 1.0],
-        _ => [1.0, 1.0, 1.0, 1.0],
+        "grass" => "builtin:grass",
+        "leafygrass" => "builtin:leafygrass",
+        "ground" | "brick" => "builtin:ground",
+        "rock" | "slate" | "concrete" | "granite" | "marble" | "pebble" | "cobblestone"
+        | "corrodedmetal" | "diamondplate" | "foil" | "metal" => "builtin:rock",
+        "sand" => "builtin:sand",
+        "mud" | "wood" | "woodplanks" => "builtin:mud",
+        "snow" | "ice" => "builtin:snow",
+        _ => name,
     }
 }
 
@@ -1223,9 +1221,10 @@ fn write_static_glb(path: &Path, groups: &[StaticMeshGroup]) -> Result<(), Strin
             "mode": 4
         }));
         materials.push(serde_json::json!({
-            "name": group.material,
+            "name": export_material_name(&group.material),
+            "extras": { "robloxMaterial": group.material },
             "pbrMetallicRoughness": {
-                "baseColorFactor": material_base_color(&group.material),
+                "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
                 "metallicFactor": 0.0,
                 "roughnessFactor": 0.88
             }
@@ -1384,9 +1383,101 @@ mod tests {
         assert_eq!(mesh.geometry_count, 1);
         assert_eq!(mesh.triangle_count, 12);
         assert_eq!(mesh.vertex_count, 36);
+        let bytes = fs::read(&first_mesh).unwrap();
+        let json_length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let document: serde_json::Value =
+            serde_json::from_slice(&bytes[20..20 + json_length]).unwrap();
+        let material = &document["materials"][0];
+        assert_eq!(material["name"], "builtin:grass");
+        assert_eq!(material["extras"]["robloxMaterial"], "Grass");
+        assert_eq!(
+            material["pbrMetallicRoughness"]["baseColorFactor"],
+            serde_json::json!([1.0, 1.0, 1.0, 1.0])
+        );
+        let binary_start = 28 + json_length;
+        for vertex in bytes[binary_start..].chunks_exact(28) {
+            assert_eq!(
+                &vertex[24..28],
+                &[0, 255, 0, 255],
+                "source Color3 must survive export"
+            );
+        }
         assert_eq!(
             fs::read(first_mesh).unwrap(),
             fs::read(second_mesh).unwrap()
         );
+    }
+
+    #[test]
+    fn exported_materials_opt_in_without_inventing_a_color_factor() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("materials.glb");
+        let names = ["Grass", "Slate", "WoodPlanks", "Metal", "Plastic"];
+        let groups = names
+            .iter()
+            .map(|name| StaticMeshGroup {
+                material: name.to_string(),
+                vertices: vec![
+                    StaticMeshVertex {
+                        position: [0.0; 3],
+                        normal: [0.0, 1.0, 0.0],
+                        color: [86, 66, 54, 255]
+                    };
+                    3
+                ],
+            })
+            .collect::<Vec<_>>();
+        write_static_glb(&path, &groups).unwrap();
+        let bytes = fs::read(path).unwrap();
+        let json_length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let doc: serde_json::Value = serde_json::from_slice(&bytes[20..20 + json_length]).unwrap();
+        for (i, expected) in [
+            "builtin:grass",
+            "builtin:rock",
+            "builtin:mud",
+            "builtin:rock",
+            "Plastic",
+        ]
+        .iter()
+        .enumerate()
+        {
+            assert_eq!(doc["materials"][i]["name"], *expected);
+            assert_eq!(doc["materials"][i]["extras"]["robloxMaterial"], names[i]);
+            assert_eq!(
+                doc["materials"][i]["pbrMetallicRoughness"]["baseColorFactor"],
+                serde_json::json!([1.0, 1.0, 1.0, 1.0])
+            );
+        }
+    }
+
+    #[test]
+    fn source_wedge_rises_toward_positive_z_with_outward_normals() {
+        let temp = tempfile::tempdir().unwrap();
+        let place = temp.path().join("wedge.rbxlx");
+        let output = temp.path().join("scene.json");
+        fs::write(
+            &place,
+            PLACE.replace("class=\"Part\"", "class=\"WedgePart\""),
+        )
+        .unwrap();
+        import_reference(&ImportOptions {
+            place_path: place,
+            terrain_path: None,
+            project_path: None,
+            output_path: output.clone(),
+        })
+        .unwrap();
+        let scene = read_reference_scene(output).unwrap();
+        let mut vertices = Vec::new();
+        append_static_geometry(&mut vertices, &scene.geometry[0]);
+        assert_eq!(vertices.len(), 24);
+        for vertex in vertices.iter().filter(|v| v.position[1] > 4.0) {
+            assert_eq!(
+                vertex.position[2], 1.0,
+                "high edge must be on the back (+Z) face"
+            );
+        }
+        let slope = &vertices[12..18];
+        assert!(slope.iter().all(|v| v.normal[1] > 0.0 && v.normal[2] < 0.0));
     }
 }
