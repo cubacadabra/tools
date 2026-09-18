@@ -63,6 +63,20 @@ lighting and post-effect settings, computed visible bounds, and source hashes.
 Roblox smooth-terrain voxel blobs are recorded by size and SHA-256 but are not
 decoded yet; that limitation is explicit in the generated scene.
 
+Bake a selected imported hierarchy into a compact static GLB for the normal
+Cubacadabra package renderer:
+
+```sh
+cargo run --release --bin cubacadabra -- export-reference-mesh \
+  --scene /tmp/reference-scene.json \
+  --output ../examples/maze-101/assets/models/maze_world_reference.glb \
+  --path-prefix 'Folder:Place[1]/Folder:Main[1]/Model:MainIsland[1]'
+```
+
+The exported GLB bakes source transforms and vertex colors. It remains an
+ordinary package model, so Studio and player hosts render it through the shared
+world-mesh path rather than the development-only reference capture shader.
+
 Create a new game from a title and a parent directory. The command creates a
 directory named from the title, with a starter `manifest.json`, `src/main.luau`,
 and empty `assets/audio/` and `assets/images/` directories:

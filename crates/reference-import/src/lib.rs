@@ -6,7 +6,7 @@
 
 use rbx_dom_weak::types::{CFrame, Color3, ContentType, Matrix3, Variant, Vector3};
 use rbx_dom_weak::{Instance, WeakDom, types::Ref, ustr};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
@@ -36,221 +36,236 @@ pub struct ImportResult {
     pub has_terrain_payload: bool,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ReferenceScene {
-    format_version: u32,
-    kind: &'static str,
-    coordinate_system: &'static str,
-    source: SourceSet,
-    summary: SceneSummary,
-    bounds: Option<Bounds>,
-    class_counts: BTreeMap<String, usize>,
-    geometry: Vec<GeometryInstance>,
-    cameras: Vec<CameraInstance>,
-    lights: Vec<LightInstance>,
-    textures: Vec<SurfaceTexture>,
-    texts: Vec<TextInstance>,
-    spawns: Vec<SpawnInstance>,
-    project_lighting: Option<ProjectLighting>,
-    terrain: Option<TerrainSource>,
+#[derive(Debug, Clone)]
+pub struct MeshExportOptions {
+    pub scene_path: PathBuf,
+    pub output_path: PathBuf,
+    pub path_prefix: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MeshExportResult {
+    pub output: PathBuf,
+    pub geometry_count: usize,
+    pub vertex_count: usize,
+    pub triangle_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SourceSet {
-    place: SourceFile,
+pub struct ReferenceScene {
+    pub format_version: u32,
+    pub kind: String,
+    pub coordinate_system: String,
+    pub source: SourceSet,
+    pub summary: SceneSummary,
+    pub bounds: Option<Bounds>,
+    pub class_counts: BTreeMap<String, usize>,
+    pub geometry: Vec<GeometryInstance>,
+    pub cameras: Vec<CameraInstance>,
+    pub lights: Vec<LightInstance>,
+    pub textures: Vec<SurfaceTexture>,
+    pub texts: Vec<TextInstance>,
+    pub spawns: Vec<SpawnInstance>,
+    pub project_lighting: Option<ProjectLighting>,
+    pub terrain: Option<TerrainSource>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceSet {
+    pub place: SourceFile,
     #[serde(skip_serializing_if = "Option::is_none")]
-    terrain: Option<SourceFile>,
+    pub terrain: Option<SourceFile>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    project: Option<SourceFile>,
+    pub project: Option<SourceFile>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SourceFile {
-    name: String,
-    bytes: u64,
-    sha256: String,
+pub struct SourceFile {
+    pub name: String,
+    pub bytes: u64,
+    pub sha256: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SceneSummary {
-    instance_count: usize,
-    geometry_count: usize,
-    visible_geometry_count: usize,
-    camera_count: usize,
-    light_count: usize,
-    texture_count: usize,
-    text_count: usize,
-    spawn_count: usize,
+pub struct SceneSummary {
+    pub instance_count: usize,
+    pub geometry_count: usize,
+    pub visible_geometry_count: usize,
+    pub camera_count: usize,
+    pub light_count: usize,
+    pub texture_count: usize,
+    pub text_count: usize,
+    pub spawn_count: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct Bounds {
-    minimum: [f32; 3],
-    maximum: [f32; 3],
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bounds {
+    pub minimum: [f32; 3],
+    pub maximum: [f32; 3],
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct Transform {
-    position: [f32; 3],
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Transform {
+    pub position: [f32; 3],
     /// Roblox CFrame rotation matrix, stored as three source rows.
-    rotation: [[f32; 3]; 3],
+    pub rotation: [[f32; 3]; 3],
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GeometryInstance {
-    path: String,
-    parent_path: String,
-    class: String,
-    name: String,
-    transform: Transform,
-    size: [f32; 3],
-    color: [f32; 3],
-    material: Material,
-    transparency: f32,
-    reflectance: f32,
-    anchored: bool,
-    can_collide: bool,
-    cast_shadow: bool,
+pub struct GeometryInstance {
+    pub path: String,
+    pub parent_path: String,
+    pub class: String,
+    pub name: String,
+    pub transform: Transform,
+    pub size: [f32; 3],
+    pub color: [f32; 3],
+    pub material: Material,
+    pub transparency: f32,
+    pub reflectance: f32,
+    pub anchored: bool,
+    pub can_collide: bool,
+    pub cast_shadow: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    shape: Option<u32>,
+    pub shape: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mesh: Option<MeshReference>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    opaque_properties: Vec<OpaqueProperty>,
+    pub mesh: Option<MeshReference>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opaque_properties: Vec<OpaqueProperty>,
 }
 
-#[derive(Debug, Serialize)]
-struct Material {
-    value: u32,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Material {
+    pub value: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<&'static str>,
+    pub name: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MeshReference {
-    kind: String,
+pub struct MeshReference {
+    pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mesh_id: Option<String>,
+    pub mesh_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    texture_id: Option<String>,
+    pub texture_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mesh_type: Option<u32>,
+    pub mesh_type: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    scale: Option<[f32; 3]>,
+    pub scale: Option<[f32; 3]>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    offset: Option<[f32; 3]>,
+    pub offset: Option<[f32; 3]>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    vertex_color: Option<[f32; 3]>,
+    pub vertex_color: Option<[f32; 3]>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OpaqueProperty {
-    name: String,
-    kind: &'static str,
-    bytes: usize,
-    sha256: String,
+pub struct OpaqueProperty {
+    pub name: String,
+    pub kind: String,
+    pub bytes: usize,
+    pub sha256: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CameraInstance {
-    path: String,
-    name: String,
-    transform: Transform,
+pub struct CameraInstance {
+    pub path: String,
+    pub name: String,
+    pub transform: Transform,
     #[serde(skip_serializing_if = "Option::is_none")]
-    focus: Option<Transform>,
-    field_of_view: f32,
+    pub focus: Option<Transform>,
+    pub field_of_view: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    camera_type: Option<u32>,
+    pub camera_type: Option<u32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LightInstance {
-    path: String,
-    parent_path: String,
-    class: String,
-    name: String,
-    color: [f32; 3],
-    brightness: f32,
-    range: f32,
-    enabled: bool,
-    shadows: bool,
+pub struct LightInstance {
+    pub path: String,
+    pub parent_path: String,
+    pub class: String,
+    pub name: String,
+    pub color: [f32; 3],
+    pub brightness: f32,
+    pub range: f32,
+    pub enabled: bool,
+    pub shadows: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    face: Option<u32>,
+    pub face: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    angle: Option<f32>,
+    pub angle: Option<f32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SurfaceTexture {
-    path: String,
-    parent_path: String,
-    class: String,
-    name: String,
+pub struct SurfaceTexture {
+    pub path: String,
+    pub parent_path: String,
+    pub class: String,
+    pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    asset: Option<String>,
-    color: [f32; 3],
-    transparency: f32,
+    pub asset: Option<String>,
+    pub color: [f32; 3],
+    pub transparency: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    face: Option<u32>,
+    pub face: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    studs_per_tile_u: Option<f32>,
+    pub studs_per_tile_u: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    studs_per_tile_v: Option<f32>,
+    pub studs_per_tile_v: Option<f32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TextInstance {
-    path: String,
-    parent_path: String,
-    class: String,
-    name: String,
-    text: String,
-    color: [f32; 3],
-    transparency: f32,
-    text_scaled: bool,
+pub struct TextInstance {
+    pub path: String,
+    pub parent_path: String,
+    pub class: String,
+    pub name: String,
+    pub text: String,
+    pub color: [f32; 3],
+    pub transparency: f32,
+    pub text_scaled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    font: Option<u32>,
+    pub font: Option<u32>,
 }
 
-#[derive(Debug, Serialize)]
-struct SpawnInstance {
-    path: String,
-    name: String,
-    transform: Transform,
-    size: [f32; 3],
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpawnInstance {
+    pub path: String,
+    pub name: String,
+    pub transform: Transform,
+    pub size: [f32; 3],
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProjectLighting {
-    properties: BTreeMap<String, Value>,
-    effects: Vec<ProjectEffect>,
+pub struct ProjectLighting {
+    pub properties: BTreeMap<String, Value>,
+    pub effects: Vec<ProjectEffect>,
 }
 
-#[derive(Debug, Serialize)]
-struct ProjectEffect {
-    name: String,
-    class: String,
-    properties: BTreeMap<String, Value>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProjectEffect {
+    pub name: String,
+    pub class: String,
+    pub properties: BTreeMap<String, Value>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TerrainSource {
-    properties: BTreeMap<String, Value>,
-    opaque_properties: Vec<OpaqueProperty>,
-    requires_voxel_decoder: bool,
+pub struct TerrainSource {
+    pub properties: BTreeMap<String, Value>,
+    pub opaque_properties: Vec<OpaqueProperty>,
+    pub requires_voxel_decoder: bool,
 }
 
 #[derive(Default)]
@@ -324,8 +339,9 @@ pub fn import_reference(options: &ImportOptions) -> Result<ImportResult, String>
     };
     let scene = ReferenceScene {
         format_version: 1,
-        kind: "roblox-static-reference-scene",
-        coordinate_system: "Roblox source coordinates (X right, Y up, CFrame basis preserved)",
+        kind: "roblox-static-reference-scene".to_owned(),
+        coordinate_system:
+            "Roblox source coordinates (X right, Y up, CFrame matrix rows preserved)".to_owned(),
         source: SourceSet {
             place: place_source,
             terrain: terrain_source_file,
@@ -562,7 +578,7 @@ fn material(instance: &Instance) -> Material {
     let value = enum_property(instance, &["Material"]).unwrap_or(256);
     Material {
         value,
-        name: material_name(value),
+        name: material_name(value).map(str::to_owned),
     }
 }
 
@@ -626,7 +642,7 @@ fn opaque_property(name: &str, value: &Variant) -> Option<OpaqueProperty> {
     }
     Some(OpaqueProperty {
         name: name.to_owned(),
-        kind,
+        kind: kind.to_owned(),
         bytes: bytes.len(),
         sha256: sha256(bytes),
     })
@@ -900,6 +916,298 @@ fn write_scene(path: &Path, scene: &ReferenceScene) -> Result<(), String> {
         .map_err(|error| format!("could not finish {}: {error}", path.display()))
 }
 
+pub fn read_reference_scene(path: impl AsRef<Path>) -> Result<ReferenceScene, String> {
+    let path = path.as_ref();
+    let data =
+        fs::read(path).map_err(|error| format!("could not read {}: {error}", path.display()))?;
+    let scene: ReferenceScene = serde_json::from_slice(&data)
+        .map_err(|error| format!("could not decode {}: {error}", path.display()))?;
+    if scene.kind != "roblox-static-reference-scene" || scene.format_version != 1 {
+        return Err(format!(
+            "{} is not a supported Roblox reference scene (kind {:?}, version {})",
+            path.display(),
+            scene.kind,
+            scene.format_version
+        ));
+    }
+    Ok(scene)
+}
+
+#[derive(Clone, Copy)]
+struct StaticMeshVertex {
+    position: [f32; 3],
+    normal: [f32; 3],
+    color: [u8; 4],
+}
+
+pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportResult, String> {
+    let scene = read_reference_scene(&options.scene_path)?;
+    let selected = scene
+        .geometry
+        .iter()
+        .filter(|geometry| {
+            options
+                .path_prefix
+                .as_deref()
+                .is_none_or(|prefix| geometry.path.starts_with(prefix))
+                && geometry.transparency < 0.99
+                && geometry
+                    .size
+                    .iter()
+                    .all(|value| value.is_finite() && *value > 0.0)
+        })
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
+        return Err("no visible reference geometry matched the requested path prefix".to_owned());
+    }
+
+    let mut vertices = Vec::with_capacity(selected.len() * 36);
+    for geometry in &selected {
+        append_static_geometry(&mut vertices, geometry);
+    }
+    if vertices.is_empty() {
+        return Err("the selected reference geometry produced no drawable triangles".to_owned());
+    }
+    write_static_glb(&options.output_path, &vertices)?;
+    Ok(MeshExportResult {
+        output: options.output_path.clone(),
+        geometry_count: selected.len(),
+        vertex_count: vertices.len(),
+        triangle_count: vertices.len() / 3,
+    })
+}
+
+fn append_static_geometry(vertices: &mut Vec<StaticMeshVertex>, geometry: &GeometryInstance) {
+    let mut half = scale3(geometry.size, 0.5);
+    let mut center = geometry.transform.position;
+    if let Some(mesh) = &geometry.mesh
+        && mesh.kind == "SpecialMesh"
+        && mesh.mesh_type == Some(2)
+    {
+        half = multiply3(half, mesh.scale.unwrap_or([1.0, 1.0, 1.0]));
+        center = add3(
+            center,
+            rotate_vector(
+                geometry.transform.rotation,
+                mesh.offset.unwrap_or([0.0, 0.0, 0.0]),
+            ),
+        );
+    }
+    let world = |local| add3(center, rotate_vector(geometry.transform.rotation, local));
+    let color = [
+        channel(geometry.color[0]),
+        channel(geometry.color[1]),
+        channel(geometry.color[2]),
+        channel(1.0 - geometry.transparency),
+    ];
+    if geometry.class == "WedgePart" {
+        let points = [
+            world([-half[0], -half[1], -half[2]]),
+            world([half[0], -half[1], -half[2]]),
+            world([-half[0], half[1], -half[2]]),
+            world([half[0], half[1], -half[2]]),
+            world([-half[0], -half[1], half[2]]),
+            world([half[0], -half[1], half[2]]),
+        ];
+        for indices in [
+            [0, 1, 3],
+            [0, 3, 2],
+            [0, 4, 5],
+            [0, 5, 1],
+            [2, 3, 5],
+            [2, 5, 4],
+            [0, 2, 4],
+            [1, 5, 3],
+        ] {
+            append_static_triangle(vertices, &points, indices, color);
+        }
+        return;
+    }
+    let points = [
+        world([-half[0], -half[1], -half[2]]),
+        world([half[0], -half[1], -half[2]]),
+        world([half[0], half[1], -half[2]]),
+        world([-half[0], half[1], -half[2]]),
+        world([-half[0], -half[1], half[2]]),
+        world([half[0], -half[1], half[2]]),
+        world([half[0], half[1], half[2]]),
+        world([-half[0], half[1], half[2]]),
+    ];
+    for indices in [
+        [0, 3, 2],
+        [0, 2, 1],
+        [4, 5, 6],
+        [4, 6, 7],
+        [0, 4, 7],
+        [0, 7, 3],
+        [1, 2, 6],
+        [1, 6, 5],
+        [0, 1, 5],
+        [0, 5, 4],
+        [3, 7, 6],
+        [3, 6, 2],
+    ] {
+        append_static_triangle(vertices, &points, indices, color);
+    }
+}
+
+fn append_static_triangle<const N: usize>(
+    vertices: &mut Vec<StaticMeshVertex>,
+    points: &[[f32; 3]; N],
+    indices: [usize; 3],
+    color: [u8; 4],
+) {
+    let first = points[indices[0]];
+    let second = points[indices[1]];
+    let third = points[indices[2]];
+    let edge_a = subtract3(second, first);
+    let edge_b = subtract3(third, first);
+    let cross = cross3(edge_a, edge_b);
+    let length = dot3(cross, cross).sqrt();
+    if !length.is_finite() || length <= 0.000001 {
+        return;
+    }
+    let normal = scale3(cross, length.recip());
+    vertices.extend(indices.into_iter().map(|index| StaticMeshVertex {
+        position: points[index],
+        normal,
+        color,
+    }));
+}
+
+fn rotate_vector(rows: [[f32; 3]; 3], vector: [f32; 3]) -> [f32; 3] {
+    [
+        dot3(rows[0], vector),
+        dot3(rows[1], vector),
+        dot3(rows[2], vector),
+    ]
+}
+
+fn add3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn subtract3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn scale3(value: [f32; 3], scale: f32) -> [f32; 3] {
+    [value[0] * scale, value[1] * scale, value[2] * scale]
+}
+
+fn multiply3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] * b[0], a[1] * b[1], a[2] * b[2]]
+}
+
+fn dot3(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn channel(value: f32) -> u8 {
+    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+fn write_static_glb(path: &Path, vertices: &[StaticMeshVertex]) -> Result<(), String> {
+    const STRIDE: usize = 28;
+    let mut binary = Vec::with_capacity(vertices.len() * STRIDE);
+    let mut minimum = [f32::INFINITY; 3];
+    let mut maximum = [f32::NEG_INFINITY; 3];
+    for vertex in vertices {
+        for axis in 0..3 {
+            minimum[axis] = minimum[axis].min(vertex.position[axis]);
+            maximum[axis] = maximum[axis].max(vertex.position[axis]);
+            binary.extend_from_slice(&vertex.position[axis].to_le_bytes());
+        }
+        for value in vertex.normal {
+            binary.extend_from_slice(&value.to_le_bytes());
+        }
+        binary.extend_from_slice(&vertex.color);
+    }
+    while binary.len() % 4 != 0 {
+        binary.push(0);
+    }
+    let document = serde_json::json!({
+        "asset": { "version": "2.0", "generator": "cubacadabra-reference-import" },
+        "scene": 0,
+        "scenes": [{ "nodes": [0] }],
+        "nodes": [{ "mesh": 0, "name": "Roblox reference geometry" }],
+        "meshes": [{
+            "name": "Roblox reference geometry",
+            "primitives": [{
+                "attributes": { "POSITION": 0, "NORMAL": 1, "COLOR_0": 2 },
+                "mode": 4
+            }]
+        }],
+        "buffers": [{ "byteLength": binary.len() }],
+        "bufferViews": [{
+            "buffer": 0,
+            "byteOffset": 0,
+            "byteLength": binary.len(),
+            "byteStride": STRIDE,
+            "target": 34962
+        }],
+        "accessors": [
+            {
+                "bufferView": 0,
+                "byteOffset": 0,
+                "componentType": 5126,
+                "count": vertices.len(),
+                "type": "VEC3",
+                "min": minimum,
+                "max": maximum
+            },
+            {
+                "bufferView": 0,
+                "byteOffset": 12,
+                "componentType": 5126,
+                "count": vertices.len(),
+                "type": "VEC3"
+            },
+            {
+                "bufferView": 0,
+                "byteOffset": 24,
+                "componentType": 5121,
+                "normalized": true,
+                "count": vertices.len(),
+                "type": "VEC4"
+            }
+        ]
+    });
+    let mut json = serde_json::to_vec(&document)
+        .map_err(|error| format!("could not encode GLB document: {error}"))?;
+    while json.len() % 4 != 0 {
+        json.push(b' ');
+    }
+    let total_length = 12usize
+        .checked_add(8 + json.len())
+        .and_then(|length| length.checked_add(8 + binary.len()))
+        .and_then(|length| u32::try_from(length).ok())
+        .ok_or_else(|| "reference GLB is too large".to_owned())?;
+    let mut output = Vec::with_capacity(total_length as usize);
+    output.extend_from_slice(&0x4654_6c67_u32.to_le_bytes());
+    output.extend_from_slice(&2_u32.to_le_bytes());
+    output.extend_from_slice(&total_length.to_le_bytes());
+    output.extend_from_slice(&(json.len() as u32).to_le_bytes());
+    output.extend_from_slice(&0x4e4f_534a_u32.to_le_bytes());
+    output.extend_from_slice(&json);
+    output.extend_from_slice(&(binary.len() as u32).to_le_bytes());
+    output.extend_from_slice(&0x004e_4942_u32.to_le_bytes());
+    output.extend_from_slice(&binary);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("could not create {}: {error}", parent.display()))?;
+    }
+    fs::write(path, output).map_err(|error| format!("could not write {}: {error}", path.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -976,6 +1284,8 @@ mod tests {
         let project = temp.path().join("default.project.json");
         let first = temp.path().join("first.json");
         let second = temp.path().join("second.json");
+        let first_mesh = temp.path().join("first.glb");
+        let second_mesh = temp.path().join("second.glb");
         fs::write(&place, PLACE).unwrap();
         fs::write(&terrain, TERRAIN).unwrap();
         fs::write(
@@ -998,6 +1308,21 @@ mod tests {
         assert_eq!(result.camera_count, 1);
         assert_eq!(result.light_count, 1);
         assert!(result.has_terrain_payload);
-        assert_eq!(fs::read(first).unwrap(), fs::read(second).unwrap());
+        assert_eq!(fs::read(&first).unwrap(), fs::read(second).unwrap());
+
+        let mesh_options = |output| MeshExportOptions {
+            scene_path: first.clone(),
+            output_path: output,
+            path_prefix: Some("Folder:Place[1]".to_owned()),
+        };
+        let mesh = export_reference_mesh(&mesh_options(first_mesh.clone())).unwrap();
+        export_reference_mesh(&mesh_options(second_mesh.clone())).unwrap();
+        assert_eq!(mesh.geometry_count, 1);
+        assert_eq!(mesh.triangle_count, 12);
+        assert_eq!(mesh.vertex_count, 36);
+        assert_eq!(
+            fs::read(first_mesh).unwrap(),
+            fs::read(second_mesh).unwrap()
+        );
     }
 }

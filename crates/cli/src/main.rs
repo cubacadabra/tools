@@ -1,6 +1,8 @@
 use cubacadabra_builder::{BuildOptions, build_game};
 use cubacadabra_project::create_game;
-use cubacadabra_reference_import::{ImportOptions, import_reference};
+use cubacadabra_reference_import::{
+    ImportOptions, MeshExportOptions, export_reference_mesh, import_reference,
+};
 use std::{env, path::PathBuf, process::ExitCode};
 
 fn main() -> ExitCode {
@@ -27,8 +29,49 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "create-game" => create_command(&args[1..]),
         "--create-game" => create_command(&args[1..]),
         "import-roblox-reference" => import_roblox_reference_command(&args[1..]),
+        "export-reference-mesh" => export_reference_mesh_command(&args[1..]),
         command => Err(format!("unknown command {command:?}; use --help")),
     }
+}
+
+fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
+    let mut scene = None;
+    let mut output = None;
+    let mut path_prefix = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--scene" => {
+                index += 1;
+                scene = Some(PathBuf::from(required_arg(args, index, "--scene")?));
+            }
+            "--output" => {
+                index += 1;
+                output = Some(PathBuf::from(required_arg(args, index, "--output")?));
+            }
+            "--path-prefix" => {
+                index += 1;
+                path_prefix = Some(required_arg(args, index, "--path-prefix")?.to_owned());
+            }
+            value => return Err(format!("unknown export-reference-mesh option {value}")),
+        }
+        index += 1;
+    }
+    let scene = scene.ok_or_else(|| "export-reference-mesh requires --scene".to_owned())?;
+    let output = output.ok_or_else(|| "export-reference-mesh requires --output".to_owned())?;
+    let result = export_reference_mesh(&MeshExportOptions {
+        scene_path: scene,
+        output_path: output,
+        path_prefix,
+    })?;
+    println!(
+        "Exported reference mesh: {} geometry, {} triangles, {} vertices -> {}",
+        result.geometry_count,
+        result.triangle_count,
+        result.vertex_count,
+        result.output.display()
+    );
+    Ok(())
 }
 
 fn import_roblox_reference_command(args: &[String]) -> Result<(), String> {
@@ -214,6 +257,6 @@ fn required_arg<'a>(args: &'a [String], index: usize, option: &str) -> Result<&'
 
 fn print_help() {
     println!(
-        "Cubacadabra creator tools\n\nCommands:\n  build-game                Build a portable game package\n  create-game               Create a starter project\n  import-roblox-reference   Extract a deterministic static reference scene from Roblox XML\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games\n  cubacadabra import-roblox-reference --place Place.rbxmx --terrain PlaceTerrain.rbxmx --project default.project.json --output /tmp/reference-scene.json"
+        "Cubacadabra creator tools\n\nCommands:\n  build-game                Build a portable game package\n  create-game               Create a starter project\n  import-roblox-reference   Extract a deterministic static reference scene from Roblox XML\n  export-reference-mesh     Bake a reference-scene hierarchy into a package GLB\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games\n  cubacadabra import-roblox-reference --place Place.rbxmx --terrain PlaceTerrain.rbxmx --project default.project.json --output /tmp/reference-scene.json\n  cubacadabra export-reference-mesh --scene /tmp/reference-scene.json --output assets/models/reference.glb --path-prefix 'Folder:Place[1]/Folder:Main[1]/Model:MainIsland[1]'"
     );
 }
