@@ -940,6 +940,11 @@ struct StaticMeshVertex {
     color: [u8; 4],
 }
 
+struct StaticMeshGroup {
+    material: String,
+    vertices: Vec<StaticMeshVertex>,
+}
+
 pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportResult, String> {
     let scene = read_reference_scene(&options.scene_path)?;
     let selected = scene
@@ -961,19 +966,33 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
         return Err("no visible reference geometry matched the requested path prefix".to_owned());
     }
 
-    let mut vertices = Vec::with_capacity(selected.len() * 36);
+    let mut groups = BTreeMap::<String, Vec<StaticMeshVertex>>::new();
     for geometry in &selected {
-        append_static_geometry(&mut vertices, geometry);
+        let material = geometry
+            .material
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("Material({})", geometry.material.value));
+        append_static_geometry(groups.entry(material).or_default(), geometry);
     }
-    if vertices.is_empty() {
+    let groups = groups
+        .into_iter()
+        .filter(|(_, vertices)| !vertices.is_empty())
+        .map(|(material, vertices)| StaticMeshGroup { material, vertices })
+        .collect::<Vec<_>>();
+    if groups.is_empty() {
         return Err("the selected reference geometry produced no drawable triangles".to_owned());
     }
-    write_static_glb(&options.output_path, &vertices)?;
+    let vertex_count = groups
+        .iter()
+        .map(|group| group.vertices.len())
+        .sum::<usize>();
+    write_static_glb(&options.output_path, &groups)?;
     Ok(MeshExportResult {
         output: options.output_path.clone(),
         geometry_count: selected.len(),
-        vertex_count: vertices.len(),
-        triangle_count: vertices.len() / 3,
+        vertex_count,
+        triangle_count: vertex_count / 3,
     })
 }
 
@@ -1115,24 +1134,102 @@ fn channel(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-fn write_static_glb(path: &Path, vertices: &[StaticMeshVertex]) -> Result<(), String> {
-    const STRIDE: usize = 28;
-    let mut binary = Vec::with_capacity(vertices.len() * STRIDE);
-    let mut minimum = [f32::INFINITY; 3];
-    let mut maximum = [f32::NEG_INFINITY; 3];
-    for vertex in vertices {
-        for axis in 0..3 {
-            minimum[axis] = minimum[axis].min(vertex.position[axis]);
-            maximum[axis] = maximum[axis].max(vertex.position[axis]);
-            binary.extend_from_slice(&vertex.position[axis].to_le_bytes());
-        }
-        for value in vertex.normal {
-            binary.extend_from_slice(&value.to_le_bytes());
-        }
-        binary.extend_from_slice(&vertex.color);
+fn material_base_color(name: &str) -> [f32; 4] {
+    match name.to_ascii_lowercase().as_str() {
+        "wood" => [0.54, 0.30, 0.13, 1.0],
+        "woodplanks" => [0.62, 0.37, 0.16, 1.0],
+        "brick" => [0.62, 0.25, 0.16, 1.0],
+        "concrete" => [0.62, 0.62, 0.58, 1.0],
+        "slate" => [0.56, 0.58, 0.55, 1.0],
+        "granite" => [0.58, 0.56, 0.51, 1.0],
+        "marble" => [0.86, 0.87, 0.84, 1.0],
+        "pebble" | "cobblestone" | "rock" => [0.62, 0.60, 0.54, 1.0],
+        "corrodedmetal" => [0.48, 0.38, 0.27, 1.0],
+        "diamondplate" | "foil" | "metal" => [0.72, 0.74, 0.73, 1.0],
+        "sand" => [1.0, 0.90, 0.62, 1.0],
+        "ice" => [0.76, 0.91, 1.0, 1.0],
+        "snow" => [1.0, 1.0, 1.0, 1.0],
+        "fabric" => [0.78, 0.78, 0.76, 1.0],
+        _ => [1.0, 1.0, 1.0, 1.0],
     }
-    while binary.len() % 4 != 0 {
-        binary.push(0);
+}
+
+fn write_static_glb(path: &Path, groups: &[StaticMeshGroup]) -> Result<(), String> {
+    const STRIDE: usize = 28;
+    let mut binary = Vec::new();
+    let mut buffer_views = Vec::with_capacity(groups.len());
+    let mut accessors = Vec::with_capacity(groups.len() * 3);
+    let mut primitives = Vec::with_capacity(groups.len());
+    let mut materials = Vec::with_capacity(groups.len());
+    for (material_index, group) in groups.iter().enumerate() {
+        let byte_offset = binary.len();
+        let mut minimum = [f32::INFINITY; 3];
+        let mut maximum = [f32::NEG_INFINITY; 3];
+        for vertex in &group.vertices {
+            for axis in 0..3 {
+                minimum[axis] = minimum[axis].min(vertex.position[axis]);
+                maximum[axis] = maximum[axis].max(vertex.position[axis]);
+                binary.extend_from_slice(&vertex.position[axis].to_le_bytes());
+            }
+            for value in vertex.normal {
+                binary.extend_from_slice(&value.to_le_bytes());
+            }
+            binary.extend_from_slice(&vertex.color);
+        }
+        while binary.len() % 4 != 0 {
+            binary.push(0);
+        }
+        let view_index = buffer_views.len();
+        buffer_views.push(serde_json::json!({
+            "buffer": 0,
+            "byteOffset": byte_offset,
+            "byteLength": binary.len() - byte_offset,
+            "byteStride": STRIDE,
+            "target": 34962
+        }));
+        let position_accessor = accessors.len();
+        accessors.push(serde_json::json!({
+            "bufferView": view_index,
+            "componentType": 5126,
+            "count": group.vertices.len(),
+            "type": "VEC3",
+            "min": minimum,
+            "max": maximum
+        }));
+        let normal_accessor = accessors.len();
+        accessors.push(serde_json::json!({
+            "bufferView": view_index,
+            "byteOffset": 12,
+            "componentType": 5126,
+            "count": group.vertices.len(),
+            "type": "VEC3"
+        }));
+        let color_accessor = accessors.len();
+        accessors.push(serde_json::json!({
+            "bufferView": view_index,
+            "byteOffset": 24,
+            "componentType": 5121,
+            "normalized": true,
+            "count": group.vertices.len(),
+            "type": "VEC4"
+        }));
+        primitives.push(serde_json::json!({
+            "attributes": {
+                "POSITION": position_accessor,
+                "NORMAL": normal_accessor,
+                "COLOR_0": color_accessor
+            },
+            "material": material_index,
+            "mode": 4
+        }));
+        materials.push(serde_json::json!({
+            "name": group.material,
+            "pbrMetallicRoughness": {
+                "baseColorFactor": material_base_color(&group.material),
+                "metallicFactor": 0.0,
+                "roughnessFactor": 0.88
+            }
+        }));
     }
     let document = serde_json::json!({
         "asset": { "version": "2.0", "generator": "cubacadabra-reference-import" },
@@ -1141,45 +1238,12 @@ fn write_static_glb(path: &Path, vertices: &[StaticMeshVertex]) -> Result<(), St
         "nodes": [{ "mesh": 0, "name": "Roblox reference geometry" }],
         "meshes": [{
             "name": "Roblox reference geometry",
-            "primitives": [{
-                "attributes": { "POSITION": 0, "NORMAL": 1, "COLOR_0": 2 },
-                "mode": 4
-            }]
+            "primitives": primitives
         }],
+        "materials": materials,
         "buffers": [{ "byteLength": binary.len() }],
-        "bufferViews": [{
-            "buffer": 0,
-            "byteOffset": 0,
-            "byteLength": binary.len(),
-            "byteStride": STRIDE,
-            "target": 34962
-        }],
-        "accessors": [
-            {
-                "bufferView": 0,
-                "byteOffset": 0,
-                "componentType": 5126,
-                "count": vertices.len(),
-                "type": "VEC3",
-                "min": minimum,
-                "max": maximum
-            },
-            {
-                "bufferView": 0,
-                "byteOffset": 12,
-                "componentType": 5126,
-                "count": vertices.len(),
-                "type": "VEC3"
-            },
-            {
-                "bufferView": 0,
-                "byteOffset": 24,
-                "componentType": 5121,
-                "normalized": true,
-                "count": vertices.len(),
-                "type": "VEC4"
-            }
-        ]
+        "bufferViews": buffer_views,
+        "accessors": accessors
     });
     let mut json = serde_json::to_vec(&document)
         .map_err(|error| format!("could not encode GLB document: {error}"))?;
