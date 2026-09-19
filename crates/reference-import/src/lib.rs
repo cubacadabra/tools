@@ -49,15 +49,17 @@ pub struct MeshExportOptions {
     pub scale: f32,
     pub origin: [f32; 3],
     pub collision_output: Option<PathBuf>,
+    pub bounds_output: Option<PathBuf>,
     pub mesh_overrides: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct MeshExportResult {
     pub output: PathBuf,
     pub geometry_count: usize,
     pub vertex_count: usize,
     pub triangle_count: usize,
+    pub bounds: Bounds,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -70,6 +72,8 @@ pub struct ReferenceScene {
     pub summary: SceneSummary,
     pub bounds: Option<Bounds>,
     pub class_counts: BTreeMap<String, usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub instances: Vec<ReferenceInstance>,
     pub geometry: Vec<GeometryInstance>,
     pub cameras: Vec<CameraInstance>,
     pub lights: Vec<LightInstance>,
@@ -78,6 +82,20 @@ pub struct ReferenceScene {
     pub spawns: Vec<SpawnInstance>,
     pub project_lighting: Option<ProjectLighting>,
     pub terrain: Option<TerrainSource>,
+}
+
+/// The normalized source hierarchy record.  Geometry and presentation facts
+/// stay in their specialized arrays; this record preserves the source tree so
+/// native authoring tools do not have to infer parentage from mesh batches.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReferenceInstance {
+    pub path: String,
+    pub parent_path: String,
+    pub class: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transform: Option<Transform>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -280,6 +298,7 @@ pub struct TerrainSource {
 #[derive(Default)]
 struct SceneCollector {
     class_counts: BTreeMap<String, usize>,
+    instances: Vec<ReferenceInstance>,
     geometry: Vec<GeometryInstance>,
     cameras: Vec<CameraInstance>,
     lights: Vec<LightInstance>,
@@ -313,6 +332,7 @@ pub fn import_reference(options: &ImportOptions) -> Result<ImportResult, String>
     walk_children(&place, place.root_ref(), "", &mut collector)?;
 
     collector.geometry.sort_by(|a, b| a.path.cmp(&b.path));
+    collector.instances.sort_by(|a, b| a.path.cmp(&b.path));
     collector.cameras.sort_by(|a, b| a.path.cmp(&b.path));
     collector.lights.sort_by(|a, b| a.path.cmp(&b.path));
     collector.textures.sort_by(|a, b| a.path.cmp(&b.path));
@@ -359,6 +379,7 @@ pub fn import_reference(options: &ImportOptions) -> Result<ImportResult, String>
         summary,
         bounds: collector.bounds,
         class_counts: collector.class_counts,
+        instances: collector.instances,
         geometry: collector.geometry,
         cameras: collector.cameras,
         lights: collector.lights,
@@ -454,6 +475,13 @@ fn collect_instance(
     let class = instance.class.to_string();
     *collector.class_counts.entry(class.clone()).or_insert(0) += 1;
     collector.instance_count += 1;
+    collector.instances.push(ReferenceInstance {
+        path: path.to_owned(),
+        parent_path: parent_path.to_owned(),
+        class: class.clone(),
+        name: instance.name.clone(),
+        transform: cframe_property(instance, &["CFrame"]).map(transform),
+    });
 
     if let (Some(cframe), Some(size)) = (
         cframe_property(instance, &["CFrame"]),
@@ -1031,16 +1059,82 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
         .iter()
         .map(|group| group.vertices.len())
         .sum::<usize>();
+    let bounds = mesh_bounds(&groups)?;
     write_static_glb(&options.output_path, &groups)?;
     if let Some(path) = &options.collision_output {
         collision::write_file(path, &collision_triangles)?;
+    }
+    if let Some(path) = &options.bounds_output {
+        write_mesh_bounds(path, &bounds)?;
     }
     Ok(MeshExportResult {
         output: options.output_path.clone(),
         geometry_count: selected.len(),
         vertex_count,
         triangle_count: vertex_count / 3,
+        bounds,
     })
+}
+
+fn mesh_bounds(groups: &[StaticMeshGroup]) -> Result<Bounds, String> {
+    let mut bounds = None;
+    for vertex in groups.iter().flat_map(|group| &group.vertices) {
+        for axis in 0..3 {
+            if !vertex.position[axis].is_finite() {
+                return Err("exported mesh contains a non-finite vertex".to_owned());
+            }
+        }
+        match &mut bounds {
+            Some(bounds) => {
+                for axis in 0..3 {
+                    bounds.minimum[axis] = bounds.minimum[axis].min(vertex.position[axis]);
+                    bounds.maximum[axis] = bounds.maximum[axis].max(vertex.position[axis]);
+                }
+            }
+            None => {
+                bounds = Some(Bounds {
+                    minimum: vertex.position,
+                    maximum: vertex.position,
+                });
+            }
+        }
+    }
+    bounds.ok_or_else(|| "exported mesh has no vertices".to_owned())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MeshBoundsFile {
+    format_version: u32,
+    minimum: [f32; 3],
+    maximum: [f32; 3],
+    size: [f32; 3],
+}
+
+fn write_mesh_bounds(path: &Path, bounds: &Bounds) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "could not create bounds directory {}: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    let size = [
+        bounds.maximum[0] - bounds.minimum[0],
+        bounds.maximum[1] - bounds.minimum[1],
+        bounds.maximum[2] - bounds.minimum[2],
+    ];
+    let file = MeshBoundsFile {
+        format_version: 1,
+        minimum: bounds.minimum,
+        maximum: bounds.maximum,
+        size,
+    };
+    let output = serde_json::to_string_pretty(&file)
+        .map_err(|error| format!("could not encode mesh bounds: {error}"))?;
+    fs::write(path, format!("{output}\n"))
+        .map_err(|error| format!("could not write mesh bounds {}: {error}", path.display()))
 }
 
 fn append_static_geometry(vertices: &mut Vec<StaticMeshVertex>, geometry: &GeometryInstance) {
@@ -1433,6 +1527,7 @@ mod tests {
             scale: 1.0,
             origin: [0.0; 3],
             collision_output: Some(collision_output),
+            bounds_output: None,
             mesh_overrides: None,
         };
         let first_collision = temp.path().join("first-collision.json");
@@ -1517,6 +1612,7 @@ mod tests {
             scale: 0.5,
             origin: [0.0; 3],
             collision_output: Some(collision_path.clone()),
+            bounds_output: None,
             mesh_overrides: Some(overrides),
         })
         .unwrap();

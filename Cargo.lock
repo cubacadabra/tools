@@ -178,6 +178,8 @@ dependencies = [
  "cubacadabra-builder",
  "cubacadabra-project",
  "cubacadabra-reference-import",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

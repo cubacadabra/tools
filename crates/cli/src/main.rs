@@ -42,6 +42,7 @@ fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
     let mut scale = 1.0;
     let mut origin = [0.0; 3];
     let mut collision_output = None;
+    let mut bounds_output = None;
     let mut mesh_overrides = None;
     let mut index = 0;
     while index < args.len() {
@@ -92,6 +93,10 @@ fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
                     "--collision-output",
                 )?));
             }
+            "--bounds-output" => {
+                index += 1;
+                bounds_output = Some(PathBuf::from(required_arg(args, index, "--bounds-output")?));
+            }
             "--mesh-overrides" => {
                 index += 1;
                 mesh_overrides = Some(PathBuf::from(required_arg(
@@ -114,6 +119,7 @@ fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
         scale,
         origin,
         collision_output,
+        bounds_output,
         mesh_overrides,
     })?;
     println!(
@@ -122,6 +128,12 @@ fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
         result.triangle_count,
         result.vertex_count,
         result.output.display()
+    );
+    println!(
+        "  local bounds: [{:.3}, {:.3}, {:.3}]",
+        result.bounds.maximum[0] - result.bounds.minimum[0],
+        result.bounds.maximum[1] - result.bounds.minimum[1],
+        result.bounds.maximum[2] - result.bounds.minimum[2]
     );
     Ok(())
 }
