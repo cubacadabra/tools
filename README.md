@@ -78,6 +78,21 @@ primitive/material group per Roblox material. It remains an ordinary package
 model, so Studio and player hosts render it through the shared world-mesh path
 rather than the development-only reference capture shader.
 
+Repeat `--path-prefix` to include multiple hierarchies. `--exclude-path` omits
+paths containing a supplied fragment; `--scale` applies the same positive unit
+conversion to the visual mesh and optional `--collision-output scene-collision.json`.
+Collision includes invisible source parts with `canCollide`, excludes non-colliding
+parts, and is independent of GLB loading. Reference it from an authored world's
+`collision: {"source": "reference/scene-collision.json"}`; the builder validates and
+inlines versioned world-space triangles into the runtime manifest.
+
+Optional `--mesh-overrides meshes.json` supplies locally available geometry for
+source mesh IDs. Version 1 is `{"formatVersion":1,"meshes":{"SOURCE_ID":{
+"vertices":[[0,0,0],[1,0,0],[0,1,0]],"triangles":[[0,1,2]]}}}`. Vertices use
+normalized source-local coordinates (usually -0.5 to 0.5); the exporter applies
+each instance's source size, rotation, position, color, and export scale. Unknown
+IDs retain the primitive approximation. Mesh files are not downloaded implicitly.
+
 Create a new game from a title and a parent directory. The command creates a
 directory named from the title, with a starter `manifest.json`, `src/main.luau`,
 and empty `assets/audio/` and `assets/images/` directories:

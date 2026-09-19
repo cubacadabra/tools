@@ -447,6 +447,43 @@ class GameBuilderTests(unittest.TestCase):
                 output=self.project / "build/package",
             )
 
+    def test_legacy_builder_rejects_inline_collision(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": 3,
+                "collision": {
+                    "formatVersion": 1,
+                    "triangles": [[[0, 0, 0], [1, 0, 0], [0, 0, 1]]],
+                },
+            }),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "native Rust builder"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
+    def test_legacy_builder_rejects_world_collision_source(self) -> None:
+        (self.project / "manifest.json").write_text(
+            json.dumps({
+                "id": "test-game",
+                "version": 3,
+                "worlds": {"hub": {"collision": {"source": "collision.json"}}},
+            }),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(GameBuildError, "native Rust builder"):
+            build_game(
+                source_root=self.project / "src",
+                manifest_path=self.project / "manifest.json",
+                output=self.project / "build/package",
+            )
+
     def test_rejects_require_traversal(self) -> None:
         (self.project / "src/main.luau").write_text(
             'local outside = require("../../outside")\nreturn outside\n',

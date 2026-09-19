@@ -490,6 +490,24 @@ def _contains_maze_declaration(manifest: dict[str, object]) -> bool:
     )
 
 
+def _reject_collision_declarations(manifest: dict[str, object]) -> None:
+    """Keep static collision semantics exclusively in the native builder."""
+
+    if "collision" in manifest:
+        raise GameBuildError(
+            "collision declarations require the native Rust builder; "
+            "use `cubacadabra build-game --source ...`"
+        )
+    worlds = manifest.get("worlds")
+    if isinstance(worlds, dict):
+        for world_id, world in worlds.items():
+            if isinstance(world, dict) and "collision" in world:
+                raise GameBuildError(
+                    "collision declarations require the native Rust builder; "
+                    f"world {world_id!r} cannot be built by the legacy Python builder"
+                )
+
+
 def _validate_output(output: Path, source_root: Path) -> None:
     """Prevent a package output from deleting or containing the source tree."""
 
@@ -925,6 +943,7 @@ def build_game(
             "maze declarations require the native Rust builder; "
             "use `cubacadabra build-game --source ...`"
         )
+    _reject_collision_declarations(manifest)
     manifest = _resolve_effects_source(manifest, manifest_path.parent)
 
     game_id = _manifest_value(manifest, "id")

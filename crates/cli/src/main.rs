@@ -37,7 +37,11 @@ fn run(args: Vec<String>) -> Result<(), String> {
 fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
     let mut scene = None;
     let mut output = None;
-    let mut path_prefix = None;
+    let mut path_prefixes = Vec::new();
+    let mut exclude_paths = Vec::new();
+    let mut scale = 1.0;
+    let mut collision_output = None;
+    let mut mesh_overrides = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -51,7 +55,33 @@ fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
             }
             "--path-prefix" => {
                 index += 1;
-                path_prefix = Some(required_arg(args, index, "--path-prefix")?.to_owned());
+                path_prefixes.push(required_arg(args, index, "--path-prefix")?.to_owned());
+            }
+            "--exclude-path" => {
+                index += 1;
+                exclude_paths.push(required_arg(args, index, "--exclude-path")?.to_owned());
+            }
+            "--scale" => {
+                index += 1;
+                scale = required_arg(args, index, "--scale")?
+                    .parse::<f32>()
+                    .map_err(|_| "--scale must be a positive number".to_owned())?;
+            }
+            "--collision-output" => {
+                index += 1;
+                collision_output = Some(PathBuf::from(required_arg(
+                    args,
+                    index,
+                    "--collision-output",
+                )?));
+            }
+            "--mesh-overrides" => {
+                index += 1;
+                mesh_overrides = Some(PathBuf::from(required_arg(
+                    args,
+                    index,
+                    "--mesh-overrides",
+                )?));
             }
             value => return Err(format!("unknown export-reference-mesh option {value}")),
         }
@@ -62,7 +92,11 @@ fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
     let result = export_reference_mesh(&MeshExportOptions {
         scene_path: scene,
         output_path: output,
-        path_prefix,
+        path_prefixes,
+        exclude_paths,
+        scale,
+        collision_output,
+        mesh_overrides,
     })?;
     println!(
         "Exported reference mesh: {} geometry, {} triangles, {} vertices -> {}",

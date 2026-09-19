@@ -14,10 +14,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod collision;
 mod maze;
 
 const PREVIEW_SDK_VERSION: &str = "0.3.0";
 const TERRAIN_SDK_VERSION: &str = "0.4.0";
+const CURRENT_SDK_VERSION: &str = "0.5.0";
 const BUILD_MARKER: &str = ".cubacadabra-build";
 const BUILD_MARKER_CONTENT: &str = "cubacadabra-game-package-v1\n";
 const MAX_AUTHORITY_SOURCE_BYTES: usize = 1024 * 1024;
@@ -173,14 +175,22 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
             &Value::String(sdk_version.to_owned()),
             "manifest.sdkVersion",
         )?;
-        if sdk_version != PREVIEW_SDK_VERSION && sdk_version != TERRAIN_SDK_VERSION {
+        if sdk_version != PREVIEW_SDK_VERSION
+            && sdk_version != TERRAIN_SDK_VERSION
+            && sdk_version != CURRENT_SDK_VERSION
+        {
             return Err(BuildError(format!(
-                "manifest.sdkVersion {sdk_version:?} is unsupported; this builder supports {PREVIEW_SDK_VERSION} and {TERRAIN_SDK_VERSION}"
+                "manifest.sdkVersion {sdk_version:?} is unsupported; this builder supports {PREVIEW_SDK_VERSION}, {TERRAIN_SDK_VERSION}, and {CURRENT_SDK_VERSION}"
             )));
         }
     }
     maze::expand_manifest_mazes(manifest)?;
+    validate_sdk_features(manifest, sdk_version.as_deref())?;
     resolve_effects_source(manifest, manifest_path.parent().unwrap_or(Path::new(".")))?;
+    collision::resolve_manifest_sources(
+        manifest,
+        manifest_path.parent().unwrap_or(Path::new(".")),
+    )?;
     validate_assets(manifest, manifest_path.parent().unwrap_or(Path::new(".")))?;
 
     let authority_source = source_root.join("server.luau");
@@ -339,6 +349,61 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
         output,
         zip_path,
     })
+}
+
+fn validate_sdk_features(manifest: &Map<String, Value>, sdk_version: Option<&str>) -> Result<()> {
+    let has_terrain = |value: Option<&Value>| {
+        value
+            .and_then(Value::as_object)
+            .and_then(|terrain| terrain.get("operations"))
+            .and_then(Value::as_array)
+            .is_some_and(|operations| !operations.is_empty())
+    };
+    let mut world_values = manifest
+        .get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|worlds| worlds.values())
+        .filter_map(Value::as_object);
+    let has_terrain = has_terrain(manifest.get("terrain"))
+        || world_values
+            .clone()
+            .any(|world| has_terrain(world.get("terrain")));
+    if has_terrain
+        && sdk_version != Some(TERRAIN_SDK_VERSION)
+        && sdk_version != Some(CURRENT_SDK_VERSION)
+    {
+        return Err(BuildError(format!(
+            "terrain operations require manifest.sdkVersion {TERRAIN_SDK_VERSION} or {CURRENT_SDK_VERSION}"
+        )));
+    }
+
+    let has_sdk_05_field = |world: &Map<String, Value>| {
+        let camera = world.get("camera").is_some_and(|value| !value.is_null());
+        let horizontal_bounds = world
+            .get("physics")
+            .and_then(Value::as_object)
+            .and_then(|physics| physics.get("horizontalBounds"))
+            .is_some_and(|value| !value.is_null());
+        camera || horizontal_bounds
+    };
+    let has_collision = manifest
+        .get("collision")
+        .is_some_and(|value| !value.is_null())
+        || world_values
+            .clone()
+            .any(|world| world.get("collision").is_some_and(|value| !value.is_null()));
+    let has_sdk_05_field = manifest
+        .get("world")
+        .and_then(Value::as_object)
+        .is_some_and(has_sdk_05_field)
+        || world_values.any(has_sdk_05_field);
+    if (has_collision || has_sdk_05_field) && sdk_version != Some(CURRENT_SDK_VERSION) {
+        return Err(BuildError(format!(
+            "collision, world.camera, and world.physics.horizontalBounds require manifest.sdkVersion {CURRENT_SDK_VERSION}"
+        )));
+    }
+    Ok(())
 }
 
 fn absolute_path(path: &Path) -> Result<PathBuf> {

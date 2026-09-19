@@ -16,6 +16,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod collision;
+
+mod mesh_overrides;
+
 #[derive(Debug, Clone)]
 pub struct ImportOptions {
     pub place_path: PathBuf,
@@ -40,7 +44,11 @@ pub struct ImportResult {
 pub struct MeshExportOptions {
     pub scene_path: PathBuf,
     pub output_path: PathBuf,
-    pub path_prefix: Option<String>,
+    pub path_prefixes: Vec<String>,
+    pub exclude_paths: Vec<String>,
+    pub scale: f32,
+    pub collision_output: Option<PathBuf>,
+    pub mesh_overrides: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -946,16 +954,24 @@ struct StaticMeshGroup {
 }
 
 pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportResult, String> {
+    if !options.scale.is_finite() || options.scale <= 0.0 {
+        return Err("export scale must be finite and positive".to_owned());
+    }
     let scene = read_reference_scene(&options.scene_path)?;
+    let overrides = mesh_overrides::load(options.mesh_overrides.as_deref())?;
     let selected = scene
         .geometry
         .iter()
         .filter(|geometry| {
-            options
-                .path_prefix
-                .as_deref()
-                .is_none_or(|prefix| geometry.path.starts_with(prefix))
-                && geometry.transparency < 0.99
+            (options.path_prefixes.is_empty()
+                || options
+                    .path_prefixes
+                    .iter()
+                    .any(|prefix| geometry.path.starts_with(prefix)))
+                && !options
+                    .exclude_paths
+                    .iter()
+                    .any(|path| geometry.path.contains(path))
                 && geometry
                     .size
                     .iter()
@@ -967,13 +983,40 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
     }
 
     let mut groups = BTreeMap::<String, Vec<StaticMeshVertex>>::new();
+    let mut collision_triangles = Vec::<[[f32; 3]; 3]>::new();
     for geometry in &selected {
+        let mut vertices = Vec::new();
+        if let Some(mesh) = geometry
+            .mesh
+            .as_ref()
+            .and_then(|mesh| mesh.mesh_id.as_ref())
+            .and_then(|id| overrides.get(id))
+        {
+            mesh.append(&mut vertices, geometry);
+        } else {
+            append_static_geometry(&mut vertices, geometry);
+        }
+        for vertex in &mut vertices {
+            vertex.position = scale3(vertex.position, options.scale);
+        }
+        if options.collision_output.is_some() && geometry.can_collide {
+            collision_triangles.extend(vertices.chunks_exact(3).map(|triangle| {
+                [
+                    triangle[0].position,
+                    triangle[1].position,
+                    triangle[2].position,
+                ]
+            }));
+        }
+        if geometry.transparency >= 0.99 {
+            continue;
+        }
         let material = geometry
             .material
             .name
             .clone()
             .unwrap_or_else(|| format!("Material({})", geometry.material.value));
-        append_static_geometry(groups.entry(material).or_default(), geometry);
+        groups.entry(material).or_default().extend(vertices);
     }
     let groups = groups
         .into_iter()
@@ -988,6 +1031,9 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
         .map(|group| group.vertices.len())
         .sum::<usize>();
     write_static_glb(&options.output_path, &groups)?;
+    if let Some(path) = &options.collision_output {
+        collision::write_file(path, &collision_triangles)?;
+    }
     Ok(MeshExportResult {
         output: options.output_path.clone(),
         geometry_count: selected.len(),
@@ -1274,6 +1320,7 @@ fn write_static_glb(path: &Path, groups: &[StaticMeshGroup]) -> Result<(), Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     const PLACE: &str = r#"<roblox version="4">
   <Item class="Folder" referent="0">
@@ -1373,13 +1420,22 @@ mod tests {
         assert!(result.has_terrain_payload);
         assert_eq!(fs::read(&first).unwrap(), fs::read(second).unwrap());
 
-        let mesh_options = |output| MeshExportOptions {
+        let mesh_options = |output: PathBuf, collision_output: PathBuf| MeshExportOptions {
             scene_path: first.clone(),
             output_path: output,
-            path_prefix: Some("Folder:Place[1]".to_owned()),
+            path_prefixes: vec!["Folder:Place[1]".to_owned()],
+            exclude_paths: Vec::new(),
+            scale: 1.0,
+            collision_output: Some(collision_output),
+            mesh_overrides: None,
         };
-        let mesh = export_reference_mesh(&mesh_options(first_mesh.clone())).unwrap();
-        export_reference_mesh(&mesh_options(second_mesh.clone())).unwrap();
+        let first_collision = temp.path().join("first-collision.json");
+        let second_collision = temp.path().join("second-collision.json");
+        let mesh =
+            export_reference_mesh(&mesh_options(first_mesh.clone(), first_collision.clone()))
+                .unwrap();
+        export_reference_mesh(&mesh_options(second_mesh.clone(), second_collision.clone()))
+            .unwrap();
         assert_eq!(mesh.geometry_count, 1);
         assert_eq!(mesh.triangle_count, 12);
         assert_eq!(mesh.vertex_count, 36);
@@ -1405,6 +1461,77 @@ mod tests {
         assert_eq!(
             fs::read(first_mesh).unwrap(),
             fs::read(second_mesh).unwrap()
+        );
+        assert_eq!(
+            fs::read(&first_collision).unwrap(),
+            fs::read(&second_collision).unwrap()
+        );
+        let collision: serde_json::Value =
+            serde_json::from_slice(&fs::read(first_collision).unwrap()).unwrap();
+        assert_eq!(collision["formatVersion"], 1);
+        assert_eq!(collision["triangles"].as_array().unwrap().len(), 12);
+    }
+
+    #[test]
+    fn export_selection_scale_and_overrides_share_visual_and_collision_geometry() {
+        let temp = tempfile::tempdir().unwrap();
+        let place = temp.path().join("Place.rbxmx");
+        let scene_path = temp.path().join("scene.json");
+        fs::write(&place, PLACE).unwrap();
+        import_reference(&ImportOptions {
+            place_path: place,
+            terrain_path: None,
+            project_path: None,
+            output_path: scene_path.clone(),
+        })
+        .unwrap();
+        let mut scene: Value = serde_json::from_slice(&fs::read(&scene_path).unwrap()).unwrap();
+        let mut visible = scene["geometry"][0].clone();
+        visible["path"] = json!("Main/visible");
+        visible["size"] = json!([4, 2, 6]);
+        visible["mesh"] = json!({"kind":"MeshPart", "meshId":"local-test"});
+        let mut hidden = visible.clone();
+        hidden["path"] = json!("Rooms/hidden-floor");
+        hidden["transparency"] = json!(1);
+        let mut excluded = visible.clone();
+        excluded["path"] = json!("Rooms/exclude-this");
+        let mut outside = visible.clone();
+        outside["path"] = json!("Other/not-selected");
+        scene["geometry"] = json!([visible, hidden, excluded, outside]);
+        fs::write(&scene_path, serde_json::to_vec(&scene).unwrap()).unwrap();
+        let overrides = temp.path().join("overrides.json");
+        fs::write(&overrides, r#"{"formatVersion":1,"meshes":{"local-test":{"vertices":[[-0.5,0,-0.5],[0.5,0,-0.5],[0,0,0.5]],"triangles":[[0,1,2]]}}}"#).unwrap();
+        let mesh_path = temp.path().join("mesh.glb");
+        let collision_path = temp.path().join("collision.json");
+        let result = export_reference_mesh(&MeshExportOptions {
+            scene_path,
+            output_path: mesh_path.clone(),
+            path_prefixes: vec!["Main/".into(), "Rooms/".into()],
+            exclude_paths: vec!["exclude-this".into()],
+            scale: 0.5,
+            collision_output: Some(collision_path.clone()),
+            mesh_overrides: Some(overrides),
+        })
+        .unwrap();
+        assert_eq!(result.geometry_count, 2);
+        assert_eq!(result.triangle_count, 1, "hidden collider must not render");
+        let collision: Value = serde_json::from_slice(&fs::read(collision_path).unwrap()).unwrap();
+        let expected = json!([[4.0, 2.0, -2.5], [6.0, 2.0, -2.5], [5.0, 2.0, 0.5]]);
+        assert_eq!(collision["triangles"], json!([expected, expected]));
+        let bytes = fs::read(mesh_path).unwrap();
+        let json_length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let vertices: Vec<_> = bytes[28 + json_length..]
+            .chunks_exact(28)
+            .map(|v| {
+                (0..3)
+                    .map(|axis| f32::from_le_bytes(v[axis * 4..axis * 4 + 4].try_into().unwrap()))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert_eq!(
+            json!(vertices),
+            expected,
+            "visual and collision transforms must match"
         );
     }
 

@@ -8,8 +8,8 @@ use serde_json::{Map, Value, json};
 
 use crate::{BuildError, Result};
 
-const MAX_MAZE_WIDTH: usize = 12;
-const MAX_MAZE_HEIGHT: usize = 12;
+const MAX_MAZE_WIDTH: usize = 20;
+const MAX_MAZE_HEIGHT: usize = 20;
 const TERRAIN_MATERIALS: &[&str] = &[
     "grass",
     "ground",
@@ -223,16 +223,23 @@ fn expand_world(world: &mut Map<String, Value>) -> Result<bool> {
 
     let mut interactions = array_clone(world, "interactions")?;
     let mut decorations = array_clone(world, "decorations")?;
-    decorations.push(json!({
-        "id": "maze-start-gate", "kind": "gate",
-        "position": position(origin, cell_size, start, 1.4),
-        "scale": 1.0, "color": "signal"
-    }));
-    decorations.push(json!({
-        "id": "maze-finish-gate", "kind": "finish",
-        "position": position(origin, cell_size, finish, 1.4),
-        "scale": 1.15, "color": "hot"
-    }));
+    let landmarks = config.get("landmarks").map_or(Ok(true), |value| {
+        value
+            .as_bool()
+            .ok_or_else(|| BuildError("manifest.maze.landmarks must be a boolean".to_owned()))
+    })?;
+    if landmarks {
+        decorations.push(json!({
+            "id": "maze-start-gate", "kind": "gate",
+            "position": position(origin, cell_size, start, 1.4),
+            "scale": 1.0, "color": "signal"
+        }));
+        decorations.push(json!({
+            "id": "maze-finish-gate", "kind": "finish",
+            "position": position(origin, cell_size, finish, 1.4),
+            "scale": 1.15, "color": "hot"
+        }));
+    }
     // Start and finish gates are generic maze landmarks. Package-owned
     // scenery is declared by the package rather than synthesized here.
     let finish_id = config
@@ -744,6 +751,39 @@ mod tests {
     }
 
     #[test]
+    fn decorative_landmarks_can_be_omitted_without_removing_gameplay() {
+        let mut world = json!({"maze": {"width": 5, "height": 5, "landmarks": false}})
+            .as_object()
+            .unwrap()
+            .clone();
+        expand_world(&mut world).unwrap();
+        assert!(world["decorations"].as_array().unwrap().is_empty());
+        assert!(
+            world["interactions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|zone| zone["id"] == "maze-finish")
+        );
+        assert!(
+            !world["terrain"]["operations"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        let mut invalid = json!({"maze": {"landmarks": "false"}})
+            .as_object()
+            .unwrap()
+            .clone();
+        assert!(
+            expand_world(&mut invalid)
+                .unwrap_err()
+                .to_string()
+                .contains("landmarks must be a boolean")
+        );
+    }
+
+    #[test]
     fn expansion_is_deterministic_for_a_seed() {
         let source = json!({"worlds": {"maze": {"maze": {"width": 6, "height": 5, "seed": 101, "collectibles": {"count": 5}}}}});
         let mut first = source.as_object().unwrap().clone();
@@ -780,14 +820,14 @@ mod tests {
 
     #[test]
     fn rejects_out_of_bounds_maze_dimensions() {
-        let mut manifest = json!({"worlds": {"maze": {"maze": {"width": 13}}}})
+        let mut manifest = json!({"worlds": {"maze": {"maze": {"width": 21}}}})
             .as_object()
             .unwrap()
             .clone();
         let error = expand_manifest_mazes(&mut manifest)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("width must be an integer between 2 and 12"));
+        assert!(error.contains("width must be an integer between 2 and 20"));
     }
 
     #[test]
@@ -848,5 +888,24 @@ mod tests {
             assert_eq!(center + height / 2.0, 12.0);
             assert_eq!(wall["material"], "leafygrass");
         }
+    }
+
+    #[test]
+    fn twenty_cell_maze_stays_inside_the_runtime_operation_budget() {
+        let mut manifest = json!({"worlds": {"maze": {"maze": {
+            "width": 20, "height": 20, "cellSize": 15, "wallHeight": 12,
+            "wallThickness": 1.8, "terrain": {"cellSize": 1.5}
+        }}}})
+        .as_object()
+        .unwrap()
+        .clone();
+        expand_manifest_mazes(&mut manifest).unwrap();
+        assert!(
+            manifest["worlds"]["maze"]["terrain"]["operations"]
+                .as_array()
+                .unwrap()
+                .len()
+                <= 512
+        );
     }
 }
