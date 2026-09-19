@@ -1077,7 +1077,7 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
 }
 
 fn mesh_bounds(groups: &[StaticMeshGroup]) -> Result<Bounds, String> {
-    let mut bounds = None;
+    let mut bounds: Option<Bounds> = None;
     for vertex in groups.iter().flat_map(|group| &group.vertices) {
         for axis in 0..3 {
             if !vertex.position[axis].is_finite() {

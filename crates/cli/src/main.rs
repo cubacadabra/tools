@@ -1,9 +1,20 @@
-use cubacadabra_builder::{BuildOptions, build_game};
+use cubacadabra_builder::{
+    AuthoringNode, AuthoringScene, BuildOptions, EditorMetadata, SourceMetadata, Transform,
+    build_game, parse_authoring_scene, serialize_authoring_scene,
+};
 use cubacadabra_project::create_game;
 use cubacadabra_reference_import::{
-    ImportOptions, MeshExportOptions, export_reference_mesh, import_reference,
+    ImportOptions, MeshExportOptions, ReferenceScene, export_reference_mesh, import_reference,
+    read_reference_scene,
 };
-use std::{env, path::PathBuf, process::ExitCode};
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env, fs,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
@@ -29,9 +40,271 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "create-game" => create_command(&args[1..]),
         "--create-game" => create_command(&args[1..]),
         "import-roblox-reference" => import_roblox_reference_command(&args[1..]),
+        "import-roblox-scene" => import_roblox_scene_command(&args[1..]),
         "export-reference-mesh" => export_reference_mesh_command(&args[1..]),
         command => Err(format!("unknown command {command:?}; use --help")),
     }
+}
+
+fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
+    let mut reference = None;
+    let mut base_scene = None;
+    let mut output = None;
+    let mut source_index = None;
+    let mut parent_id = None;
+    let mut tree_depth = 4usize;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--reference" => {
+                index += 1;
+                reference = Some(PathBuf::from(required_arg(args, index, "--reference")?));
+            }
+            "--base-scene" => {
+                index += 1;
+                base_scene = Some(PathBuf::from(required_arg(args, index, "--base-scene")?));
+            }
+            "--output" => {
+                index += 1;
+                output = Some(PathBuf::from(required_arg(args, index, "--output")?));
+            }
+            "--source-index" => {
+                index += 1;
+                source_index = Some(PathBuf::from(required_arg(args, index, "--source-index")?));
+            }
+            "--parent-id" => {
+                index += 1;
+                parent_id = Some(required_arg(args, index, "--parent-id")?.to_owned());
+            }
+            "--tree-depth" => {
+                index += 1;
+                tree_depth = required_arg(args, index, "--tree-depth")?
+                    .parse::<usize>()
+                    .map_err(|_| "--tree-depth must be a non-negative integer".to_owned())?;
+            }
+            value => return Err(format!("unknown import-roblox-scene option {value}")),
+        }
+        index += 1;
+    }
+    let reference_path =
+        reference.ok_or_else(|| "import-roblox-scene requires --reference".to_owned())?;
+    let reference_scene = read_reference_scene(&reference_path)?;
+    let output = output.unwrap_or_else(|| {
+        base_scene
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("scene.json"))
+    });
+    let source_index = source_index.unwrap_or_else(|| {
+        output
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("source-hierarchy.json")
+    });
+    let mut scene = if let Some(path) = base_scene {
+        let source = fs::read_to_string(&path)
+            .map_err(|error| format!("could not read base scene {}: {error}", path.display()))?;
+        parse_authoring_scene(&source)?
+    } else {
+        AuthoringScene {
+            format_version: 1,
+            world_id: None,
+            nodes: Vec::new(),
+        }
+    };
+    let parent_id = parent_id.or_else(|| {
+        scene
+            .nodes
+            .iter()
+            .find(|node| node.id == "imported-environment")
+            .map(|node| node.id.clone())
+    });
+    if let Some(parent_id) = &parent_id
+        && scene.node(parent_id).is_none()
+    {
+        return Err(format!(
+            "import-roblox-scene parent node {parent_id:?} was not found"
+        ));
+    }
+
+    let source_hash = short_hash(&reference_scene.source.place.sha256);
+    let root_id = format!("source-hierarchy-{source_hash}");
+    scene.nodes.retain(|node| {
+        node.id != root_id
+            && node
+                .source
+                .as_ref()
+                .and_then(|source| source.properties.get("generatedBy"))
+                .and_then(Value::as_str)
+                != Some("import-roblox-scene")
+    });
+    let generated_ids =
+        generated_scene_nodes(&reference_scene, &root_id, parent_id.as_deref(), tree_depth);
+    scene.nodes.extend(generated_ids);
+    scene.validate()?;
+    let scene_source = serialize_authoring_scene(&scene)?;
+    write_text(&output, &scene_source)?;
+    write_source_index(&source_index, &reference_scene)?;
+    println!(
+        "Imported Roblox source hierarchy: {} source nodes ({} in scene tree, depth {}) -> {}",
+        reference_scene.instances.len(),
+        scene
+            .nodes
+            .iter()
+            .filter(|node| {
+                node.source
+                    .as_ref()
+                    .and_then(|source| source.properties.get("generatedBy"))
+                    .and_then(Value::as_str)
+                    == Some("import-roblox-scene")
+            })
+            .count(),
+        tree_depth,
+        output.display()
+    );
+    println!("  complete source index -> {}", source_index.display());
+    Ok(())
+}
+
+fn generated_scene_nodes(
+    reference: &ReferenceScene,
+    root_id: &str,
+    parent_id: Option<&str>,
+    tree_depth: usize,
+) -> Vec<AuthoringNode> {
+    let mut nodes = vec![AuthoringNode {
+        id: root_id.to_owned(),
+        parent_id: parent_id.map(str::to_owned),
+        name: "Roblox Source".to_owned(),
+        transform: Transform::default(),
+        components: BTreeMap::new(),
+        editor: EditorMetadata {
+            visible: true,
+            locked: true,
+            lock_reason: Some(
+                "Source hierarchy is read-only; extracted render assets are authored separately"
+                    .to_owned(),
+            ),
+        },
+        source: Some(SourceMetadata {
+            format: "roblox".to_owned(),
+            class: Some("SourceHierarchy".to_owned()),
+            path: None,
+            properties: BTreeMap::from([
+                ("generatedBy".to_owned(), json!("import-roblox-scene")),
+                ("sourceIndex".to_owned(), json!("source-hierarchy.json")),
+                ("instanceCount".to_owned(), json!(reference.instances.len())),
+                ("geometryCount".to_owned(), json!(reference.geometry.len())),
+            ]),
+        }),
+    }];
+    let included = reference
+        .instances
+        .iter()
+        .filter(|instance| instance.path.split('/').count() <= tree_depth)
+        .map(|instance| instance.path.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut ids = BTreeMap::new();
+    for instance in &reference.instances {
+        if !included.contains(instance.path.as_str()) {
+            continue;
+        }
+        let id = source_node_id(&instance.path);
+        let parent = instance
+            .parent_path
+            .as_str()
+            .strip_prefix("")
+            .filter(|path| included.contains(path))
+            .map(source_node_id)
+            .unwrap_or_else(|| root_id.to_owned());
+        ids.insert(instance.path.clone(), id.clone());
+        let mut properties =
+            BTreeMap::from([("generatedBy".to_owned(), json!("import-roblox-scene"))]);
+        let geometry_count = reference
+            .geometry
+            .iter()
+            .filter(|geometry| geometry.path == instance.path)
+            .count();
+        if geometry_count > 0 {
+            properties.insert("geometryCount".to_owned(), json!(geometry_count));
+        }
+        nodes.push(AuthoringNode {
+            id,
+            parent_id: Some(parent),
+            name: instance.name.clone(),
+            transform: Transform {
+                position: instance
+                    .transform
+                    .as_ref()
+                    .map(|transform| transform.position)
+                    .unwrap_or([0.0; 3]),
+                ..Transform::default()
+            },
+            components: BTreeMap::new(),
+            editor: EditorMetadata {
+                visible: true,
+                locked: true,
+                lock_reason: Some(
+                    "Imported source node has no editable native representation yet".to_owned(),
+                ),
+            },
+            source: Some(SourceMetadata {
+                format: "roblox".to_owned(),
+                class: Some(instance.class.clone()),
+                path: Some(instance.path.clone()),
+                properties,
+            }),
+        });
+    }
+    nodes
+}
+
+fn write_source_index(path: &Path, reference: &ReferenceScene) -> Result<(), String> {
+    let mut geometry_by_path = BTreeMap::<&str, usize>::new();
+    for geometry in &reference.geometry {
+        *geometry_by_path.entry(geometry.path.as_str()).or_default() += 1;
+    }
+    let nodes = reference
+        .instances
+        .iter()
+        .map(|instance| {
+            json!({
+                "id": source_node_id(&instance.path),
+                "path": instance.path,
+                "parentPath": instance.parent_path,
+                "class": instance.class,
+                "name": instance.name,
+                "transform": instance.transform,
+                "geometryCount": geometry_by_path.get(instance.path.as_str()).copied().unwrap_or(0),
+            })
+        })
+        .collect::<Vec<_>>();
+    let index = json!({
+        "formatVersion": 1,
+        "kind": "cubacadabra-roblox-source-hierarchy",
+        "source": reference.source,
+        "instanceCount": reference.instances.len(),
+        "geometryCount": reference.geometry.len(),
+        "nodes": nodes,
+    });
+    let encoded = serde_json::to_string_pretty(&index)
+        .map_err(|error| format!("could not encode source hierarchy: {error}"))?;
+    write_text(path, &format!("{encoded}\n"))
+}
+
+fn source_node_id(path: &str) -> String {
+    format!("source-{}", short_hash(path))
+}
+
+fn short_hash(value: &str) -> String {
+    format!("{:x}", Sha256::digest(value.as_bytes()))[..16].to_owned()
+}
+
+fn write_text(path: &Path, content: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("could not create {}: {error}", parent.display()))?;
+    }
+    fs::write(path, content).map_err(|error| format!("could not write {}: {error}", path.display()))
 }
 
 fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
@@ -321,6 +594,6 @@ fn required_arg<'a>(args: &'a [String], index: usize, option: &str) -> Result<&'
 
 fn print_help() {
     println!(
-        "Cubacadabra creator tools\n\nCommands:\n  build-game                Build a portable game package\n  create-game               Create a starter project\n  import-roblox-reference   Extract a deterministic static reference scene from Roblox XML\n  export-reference-mesh     Bake a reference-scene hierarchy into a package GLB\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games\n  cubacadabra import-roblox-reference --place Place.rbxmx --terrain PlaceTerrain.rbxmx --project default.project.json --output /tmp/reference-scene.json\n  cubacadabra export-reference-mesh --scene /tmp/reference-scene.json --output assets/models/reference.glb --path-prefix 'Folder:Place[1]/Folder:Main[1]/Model:MainIsland[1]'"
+        "Cubacadabra creator tools\n\nCommands:\n  build-game                Build a portable game package\n  create-game               Create a starter project\n  import-roblox-reference   Extract a deterministic static reference scene from Roblox XML\n  import-roblox-scene       Generate a native scene tree and complete source hierarchy index\n  export-reference-mesh     Bake a reference-scene hierarchy into a package GLB\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games\n  cubacadabra import-roblox-reference --place Place.rbxmx --terrain PlaceTerrain.rbxmx --project default.project.json --output /tmp/reference-scene.json\n  cubacadabra import-roblox-scene --reference /tmp/reference-scene.json --base-scene scene.json --output scene.json --source-index source-hierarchy.json\n  cubacadabra export-reference-mesh --scene /tmp/reference-scene.json --output assets/models/reference.glb --path-prefix 'Folder:Place[1]/Folder:Main[1]/Model:MainIsland[1]'"
     );
 }
