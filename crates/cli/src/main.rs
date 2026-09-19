@@ -16,6 +16,10 @@ use std::{
     process::ExitCode,
 };
 
+const SOURCE_INDEX_FORMAT_VERSION: u32 = 2;
+const SOURCE_SHARD_TARGET_BYTES: usize = 3 * 1024 * 1024;
+const SOURCE_SHARD_MAX_BYTES: usize = 4 * 1024 * 1024;
+
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
         Ok(()) => ExitCode::SUCCESS,
@@ -41,9 +45,110 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "--create-game" => create_command(&args[1..]),
         "import-roblox-reference" => import_roblox_reference_command(&args[1..]),
         "import-roblox-scene" => import_roblox_scene_command(&args[1..]),
+        "migrate-source-index" => migrate_source_index_command(&args[1..]),
         "export-reference-mesh" => export_reference_mesh_command(&args[1..]),
         command => Err(format!("unknown command {command:?}; use --help")),
     }
+}
+
+fn migrate_source_index_command(args: &[String]) -> Result<(), String> {
+    let mut input = None;
+    let mut output = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--input" => {
+                index += 1;
+                input = Some(PathBuf::from(required_arg(args, index, "--input")?));
+            }
+            "--output" => {
+                index += 1;
+                output = Some(PathBuf::from(required_arg(args, index, "--output")?));
+            }
+            value => return Err(format!("unknown migrate-source-index option {value}")),
+        }
+        index += 1;
+    }
+    let input = input.ok_or_else(|| "migrate-source-index requires --input".to_owned())?;
+    let output = output.ok_or_else(|| "migrate-source-index requires --output".to_owned())?;
+    let legacy: Value = serde_json::from_slice(
+        &fs::read(&input)
+            .map_err(|error| format!("could not read {}: {error}", input.display()))?,
+    )
+    .map_err(|error| format!("could not decode {}: {error}", input.display()))?;
+    if legacy.get("formatVersion").and_then(Value::as_u64) != Some(1)
+        || legacy.get("kind").and_then(Value::as_str) != Some("cubacadabra-roblox-source-hierarchy")
+    {
+        return Err(format!(
+            "{} is not a supported v1 source hierarchy index",
+            input.display()
+        ));
+    }
+    let nodes = legacy
+        .get("nodes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("{} has no v1 nodes array", input.display()))?
+        .iter()
+        .map(normalize_legacy_source_node)
+        .collect::<Result<Vec<_>, _>>()?;
+    let shard_count = write_sharded_source_index(
+        &output,
+        legacy.get("source").cloned().unwrap_or(Value::Null),
+        legacy
+            .get("instanceCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(nodes.len() as u64) as usize,
+        legacy
+            .get("geometryCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize,
+        nodes,
+    )?;
+    println!(
+        "Migrated source hierarchy: {} -> {} shard files in {}",
+        input.display(),
+        shard_count,
+        output.display()
+    );
+    Ok(())
+}
+
+fn normalize_legacy_source_node(node: &Value) -> Result<Value, String> {
+    let path = node
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "legacy source node is missing path".to_owned())?;
+    let parent_path = node.get("parentPath").and_then(Value::as_str).unwrap_or("");
+    let class = node
+        .get("class")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("legacy source node {path:?} is missing class"))?;
+    let name = node
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("legacy source node {path:?} is missing name"))?;
+    let mut normalized = json!({
+        "id": source_node_id(path),
+        "parent": if parent_path.is_empty() {
+            Value::Null
+        } else {
+            json!(source_node_id(parent_path))
+        },
+        "sourceSegment": source_segment(path),
+        "class": class,
+        "name": name,
+    });
+    if let Some(transform) = node.get("transform").filter(|value| !value.is_null()) {
+        normalized["transform"] = transform.clone();
+    }
+    if let Some(geometry_count) = node
+        .get("geometryCount")
+        .and_then(Value::as_u64)
+        .filter(|count| *count > 0)
+    {
+        normalized["geometryCount"] = json!(geometry_count);
+    }
+    Ok(normalized)
 }
 
 fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
@@ -109,8 +214,12 @@ fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
         output
             .parent()
             .unwrap_or_else(|| Path::new("."))
-            .join("source-hierarchy.json")
+            .join("imports")
+            .join("roblox")
+            .join(source_dataset_name(&reference_scene.source.place.name))
+            .join("index.json")
     });
+    let source_index_reference = source_index_reference(&output, &source_index);
     let mut scene = if let Some(path) = base_scene {
         let source = fs::read_to_string(&path)
             .map_err(|error| format!("could not read base scene {}: {error}", path.display()))?;
@@ -154,12 +263,13 @@ fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
         parent_id.as_deref(),
         tree_depth,
         &focus_paths,
+        &source_index_reference,
     );
     scene.nodes.extend(generated_ids);
     scene.validate()?;
     let scene_source = serialize_authoring_scene(&scene)?;
     write_text(&output, &scene_source)?;
-    write_source_index(&source_index, &reference_scene)?;
+    let shard_count = write_source_index(&source_index, &reference_scene)?;
     println!(
         "Imported Roblox source hierarchy: {} source nodes ({} in scene tree, depth {}, {} focus paths) -> {}",
         reference_scene.instances.len(),
@@ -178,7 +288,11 @@ fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
         focus_paths.len(),
         output.display()
     );
-    println!("  complete source index -> {}", source_index.display());
+    println!(
+        "  sharded source index ({} files) -> {}",
+        shard_count,
+        source_index.display()
+    );
     Ok(())
 }
 
@@ -188,6 +302,7 @@ fn generated_scene_nodes(
     parent_id: Option<&str>,
     tree_depth: usize,
     focus_paths: &[String],
+    source_index_reference: &str,
 ) -> Vec<AuthoringNode> {
     let mut nodes = vec![AuthoringNode {
         id: root_id.to_owned(),
@@ -209,7 +324,7 @@ fn generated_scene_nodes(
             path: None,
             properties: BTreeMap::from([
                 ("generatedBy".to_owned(), json!("import-roblox-scene")),
-                ("sourceIndex".to_owned(), json!("source-hierarchy.json")),
+                ("sourceIndex".to_owned(), json!(source_index_reference)),
                 ("instanceCount".to_owned(), json!(reference.instances.len())),
                 ("geometryCount".to_owned(), json!(reference.geometry.len())),
             ]),
@@ -279,7 +394,7 @@ fn generated_scene_nodes(
     nodes
 }
 
-fn write_source_index(path: &Path, reference: &ReferenceScene) -> Result<(), String> {
+fn write_source_index(path: &Path, reference: &ReferenceScene) -> Result<usize, String> {
     let mut geometry_by_path = BTreeMap::<&str, usize>::new();
     for geometry in &reference.geometry {
         *geometry_by_path.entry(geometry.path.as_str()).or_default() += 1;
@@ -288,28 +403,221 @@ fn write_source_index(path: &Path, reference: &ReferenceScene) -> Result<(), Str
         .instances
         .iter()
         .map(|instance| {
-            json!({
+            let geometry_count = geometry_by_path
+                .get(instance.path.as_str())
+                .copied()
+                .unwrap_or(0);
+            let mut node = json!({
                 "id": source_node_id(&instance.path),
-                "path": instance.path,
-                "parentPath": instance.parent_path,
+                "parent": if instance.parent_path.is_empty() {
+                    Value::Null
+                } else {
+                    json!(source_node_id(&instance.parent_path))
+                },
+                "sourceSegment": source_segment(&instance.path),
                 "class": instance.class,
                 "name": instance.name,
-                "transform": instance.transform,
-                "geometryCount": geometry_by_path.get(instance.path.as_str()).copied().unwrap_or(0),
-            })
+            });
+            if let Some(transform) = &instance.transform {
+                node["transform"] = json!(transform);
+            }
+            if geometry_count > 0 {
+                node["geometryCount"] = json!(geometry_count);
+            }
+            node
         })
         .collect::<Vec<_>>();
+
+    write_sharded_source_index(
+        path,
+        json!(reference.source),
+        reference.instances.len(),
+        reference.geometry.len(),
+        nodes,
+    )
+}
+
+fn write_sharded_source_index(
+    path: &Path,
+    source: Value,
+    instance_count: usize,
+    geometry_count: usize,
+    nodes: Vec<Value>,
+) -> Result<usize, String> {
+    let node_store_name = if path.file_name().and_then(|name| name.to_str()) == Some("index.json") {
+        "nodes".to_owned()
+    } else {
+        format!(
+            "{}.nodes",
+            path.file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or("source-hierarchy")
+        )
+    };
+    let node_store = path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(&node_store_name);
+    if node_store.exists() {
+        fs::remove_dir_all(&node_store)
+            .map_err(|error| format!("could not replace {}: {error}", node_store.display()))?;
+    }
+    fs::create_dir_all(&node_store)
+        .map_err(|error| format!("could not create {}: {error}", node_store.display()))?;
+
+    let shards = shard_source_nodes(&nodes)?;
+    for shard in &shards {
+        let shard_path = node_store.join(&shard.file_name);
+        if let Some(parent) = shard_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("could not create {}: {error}", parent.display()))?;
+        }
+        write_text(&shard_path, &format!("{}\n", shard.encoded))?;
+    }
+
     let index = json!({
-        "formatVersion": 1,
+        "formatVersion": SOURCE_INDEX_FORMAT_VERSION,
         "kind": "cubacadabra-roblox-source-hierarchy",
-        "source": reference.source,
-        "instanceCount": reference.instances.len(),
-        "geometryCount": reference.geometry.len(),
-        "nodes": nodes,
+        "source": source,
+        "instanceCount": instance_count,
+        "geometryCount": geometry_count,
+        "nodeStore": {
+            "kind": "sharded-json",
+            "path": node_store_name,
+            "targetBytes": SOURCE_SHARD_TARGET_BYTES,
+            "maxBytes": SOURCE_SHARD_MAX_BYTES,
+            "shards": shards.iter().map(|shard| json!({
+                "path": shard.file_name,
+                "nodeCount": shard.node_count,
+                "bytes": shard.bytes,
+            })).collect::<Vec<_>>(),
+        },
     });
     let encoded = serde_json::to_string_pretty(&index)
         .map_err(|error| format!("could not encode source hierarchy: {error}"))?;
-    write_text(path, &format!("{encoded}\n"))
+    write_text(path, &format!("{encoded}\n"))?;
+    Ok(shards.len())
+}
+
+struct SourceShard {
+    file_name: String,
+    node_count: usize,
+    bytes: usize,
+    encoded: String,
+}
+
+fn shard_source_nodes(nodes: &[Value]) -> Result<Vec<SourceShard>, String> {
+    let mut buckets = BTreeMap::<String, Vec<Value>>::new();
+    for node in nodes {
+        let id = node
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "source node is missing a string id".to_owned())?;
+        let prefix = id
+            .strip_prefix("source-")
+            .and_then(|value| value.chars().next())
+            .ok_or_else(|| format!("source node id {id:?} has no hash prefix"))?;
+        buckets
+            .entry(prefix.to_string())
+            .or_default()
+            .push(node.clone());
+    }
+
+    let mut shards = Vec::new();
+    for (prefix, nodes) in buckets {
+        split_source_bucket(prefix, nodes, &mut shards)?;
+    }
+    Ok(shards)
+}
+
+fn split_source_bucket(
+    prefix: String,
+    nodes: Vec<Value>,
+    shards: &mut Vec<SourceShard>,
+) -> Result<(), String> {
+    let encoded = serde_json::to_string_pretty(&nodes)
+        .map_err(|error| format!("could not encode source shard {prefix}: {error}"))?;
+    let bytes = encoded.len() + 1;
+    if bytes <= SOURCE_SHARD_TARGET_BYTES || prefix.len() >= 16 {
+        if bytes > SOURCE_SHARD_MAX_BYTES {
+            return Err(format!(
+                "source shard {prefix} is {} bytes, above the {} byte limit",
+                bytes, SOURCE_SHARD_MAX_BYTES
+            ));
+        }
+        let file_name = if prefix.len() == 1 {
+            format!("{prefix}.json")
+        } else {
+            format!("{}/{prefix}.json", &prefix[..1])
+        };
+        shards.push(SourceShard {
+            file_name,
+            node_count: nodes.len(),
+            bytes,
+            encoded,
+        });
+        return Ok(());
+    }
+
+    let next_index = prefix.len();
+    let mut children = BTreeMap::<char, Vec<Value>>::new();
+    for node in nodes {
+        let id = node
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "source node is missing a string id".to_owned())?;
+        let hash = id
+            .strip_prefix("source-")
+            .ok_or_else(|| format!("source node id {id:?} has no hash prefix"))?;
+        let next = hash
+            .chars()
+            .nth(next_index)
+            .ok_or_else(|| format!("source node id {id:?} has a short hash"))?;
+        children.entry(next).or_default().push(node);
+    }
+    for (next, child_nodes) in children {
+        split_source_bucket(format!("{prefix}{next}"), child_nodes, shards)?;
+    }
+    Ok(())
+}
+
+fn source_segment(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
+}
+
+fn source_dataset_name(place_name: &str) -> String {
+    let stem = Path::new(place_name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(place_name);
+    let sanitized = stem
+        .chars()
+        .map(|value| {
+            if value.is_ascii_alphanumeric() || matches!(value, '-' | '_') {
+                value
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if sanitized.is_empty() {
+        "import".to_owned()
+    } else {
+        sanitized
+    }
+}
+
+fn source_index_reference(scene_path: &Path, source_index: &Path) -> String {
+    let base = scene_path.parent().unwrap_or_else(|| Path::new("."));
+    let value = if source_index.is_absolute() {
+        source_index
+            .strip_prefix(base)
+            .unwrap_or(source_index)
+            .to_path_buf()
+    } else {
+        source_index.to_path_buf()
+    };
+    value.to_string_lossy().replace('\\', "/")
 }
 
 fn source_node_id(path: &str) -> String {
@@ -615,6 +923,78 @@ fn required_arg<'a>(args: &'a [String], index: usize, option: &str) -> Result<&'
 
 fn print_help() {
     println!(
-        "Cubacadabra creator tools\n\nCommands:\n  build-game                Build a portable game package\n  create-game               Create a starter project\n  import-roblox-reference   Extract a deterministic static reference scene from Roblox XML\n  import-roblox-scene       Generate a native scene tree and complete source hierarchy index\n  export-reference-mesh     Bake a reference-scene hierarchy into a package GLB\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games\n  cubacadabra import-roblox-reference --place Place.rbxmx --terrain PlaceTerrain.rbxmx --project default.project.json --output /tmp/reference-scene.json\n  cubacadabra import-roblox-scene --reference /tmp/reference-scene.json --base-scene scene.json --output scene.json --source-index source-hierarchy.json\n  cubacadabra export-reference-mesh --scene /tmp/reference-scene.json --output assets/models/reference.glb --path-prefix 'Folder:Place[1]/Folder:Main[1]/Model:MainIsland[1]'"
+        "Cubacadabra creator tools\n\nCommands:\n  build-game                Build a portable game package\n  create-game               Create a starter project\n  import-roblox-reference   Extract a deterministic static reference scene from Roblox XML\n  import-roblox-scene       Generate a native scene tree and sharded source hierarchy index\n  migrate-source-index      Migrate a v1 source hierarchy into sharded JSON\n  export-reference-mesh     Bake a reference-scene hierarchy into a package GLB\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games\n  cubacadabra import-roblox-reference --place Place.rbxmx --terrain PlaceTerrain.rbxmx --project default.project.json --output /tmp/reference-scene.json\n  cubacadabra import-roblox-scene --reference /tmp/reference-scene.json --base-scene scene.json --output scene.json --source-index imports/roblox/place/index.json\n  cubacadabra migrate-source-index --input source-hierarchy.json --output imports/roblox/place/index.json\n  cubacadabra export-reference-mesh --scene /tmp/reference-scene.json --output assets/models/reference.glb --path-prefix 'Folder:Place[1]/Folder:Main[1]/Model:MainIsland[1]'"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_records_store_parent_ids_and_local_segments() {
+        let nodes = vec![
+            json!({
+                "id": "source-0123456789abcdef",
+                "parent": Value::Null,
+                "sourceSegment": "Workspace:Workspace[1]",
+                "class": "Workspace",
+                "name": "Workspace",
+                "geometryCount": 0,
+            }),
+            json!({
+                "id": "source-abcdef0123456789",
+                "parent": "source-0123456789abcdef",
+                "sourceSegment": "Model:Casino[1]",
+                "class": "Model",
+                "name": "Casino",
+                "geometryCount": 0,
+            }),
+        ];
+        let shards = shard_source_nodes(&nodes).unwrap();
+        assert_eq!(shards.len(), 2);
+        assert!(
+            shards
+                .iter()
+                .all(|shard| shard.bytes <= SOURCE_SHARD_MAX_BYTES)
+        );
+        assert!(
+            shards
+                .iter()
+                .all(|shard| !shard.encoded.contains("parentPath"))
+        );
+        assert!(
+            shards
+                .iter()
+                .all(|shard| !shard.encoded.contains("Workspace:Workspace[1]/Model"))
+        );
+    }
+
+    #[test]
+    fn source_dataset_name_is_stable_and_safe_for_paths() {
+        assert_eq!(source_dataset_name("vegas.rbxlx"), "vegas");
+        assert_eq!(
+            source_dataset_name("Vegas Place (copy).rbxlx"),
+            "Vegas_Place__copy_"
+        );
+        assert_eq!(source_dataset_name(""), "import");
+    }
+
+    #[test]
+    fn source_index_reference_is_relative_to_scene() {
+        assert_eq!(
+            source_index_reference(
+                Path::new("/tmp/project/scene.json"),
+                Path::new("/tmp/project/imports/roblox/vegas/index.json"),
+            ),
+            "imports/roblox/vegas/index.json"
+        );
+        assert_eq!(
+            source_index_reference(
+                Path::new("scene.json"),
+                Path::new("imports/roblox/vegas/index.json"),
+            ),
+            "imports/roblox/vegas/index.json"
+        );
+    }
 }
