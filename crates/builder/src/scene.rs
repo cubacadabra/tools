@@ -1,0 +1,469 @@
+//! The project-owned authoring scene format.
+//!
+//! This is deliberately an entity/component document rather than a copy of
+//! Roblox's class hierarchy.  The builder is the adapter between this
+//! editable source and the compact runtime manifest.
+
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value, json};
+use std::collections::{BTreeMap, BTreeSet};
+
+pub const AUTHORING_SCENE_FORMAT_VERSION: u32 = 1;
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthoringScene {
+    pub format_version: u32,
+    pub nodes: Vec<AuthoringNode>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthoringNode {
+    pub id: String,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    pub name: String,
+    #[serde(default)]
+    pub transform: Transform,
+    #[serde(default)]
+    pub components: BTreeMap<String, Value>,
+    #[serde(default)]
+    pub editor: EditorMetadata,
+    #[serde(default)]
+    pub source: Option<SourceMetadata>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct Transform {
+    #[serde(default)]
+    pub position: [f32; 3],
+    #[serde(default)]
+    pub rotation: [f32; 3],
+    #[serde(default = "identity_scale")]
+    pub scale: [f32; 3],
+}
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self {
+            position: [0.0; 3],
+            rotation: [0.0; 3],
+            scale: identity_scale(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorMetadata {
+    #[serde(default = "default_true")]
+    pub visible: bool,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default)]
+    pub lock_reason: Option<String>,
+}
+
+impl Default for EditorMetadata {
+    fn default() -> Self {
+        Self {
+            visible: true,
+            locked: false,
+            lock_reason: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceMetadata {
+    pub format: String,
+    #[serde(default)]
+    pub class: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(flatten)]
+    pub properties: BTreeMap<String, Value>,
+}
+
+fn identity_scale() -> [f32; 3] {
+    [1.0; 3]
+}
+
+fn default_true() -> bool {
+    true
+}
+
+pub fn parse_authoring_scene(source: &str) -> Result<AuthoringScene, String> {
+    let scene: AuthoringScene = serde_json::from_str(source)
+        .map_err(|error| format!("could not parse scene.json: {error}"))?;
+    scene.validate()?;
+    Ok(scene)
+}
+
+pub fn serialize_authoring_scene(scene: &AuthoringScene) -> Result<String, String> {
+    scene.validate()?;
+    serde_json::to_string_pretty(scene)
+        .map(|source| format!("{source}\n"))
+        .map_err(|error| format!("could not serialize scene.json: {error}"))
+}
+
+impl AuthoringScene {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.format_version != AUTHORING_SCENE_FORMAT_VERSION {
+            return Err(format!(
+                "scene formatVersion must be {AUTHORING_SCENE_FORMAT_VERSION}, found {}",
+                self.format_version
+            ));
+        }
+
+        let mut ids = BTreeSet::new();
+        for node in &self.nodes {
+            if node.id.trim().is_empty() {
+                return Err(format!("scene node {:?} has an empty id", node.name));
+            }
+            if node.name.trim().is_empty() {
+                return Err(format!("scene node {} has an empty name", node.id));
+            }
+            if !ids.insert(node.id.clone()) {
+                return Err(format!(
+                    "scene node id {:?} is duplicated (name {:?})",
+                    node.id, node.name
+                ));
+            }
+            validate_transform(node)?;
+            validate_components(node)?;
+        }
+        for node in &self.nodes {
+            if let Some(parent_id) = &node.parent_id
+                && !ids.contains(parent_id)
+            {
+                return Err(format!(
+                    "scene node {} ({}) refers to missing parent {}",
+                    node.id, node.name, parent_id
+                ));
+            }
+        }
+        for node in &self.nodes {
+            let mut seen = BTreeSet::new();
+            let mut current = Some(node.id.as_str());
+            while let Some(id) = current {
+                if !seen.insert(id) {
+                    return Err(format!(
+                        "scene node {} ({}) is part of a parent cycle",
+                        node.id, node.name
+                    ));
+                }
+                current = self
+                    .nodes
+                    .iter()
+                    .find(|candidate| candidate.id == id)
+                    .and_then(|candidate| candidate.parent_id.as_deref());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn node(&self, id: &str) -> Option<&AuthoringNode> {
+        self.nodes.iter().find(|node| node.id == id)
+    }
+
+    pub fn node_mut(&mut self, id: &str) -> Option<&mut AuthoringNode> {
+        self.nodes.iter_mut().find(|node| node.id == id)
+    }
+
+    pub fn set_position(&mut self, id: &str, position: [f32; 3]) -> Result<[f32; 3], String> {
+        if position.iter().any(|value| !value.is_finite()) {
+            return Err(format!(
+                "scene node {id} position must contain finite values"
+            ));
+        }
+        let node = self
+            .node_mut(id)
+            .ok_or_else(|| format!("scene node {id} was not found"))?;
+        if node.editor.locked {
+            return Err(format!(
+                "scene node {} ({}) is locked{}",
+                node.id,
+                node.name,
+                node.editor
+                    .lock_reason
+                    .as_deref()
+                    .map(|reason| format!(": {reason}"))
+                    .unwrap_or_default()
+            ));
+        }
+        let previous = node.transform.position;
+        node.transform.position = position;
+        Ok(previous)
+    }
+
+    /// Expand the supported component combinations into the existing runtime
+    /// manifest. Unknown components are rejected rather than being silently
+    /// dropped from a build.
+    pub fn compile_into_manifest(&self, manifest: &mut Value) -> Result<(), String> {
+        self.validate()?;
+        let world_id = manifest
+            .get("launch")
+            .and_then(|launch| launch.get("destinationWorld"))
+            .and_then(Value::as_str)
+            .or_else(|| manifest.get("startWorld").and_then(Value::as_str))
+            .unwrap_or("lobby")
+            .to_owned();
+        let world = if world_id == "lobby" {
+            manifest
+        } else {
+            manifest
+                .get_mut("worlds")
+                .and_then(Value::as_object_mut)
+                .and_then(|worlds| worlds.get_mut(&world_id))
+                .ok_or_else(|| format!("scene target world {world_id:?} was not found"))?
+        };
+        let world = world
+            .as_object_mut()
+            .ok_or_else(|| format!("scene target world {world_id:?} must be an object"))?;
+
+        let mut decorations = Vec::new();
+        let mut signs = Vec::new();
+        let mut interactions = Vec::new();
+        for node in &self.nodes {
+            if !node.editor.visible {
+                continue;
+            }
+            let position = self.world_position(node)?;
+            if let Some(render) = node.components.get("render") {
+                let render = render
+                    .as_object()
+                    .ok_or_else(|| component_error(node, "render must be an object"))?;
+                if let Some(mesh) = render.get("mesh").and_then(Value::as_str) {
+                    let scale = node.transform.scale;
+                    let uniform_scale = if scale[0] == scale[1] && scale[1] == scale[2] {
+                        scale[0]
+                    } else {
+                        return Err(component_error(
+                            node,
+                            "non-uniform render scale is not supported by the runtime mesh adapter",
+                        ));
+                    };
+                    decorations.push(json!({
+                        "kind": "mesh",
+                        "asset": mesh,
+                        "position": position,
+                        "scale": uniform_scale,
+                        "color": render.get("color").cloned().unwrap_or_else(|| json!("#FFFFFF")),
+                    }));
+                }
+            }
+            if let Some(text) = node.components.get("text") {
+                let text = text
+                    .as_object()
+                    .ok_or_else(|| component_error(node, "text must be an object"))?;
+                let mut sign = Map::new();
+                sign.insert(
+                    "text".to_owned(),
+                    text.get("text")
+                        .cloned()
+                        .unwrap_or_else(|| json!(node.name)),
+                );
+                sign.insert("position".to_owned(), json!(position));
+                copy_component_value(text, &mut sign, "maxWidth");
+                copy_component_value(text, &mut sign, "color");
+                signs.push(Value::Object(sign));
+            }
+            if let Some(interaction) = node.components.get("interaction") {
+                let interaction = interaction
+                    .as_object()
+                    .ok_or_else(|| component_error(node, "interaction must be an object"))?;
+                let mut output = Map::new();
+                output.insert(
+                    "id".to_owned(),
+                    interaction
+                        .get("id")
+                        .cloned()
+                        .unwrap_or_else(|| Value::String(node.id.clone())),
+                );
+                output.insert(
+                    "kind".to_owned(),
+                    interaction
+                        .get("kind")
+                        .cloned()
+                        .unwrap_or_else(|| json!("zone")),
+                );
+                output.insert(
+                    "label".to_owned(),
+                    interaction
+                        .get("label")
+                        .cloned()
+                        .unwrap_or_else(|| Value::String(node.name.clone())),
+                );
+                output.insert("position".to_owned(), json!(position));
+                for key in ["radius", "color", "visual"] {
+                    copy_component_value(interaction, &mut output, key);
+                }
+                interactions.push(Value::Object(output));
+            }
+        }
+        world.insert("decorations".to_owned(), Value::Array(decorations));
+        world.insert("signs".to_owned(), Value::Array(signs));
+        world.insert("interactions".to_owned(), Value::Array(interactions));
+        Ok(())
+    }
+
+    fn world_position(&self, node: &AuthoringNode) -> Result<[f32; 3], String> {
+        let mut position = [0.0; 3];
+        let mut current = Some(node);
+        while let Some(node) = current {
+            for (index, value) in node.transform.position.into_iter().enumerate() {
+                position[index] += value;
+            }
+            current = node
+                .parent_id
+                .as_deref()
+                .and_then(|parent| self.node(parent));
+        }
+        Ok(position)
+    }
+}
+
+fn validate_transform(node: &AuthoringNode) -> Result<(), String> {
+    let values = node
+        .transform
+        .position
+        .into_iter()
+        .chain(node.transform.rotation)
+        .chain(node.transform.scale);
+    if values.clone().any(|value| !value.is_finite()) {
+        return Err(format!(
+            "scene node {} ({}) has a non-finite transform",
+            node.id, node.name
+        ));
+    }
+    Ok(())
+}
+
+fn validate_components(node: &AuthoringNode) -> Result<(), String> {
+    for (name, value) in &node.components {
+        if !matches!(name.as_str(), "render" | "text" | "interaction") {
+            return Err(format!(
+                "scene node {} ({}) uses unsupported component {:?}",
+                node.id, node.name, name
+            ));
+        }
+        if !value.is_object() {
+            return Err(component_error(node, &format!("{name} must be an object")));
+        }
+        if name == "render"
+            && value
+                .get("mesh")
+                .and_then(Value::as_str)
+                .is_none_or(|mesh| mesh.trim().is_empty())
+        {
+            return Err(component_error(
+                node,
+                "render component requires a non-empty mesh asset",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn component_error(node: &AuthoringNode, message: &str) -> String {
+    format!("scene node {} ({}) {message}", node.id, node.name)
+}
+
+fn copy_component_value(source: &Map<String, Value>, target: &mut Map<String, Value>, key: &str) {
+    if let Some(value) = source.get(key) {
+        target.insert(key.to_owned(), value.clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn node(id: &str, parent_id: Option<&str>) -> AuthoringNode {
+        AuthoringNode {
+            id: id.to_owned(),
+            parent_id: parent_id.map(str::to_owned),
+            name: id.to_owned(),
+            transform: Transform::default(),
+            components: BTreeMap::new(),
+            editor: EditorMetadata::default(),
+            source: None,
+        }
+    }
+
+    #[test]
+    fn duplicate_ids_are_rejected() {
+        let mut scene = AuthoringScene {
+            format_version: 1,
+            nodes: vec![node("same", None), node("same", None)],
+        };
+        let error = scene.validate().unwrap_err();
+        assert!(error.contains("same"));
+        scene.nodes[1].id = "other".to_owned();
+        assert!(scene.validate().is_ok());
+    }
+
+    #[test]
+    fn missing_parent_and_cycle_are_rejected() {
+        let mut scene = AuthoringScene {
+            format_version: 1,
+            nodes: vec![node("child", Some("missing"))],
+        };
+        assert!(scene.validate().unwrap_err().contains("missing parent"));
+        scene.nodes = vec![node("a", Some("b")), node("b", Some("a"))];
+        assert!(scene.validate().unwrap_err().contains("cycle"));
+    }
+
+    #[test]
+    fn serialization_is_deterministic_and_position_is_undoable_by_caller() {
+        let scene = AuthoringScene {
+            format_version: 1,
+            nodes: vec![node("root", None)],
+        };
+        let first = serialize_authoring_scene(&scene).unwrap();
+        let reloaded = parse_authoring_scene(&first).unwrap();
+        let second = serialize_authoring_scene(&reloaded).unwrap();
+        assert_eq!(first, second);
+        let mut edited = reloaded.clone();
+        let old = edited.set_position("root", [5.0, 0.0, 0.0]).unwrap();
+        assert_eq!(old, [0.0; 3]);
+        assert_eq!(
+            edited.node("root").unwrap().transform.position,
+            [5.0, 0.0, 0.0]
+        );
+    }
+
+    #[test]
+    fn components_compile_to_the_existing_runtime_collections() {
+        let mut mesh = node("mesh", Some("root"));
+        mesh.components
+            .insert("render".to_owned(), json!({ "mesh": "casino" }));
+        let mut sign = node("sign", Some("root"));
+        sign.transform.position = [1.0, 2.0, 3.0];
+        sign.components.insert(
+            "text".to_owned(),
+            json!({ "text": "TABLES", "maxWidth": 8, "color": "butter" }),
+        );
+        let mut interaction = node("interaction", Some("root"));
+        interaction.components.insert(
+            "interaction".to_owned(),
+            json!({ "id": "table", "label": "PLAY", "radius": 7.5 }),
+        );
+        let scene = AuthoringScene {
+            format_version: 1,
+            nodes: vec![node("root", None), mesh, sign, interaction],
+        };
+        let mut manifest = json!({
+            "startWorld": "world",
+            "worlds": { "world": {} }
+        });
+        scene.compile_into_manifest(&mut manifest).unwrap();
+        let world = &manifest["worlds"]["world"];
+        assert_eq!(world["decorations"][0]["asset"], "casino");
+        assert_eq!(world["signs"][0]["text"], "TABLES");
+        assert_eq!(world["interactions"][0]["id"], "table");
+    }
+}

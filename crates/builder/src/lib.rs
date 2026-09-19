@@ -16,6 +16,12 @@ use std::{
 
 mod collision;
 mod maze;
+mod scene;
+
+pub use scene::{
+    AUTHORING_SCENE_FORMAT_VERSION, AuthoringNode, AuthoringScene, EditorMetadata, SourceMetadata,
+    Transform, parse_authoring_scene, serialize_authoring_scene,
+};
 
 const PREVIEW_SDK_VERSION: &str = "0.3.0";
 const TERRAIN_SDK_VERSION: &str = "0.4.0";
@@ -122,6 +128,18 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
     validate_output(&output, &source_root)?;
 
     let mut manifest = read_json(&manifest_path)?;
+    if let Some(scene_path) = manifest_path
+        .parent()
+        .map(|parent| parent.join("scene.json"))
+        && scene_path.is_file()
+    {
+        let source =
+            fs::read_to_string(&scene_path).map_err(io_error("could not read scene.json"))?;
+        let scene = parse_authoring_scene(&source).map_err(BuildError)?;
+        scene
+            .compile_into_manifest(&mut manifest)
+            .map_err(BuildError)?;
+    }
     let manifest = manifest
         .as_object_mut()
         .ok_or_else(|| BuildError("manifest must contain a JSON object".to_owned()))?;
