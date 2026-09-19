@@ -4,6 +4,7 @@
 //! Roblox's class hierarchy.  The builder is the adapter between this
 //! editable source and the compact runtime manifest.
 
+use glam::{Affine3A, EulerRot, Quat, Vec3};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,6 +15,8 @@ pub const AUTHORING_SCENE_FORMAT_VERSION: u32 = 1;
 #[serde(rename_all = "camelCase")]
 pub struct AuthoringScene {
     pub format_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_id: Option<String>,
     pub nodes: Vec<AuthoringNode>,
 }
 
@@ -41,6 +44,16 @@ pub struct Transform {
     #[serde(default)]
     pub rotation: [f32; 3],
     #[serde(default = "identity_scale")]
+    pub scale: [f32; 3],
+}
+
+/// The derived world-space transform used by both the builder and Studio.
+/// Authoring rotations are XYZ Euler angles in radians; serialized position
+/// and scale remain ordinary world units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AuthoringWorldTransform {
+    pub position: [f32; 3],
+    pub rotation: [f32; 3],
     pub scale: [f32; 3],
 }
 
@@ -119,6 +132,7 @@ impl AuthoringScene {
         }
 
         let mut ids = BTreeSet::new();
+        let mut nodes_by_id = BTreeMap::new();
         for node in &self.nodes {
             if node.id.trim().is_empty() {
                 return Err(format!("scene node {:?} has an empty id", node.name));
@@ -134,6 +148,7 @@ impl AuthoringScene {
             }
             validate_transform(node)?;
             validate_components(node)?;
+            nodes_by_id.insert(node.id.as_str(), node);
         }
         for node in &self.nodes {
             if let Some(parent_id) = &node.parent_id
@@ -145,24 +160,116 @@ impl AuthoringScene {
                 ));
             }
         }
+        let mut state = BTreeMap::<&str, u8>::new();
         for node in &self.nodes {
-            let mut seen = BTreeSet::new();
-            let mut current = Some(node.id.as_str());
-            while let Some(id) = current {
-                if !seen.insert(id) {
+            if state.get(node.id.as_str()) == Some(&2) {
+                continue;
+            }
+            let mut path = Vec::new();
+            let mut current = node.id.as_str();
+            loop {
+                if state.get(current) == Some(&2) {
+                    break;
+                }
+                if state.get(current) == Some(&1) {
                     return Err(format!(
                         "scene node {} ({}) is part of a parent cycle",
                         node.id, node.name
                     ));
                 }
-                current = self
-                    .nodes
-                    .iter()
-                    .find(|candidate| candidate.id == id)
-                    .and_then(|candidate| candidate.parent_id.as_deref());
+                state.insert(current, 1);
+                path.push(current);
+                let Some(parent_id) = nodes_by_id
+                    .get(current)
+                    .and_then(|candidate| candidate.parent_id.as_deref())
+                else {
+                    break;
+                };
+                current = parent_id;
+            }
+            for id in path {
+                state.insert(id, 2);
             }
         }
         Ok(())
+    }
+
+    fn index(&self) -> Result<BTreeMap<&str, &AuthoringNode>, String> {
+        let mut nodes = BTreeMap::new();
+        for node in &self.nodes {
+            if nodes.insert(node.id.as_str(), node).is_some() {
+                return Err(format!(
+                    "scene node id {:?} is duplicated (name {:?})",
+                    node.id, node.name
+                ));
+            }
+        }
+        Ok(nodes)
+    }
+
+    pub fn world_transform(&self, id: &str) -> Result<AuthoringWorldTransform, String> {
+        self.world_transforms()?
+            .remove(id)
+            .ok_or_else(|| format!("scene node {id} was not found"))
+    }
+
+    pub fn world_transforms(&self) -> Result<BTreeMap<String, AuthoringWorldTransform>, String> {
+        let nodes = self.index()?;
+        let mut cache = BTreeMap::new();
+        self.nodes
+            .iter()
+            .map(|node| {
+                self.world_affine(&node.id, &nodes, &mut cache)
+                    .map(|transform| (node.id.clone(), affine_transform(transform)))
+            })
+            .collect()
+    }
+
+    pub fn local_position_for_world(
+        &self,
+        id: &str,
+        world_position: [f32; 3],
+    ) -> Result<[f32; 3], String> {
+        if world_position.iter().any(|value| !value.is_finite()) {
+            return Err(format!(
+                "scene node {id} position must contain finite values"
+            ));
+        }
+        let nodes = self.index()?;
+        let node = nodes
+            .get(id)
+            .ok_or_else(|| format!("scene node {id} was not found"))?;
+        let Some(parent_id) = node.parent_id.as_deref() else {
+            return Ok(world_position);
+        };
+        let mut cache = BTreeMap::new();
+        let parent = self.world_affine(parent_id, &nodes, &mut cache)?;
+        Ok(parent
+            .inverse()
+            .transform_point3(Vec3::from_array(world_position))
+            .to_array())
+    }
+
+    fn world_affine<'a>(
+        &'a self,
+        id: &str,
+        nodes: &BTreeMap<&str, &AuthoringNode>,
+        cache: &mut BTreeMap<String, Affine3A>,
+    ) -> Result<Affine3A, String> {
+        if let Some(transform) = cache.get(id) {
+            return Ok(*transform);
+        }
+        let node = nodes
+            .get(id)
+            .ok_or_else(|| format!("scene node {id} was not found"))?;
+        let local = local_affine(&node.transform);
+        let world = if let Some(parent_id) = node.parent_id.as_deref() {
+            self.world_affine(parent_id, nodes, cache)? * local
+        } else {
+            local
+        };
+        cache.insert(id.to_owned(), world);
+        Ok(world)
     }
 
     pub fn node(&self, id: &str) -> Option<&AuthoringNode> {
@@ -211,6 +318,13 @@ impl AuthoringScene {
             .or_else(|| manifest.get("startWorld").and_then(Value::as_str))
             .unwrap_or("lobby")
             .to_owned();
+        if let Some(scene_world_id) = self.world_id.as_deref()
+            && scene_world_id != world_id
+        {
+            return Err(format!(
+                "scene.json worldId {scene_world_id:?} does not match manifest world {world_id:?}"
+            ));
+        }
         let world = if world_id == "lobby" {
             manifest
         } else {
@@ -227,18 +341,23 @@ impl AuthoringScene {
         let mut decorations = Vec::new();
         let mut signs = Vec::new();
         let mut interactions = Vec::new();
+        let nodes = self.index()?;
+        let mut world_cache = BTreeMap::new();
         for node in &self.nodes {
             if !node.editor.visible {
                 continue;
             }
-            let position = self.world_position(node)?;
+            let world = self.world_affine(&node.id, &nodes, &mut world_cache)?;
+            let world_transform = affine_transform(world);
             if let Some(render) = node.components.get("render") {
                 let render = render
                     .as_object()
                     .ok_or_else(|| component_error(node, "render must be an object"))?;
                 if let Some(mesh) = render.get("mesh").and_then(Value::as_str) {
-                    let scale = node.transform.scale;
-                    let uniform_scale = if scale[0] == scale[1] && scale[1] == scale[2] {
+                    let scale = world_transform.scale;
+                    let uniform_scale = if approximately_equal(scale[0], scale[1])
+                        && approximately_equal(scale[1], scale[2])
+                    {
                         scale[0]
                     } else {
                         return Err(component_error(
@@ -246,11 +365,20 @@ impl AuthoringScene {
                             "non-uniform render scale is not supported by the runtime mesh adapter",
                         ));
                     };
+                    if world_transform.rotation[0].abs() > 0.0001
+                        || world_transform.rotation[2].abs() > 0.0001
+                    {
+                        return Err(component_error(
+                            node,
+                            "render rotation is limited to the runtime mesh adapter's Y axis",
+                        ));
+                    }
                     decorations.push(json!({
                         "kind": "mesh",
                         "asset": mesh,
-                        "position": position,
+                        "position": world_transform.position,
                         "scale": uniform_scale,
+                        "yaw": world_transform.rotation[1],
                         "color": render.get("color").cloned().unwrap_or_else(|| json!("#FFFFFF")),
                     }));
                 }
@@ -266,7 +394,7 @@ impl AuthoringScene {
                         .cloned()
                         .unwrap_or_else(|| json!(node.name)),
                 );
-                sign.insert("position".to_owned(), json!(position));
+                sign.insert("position".to_owned(), json!(world_transform.position));
                 copy_component_value(text, &mut sign, "maxWidth");
                 copy_component_value(text, &mut sign, "color");
                 signs.push(Value::Object(sign));
@@ -297,7 +425,7 @@ impl AuthoringScene {
                         .cloned()
                         .unwrap_or_else(|| Value::String(node.name.clone())),
                 );
-                output.insert("position".to_owned(), json!(position));
+                output.insert("position".to_owned(), json!(world_transform.position));
                 for key in ["radius", "color", "visual"] {
                     copy_component_value(interaction, &mut output, key);
                 }
@@ -309,21 +437,33 @@ impl AuthoringScene {
         world.insert("interactions".to_owned(), Value::Array(interactions));
         Ok(())
     }
+}
 
-    fn world_position(&self, node: &AuthoringNode) -> Result<[f32; 3], String> {
-        let mut position = [0.0; 3];
-        let mut current = Some(node);
-        while let Some(node) = current {
-            for (index, value) in node.transform.position.into_iter().enumerate() {
-                position[index] += value;
-            }
-            current = node
-                .parent_id
-                .as_deref()
-                .and_then(|parent| self.node(parent));
-        }
-        Ok(position)
+fn local_affine(transform: &Transform) -> Affine3A {
+    Affine3A::from_scale_rotation_translation(
+        Vec3::from_array(transform.scale),
+        Quat::from_euler(
+            EulerRot::XYZ,
+            transform.rotation[0],
+            transform.rotation[1],
+            transform.rotation[2],
+        ),
+        Vec3::from_array(transform.position),
+    )
+}
+
+fn affine_transform(transform: Affine3A) -> AuthoringWorldTransform {
+    let (scale, rotation, position) = transform.to_scale_rotation_translation();
+    let (x, y, z) = rotation.to_euler(EulerRot::XYZ);
+    AuthoringWorldTransform {
+        position: position.to_array(),
+        rotation: [x, y, z],
+        scale: scale.to_array(),
     }
+}
+
+fn approximately_equal(left: f32, right: f32) -> bool {
+    (left - right).abs() <= 0.0001
 }
 
 fn validate_transform(node: &AuthoringNode) -> Result<(), String> {
@@ -398,6 +538,7 @@ mod tests {
     fn duplicate_ids_are_rejected() {
         let mut scene = AuthoringScene {
             format_version: 1,
+            world_id: None,
             nodes: vec![node("same", None), node("same", None)],
         };
         let error = scene.validate().unwrap_err();
@@ -410,6 +551,7 @@ mod tests {
     fn missing_parent_and_cycle_are_rejected() {
         let mut scene = AuthoringScene {
             format_version: 1,
+            world_id: None,
             nodes: vec![node("child", Some("missing"))],
         };
         assert!(scene.validate().unwrap_err().contains("missing parent"));
@@ -421,6 +563,7 @@ mod tests {
     fn serialization_is_deterministic_and_position_is_undoable_by_caller() {
         let scene = AuthoringScene {
             format_version: 1,
+            world_id: None,
             nodes: vec![node("root", None)],
         };
         let first = serialize_authoring_scene(&scene).unwrap();
@@ -433,6 +576,34 @@ mod tests {
         assert_eq!(
             edited.node("root").unwrap().transform.position,
             [5.0, 0.0, 0.0]
+        );
+    }
+
+    #[test]
+    fn world_transforms_compose_parent_rotation_scale_and_inverse_position() {
+        let mut root = node("root", None);
+        root.transform.position = [10.0, 0.0, 4.0];
+        root.transform.rotation = [0.0, std::f32::consts::FRAC_PI_2, 0.0];
+        root.transform.scale = [2.0, 2.0, 2.0];
+        let mut child = node("child", Some("root"));
+        child.transform.position = [1.0, 0.0, 0.0];
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: None,
+            nodes: vec![root, child],
+        };
+
+        let world = scene.world_transform("child").unwrap();
+        assert!((world.position[0] - 10.0).abs() < 0.0001);
+        assert!((world.position[2] - 2.0).abs() < 0.0001);
+        let local = scene
+            .local_position_for_world("child", world.position)
+            .unwrap();
+        assert!(
+            local
+                .into_iter()
+                .zip([1.0, 0.0, 0.0])
+                .all(|(actual, expected)| (actual - expected).abs() < 0.0001)
         );
     }
 
@@ -454,6 +625,7 @@ mod tests {
         );
         let scene = AuthoringScene {
             format_version: 1,
+            world_id: None,
             nodes: vec![node("root", None), mesh, sign, interaction],
         };
         let mut manifest = json!({

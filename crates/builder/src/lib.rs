@@ -19,8 +19,8 @@ mod maze;
 mod scene;
 
 pub use scene::{
-    AUTHORING_SCENE_FORMAT_VERSION, AuthoringNode, AuthoringScene, EditorMetadata, SourceMetadata,
-    Transform, parse_authoring_scene, serialize_authoring_scene,
+    AUTHORING_SCENE_FORMAT_VERSION, AuthoringNode, AuthoringScene, AuthoringWorldTransform,
+    EditorMetadata, SourceMetadata, Transform, parse_authoring_scene, serialize_authoring_scene,
 };
 
 const PREVIEW_SDK_VERSION: &str = "0.3.0";
