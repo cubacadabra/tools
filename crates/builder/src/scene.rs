@@ -24,7 +24,7 @@ pub struct AuthoringScene {
 #[serde(rename_all = "camelCase")]
 pub struct AuthoringNode {
     pub id: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
     pub name: String,
     #[serde(default)]
@@ -33,7 +33,7 @@ pub struct AuthoringNode {
     pub components: BTreeMap<String, Value>,
     #[serde(default)]
     pub editor: EditorMetadata,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceMetadata>,
 }
 
@@ -74,7 +74,7 @@ pub struct EditorMetadata {
     pub visible: bool,
     #[serde(default)]
     pub locked: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lock_reason: Option<String>,
 }
 
@@ -92,9 +92,9 @@ impl Default for EditorMetadata {
 #[serde(rename_all = "camelCase")]
 pub struct SourceMetadata {
     pub format: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub class: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     #[serde(flatten)]
     pub properties: BTreeMap<String, Value>,
@@ -577,6 +577,47 @@ mod tests {
             edited.node("root").unwrap().transform.position,
             [5.0, 0.0, 0.0]
         );
+    }
+
+    #[test]
+    fn serialization_omits_implicit_optional_metadata() {
+        let source = r#"{
+  "formatVersion": 1,
+  "nodes": [{
+    "id": "root",
+    "name": "Root",
+    "transform": {
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1]
+    },
+    "components": {},
+    "editor": {
+      "visible": true,
+      "locked": false
+    },
+    "source": {
+      "format": "roblox"
+    }
+  }]
+}"#;
+
+        let scene = parse_authoring_scene(source).unwrap();
+        let rendered = serialize_authoring_scene(&scene).unwrap();
+
+        assert!(!rendered.contains("\"parentId\""));
+        assert!(!rendered.contains("\"lockReason\""));
+        assert!(!rendered.contains("\"class\""));
+        assert!(!rendered.contains("\"path\""));
+        assert!(rendered.contains("\"source\": {"));
+
+        let source = source.replace(
+            ",\n    \"source\": {\n      \"format\": \"roblox\"\n    }",
+            "",
+        );
+        let scene_without_source = parse_authoring_scene(&source).unwrap();
+        let rendered_without_source = serialize_authoring_scene(&scene_without_source).unwrap();
+        assert!(!rendered_without_source.contains("\"source\""));
     }
 
     #[test]
