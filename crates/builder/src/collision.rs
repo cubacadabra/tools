@@ -356,7 +356,7 @@ mod tests {
         assert!(
             error
                 .0
-                .contains("require manifest.sdkVersion 0.4.0 or 0.5.0")
+                .contains("require manifest.sdkVersion 0.4.0, 0.5.0, or 0.6.0")
         );
     }
 }

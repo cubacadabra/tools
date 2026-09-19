@@ -20,12 +20,14 @@ mod scene;
 
 pub use scene::{
     AUTHORING_SCENE_FORMAT_VERSION, AuthoringNode, AuthoringScene, AuthoringWorldTransform,
-    EditorMetadata, SourceMetadata, Transform, parse_authoring_scene, serialize_authoring_scene,
+    EditorMetadata, MIN_AUTHORING_SCALE, SourceMetadata, Transform, parse_authoring_scene,
+    serialize_authoring_scene,
 };
 
 const PREVIEW_SDK_VERSION: &str = "0.3.0";
 const TERRAIN_SDK_VERSION: &str = "0.4.0";
-const CURRENT_SDK_VERSION: &str = "0.5.0";
+const LEGACY_CURRENT_SDK_VERSION: &str = "0.5.0";
+const CURRENT_SDK_VERSION: &str = "0.6.0";
 const BUILD_MARKER: &str = ".cubacadabra-build";
 const BUILD_MARKER_CONTENT: &str = "cubacadabra-game-package-v1\n";
 const MAX_AUTHORITY_SOURCE_BYTES: usize = 1024 * 1024;
@@ -195,10 +197,11 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
         )?;
         if sdk_version != PREVIEW_SDK_VERSION
             && sdk_version != TERRAIN_SDK_VERSION
+            && sdk_version != LEGACY_CURRENT_SDK_VERSION
             && sdk_version != CURRENT_SDK_VERSION
         {
             return Err(BuildError(format!(
-                "manifest.sdkVersion {sdk_version:?} is unsupported; this builder supports {PREVIEW_SDK_VERSION}, {TERRAIN_SDK_VERSION}, and {CURRENT_SDK_VERSION}"
+                "manifest.sdkVersion {sdk_version:?} is unsupported; this builder supports {PREVIEW_SDK_VERSION}, {TERRAIN_SDK_VERSION}, {LEGACY_CURRENT_SDK_VERSION}, and {CURRENT_SDK_VERSION}"
             )));
         }
     }
@@ -389,10 +392,11 @@ fn validate_sdk_features(manifest: &Map<String, Value>, sdk_version: Option<&str
             .any(|world| has_terrain(world.get("terrain")));
     if has_terrain
         && sdk_version != Some(TERRAIN_SDK_VERSION)
+        && sdk_version != Some(LEGACY_CURRENT_SDK_VERSION)
         && sdk_version != Some(CURRENT_SDK_VERSION)
     {
         return Err(BuildError(format!(
-            "terrain operations require manifest.sdkVersion {TERRAIN_SDK_VERSION} or {CURRENT_SDK_VERSION}"
+            "terrain operations require manifest.sdkVersion {TERRAIN_SDK_VERSION}, {LEGACY_CURRENT_SDK_VERSION}, or {CURRENT_SDK_VERSION}"
         )));
     }
 
@@ -416,9 +420,50 @@ fn validate_sdk_features(manifest: &Map<String, Value>, sdk_version: Option<&str
         .and_then(Value::as_object)
         .is_some_and(has_sdk_05_field)
         || world_values.any(has_sdk_05_field);
-    if (has_collision || has_sdk_05_field) && sdk_version != Some(CURRENT_SDK_VERSION) {
+    if (has_collision || has_sdk_05_field)
+        && sdk_version != Some(LEGACY_CURRENT_SDK_VERSION)
+        && sdk_version != Some(CURRENT_SDK_VERSION)
+    {
         return Err(BuildError(format!(
-            "collision, world.camera, and world.physics.horizontalBounds require manifest.sdkVersion {CURRENT_SDK_VERSION}"
+            "collision, world.camera, and world.physics.horizontalBounds require manifest.sdkVersion {LEGACY_CURRENT_SDK_VERSION} or {CURRENT_SDK_VERSION}"
+        )));
+    }
+    let mesh_scale_entries = manifest
+        .get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|worlds| worlds.values())
+        .filter_map(Value::as_object)
+        .flat_map(|world| world.get("decorations"))
+        .filter_map(Value::as_array)
+        .flatten()
+        .filter_map(|decoration| decoration.as_object())
+        .filter_map(|decoration| decoration.get("scale3"));
+    let mut has_non_uniform_mesh_scale = false;
+    for scale3 in mesh_scale_entries {
+        let values = scale3.as_array().ok_or_else(|| {
+            BuildError(
+                "mesh decoration scale3 must be an array of exactly three positive finite numbers"
+                    .to_owned(),
+            )
+        })?;
+        if values.len() != 3
+            || values.iter().any(|value| {
+                value
+                    .as_f64()
+                    .is_none_or(|value| !value.is_finite() || value < 0.05)
+            })
+        {
+            return Err(BuildError(
+                "mesh decoration scale3 must be an array of exactly three positive finite numbers >= 0.05"
+                    .to_owned(),
+            ));
+        }
+        has_non_uniform_mesh_scale = true;
+    }
+    if has_non_uniform_mesh_scale && sdk_version != Some(CURRENT_SDK_VERSION) {
+        return Err(BuildError(format!(
+            "mesh scale3 requires manifest.sdkVersion {CURRENT_SDK_VERSION}"
         )));
     }
     Ok(())

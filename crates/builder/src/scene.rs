@@ -10,6 +10,7 @@ use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const AUTHORING_SCENE_FORMAT_VERSION: u32 = 1;
+pub const MIN_AUTHORING_SCALE: f32 = 0.05;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -250,6 +251,52 @@ impl AuthoringScene {
             .to_array())
     }
 
+    pub fn local_transform_for_world(
+        &self,
+        id: &str,
+        world_position: [f32; 3],
+        world_scale: [f32; 3],
+    ) -> Result<([f32; 3], [f32; 3]), String> {
+        if world_scale
+            .iter()
+            .any(|value| !value.is_finite() || *value < MIN_AUTHORING_SCALE)
+        {
+            return Err(format!(
+                "scene node {id} world scale must contain finite values of at least {MIN_AUTHORING_SCALE}"
+            ));
+        }
+        let nodes = self.index()?;
+        let node = nodes
+            .get(id)
+            .ok_or_else(|| format!("scene node {id} was not found"))?;
+        let local_position = self.local_position_for_world(id, world_position)?;
+        let Some(parent_id) = node.parent_id.as_deref() else {
+            return Ok((local_position, world_scale));
+        };
+        let parent = self.world_transform(parent_id)?;
+        if parent.rotation[0].abs() > 0.0001 || parent.rotation[2].abs() > 0.0001 {
+            return Err(format!(
+                "scene node {id} has a parent with unsupported X/Z rotation"
+            ));
+        }
+        if parent.scale.iter().any(|value| value.abs() <= f32::EPSILON) {
+            return Err(format!("scene node {id} has a singular parent scale"));
+        }
+        let local_scale = [
+            world_scale[0] / parent.scale[0],
+            world_scale[1] / parent.scale[1],
+            world_scale[2] / parent.scale[2],
+        ];
+        if (parent.scale[0] - parent.scale[2]).abs() <= 0.0001
+            || node.transform.rotation[1].abs() <= 0.0001
+        {
+            return Ok((local_position, local_scale));
+        }
+        Err(format!(
+            "scene node {id} cannot resize under a non-uniform rotated parent without shear"
+        ))
+    }
+
     fn world_affine<'a>(
         &'a self,
         id: &str,
@@ -309,10 +356,10 @@ impl AuthoringScene {
     pub fn set_scale(&mut self, id: &str, scale: [f32; 3]) -> Result<[f32; 3], String> {
         if scale
             .iter()
-            .any(|value| !value.is_finite() || *value <= 0.0)
+            .any(|value| !value.is_finite() || *value < MIN_AUTHORING_SCALE)
         {
             return Err(format!(
-                "scene node {id} scale must contain positive finite values"
+                "scene node {id} scale must contain finite values of at least {MIN_AUTHORING_SCALE}"
             ));
         }
         let node = self
@@ -383,6 +430,12 @@ impl AuthoringScene {
                     .as_object()
                     .ok_or_else(|| component_error(node, "render must be an object"))?;
                 if let Some(mesh) = render.get("mesh").and_then(Value::as_str) {
+                    if !runtime_mesh_transform_is_lossless(world) {
+                        return Err(component_error(
+                            node,
+                            "render transform contains shear or unsupported rotation and cannot compile losslessly",
+                        ));
+                    }
                     let scale = world_transform.scale;
                     if world_transform.rotation[0].abs() > 0.0001
                         || world_transform.rotation[2].abs() > 0.0001
@@ -392,15 +445,25 @@ impl AuthoringScene {
                             "render rotation is limited to the runtime mesh adapter's Y axis",
                         ));
                     }
-                    decorations.push(json!({
+                    let mut decoration = json!({
                         "kind": "mesh",
                         "asset": mesh,
                         "position": world_transform.position,
                         "scale": scale[0],
-                        "scale3": scale,
                         "yaw": world_transform.rotation[1],
                         "color": render.get("color").cloned().unwrap_or_else(|| json!("#FFFFFF")),
-                    }));
+                    });
+                    if scale
+                        .iter()
+                        .zip([scale[0]; 3])
+                        .any(|(value, uniform)| (*value - uniform).abs() > 0.0001)
+                    {
+                        decoration
+                            .as_object_mut()
+                            .expect("mesh decoration is an object")
+                            .insert("scale3".to_owned(), json!(scale));
+                    }
+                    decorations.push(decoration);
                 }
             }
             if let Some(text) = node.components.get("text") {
@@ -482,6 +545,25 @@ fn affine_transform(transform: Affine3A) -> AuthoringWorldTransform {
     }
 }
 
+fn runtime_mesh_transform_is_lossless(transform: Affine3A) -> bool {
+    let decomposed = affine_transform(transform);
+    let rebuilt = Affine3A::from_scale_rotation_translation(
+        Vec3::from_array(decomposed.scale),
+        Quat::from_euler(
+            EulerRot::XYZ,
+            decomposed.rotation[0],
+            decomposed.rotation[1],
+            decomposed.rotation[2],
+        ),
+        Vec3::from_array(decomposed.position),
+    );
+    transform
+        .to_cols_array()
+        .into_iter()
+        .zip(rebuilt.to_cols_array())
+        .all(|(left, right)| (left - right).abs() <= 0.001)
+}
+
 fn validate_transform(node: &AuthoringNode) -> Result<(), String> {
     let values = node
         .transform
@@ -492,6 +574,17 @@ fn validate_transform(node: &AuthoringNode) -> Result<(), String> {
     if values.clone().any(|value| !value.is_finite()) {
         return Err(format!(
             "scene node {} ({}) has a non-finite transform",
+            node.id, node.name
+        ));
+    }
+    if node
+        .transform
+        .scale
+        .into_iter()
+        .any(|value| value < MIN_AUTHORING_SCALE)
+    {
+        return Err(format!(
+            "scene node {} ({}) scale must be at least {MIN_AUTHORING_SCALE}",
             node.id, node.name
         ));
     }
@@ -593,6 +686,53 @@ mod tests {
             edited.node("root").unwrap().transform.position,
             [5.0, 0.0, 0.0]
         );
+        assert!(
+            edited
+                .set_scale("root", [MIN_AUTHORING_SCALE - 0.01, 1.0, 1.0])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn world_resize_converts_position_and_scale_back_to_local_parent_space() {
+        let mut parent = node("parent", None);
+        parent.transform.scale = [2.0, 3.0, 4.0];
+        let child = node("child", Some("parent"));
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: None,
+            nodes: vec![parent, child],
+        };
+        let (position, scale) = scene
+            .local_transform_for_world("child", [8.0, 6.0, 12.0], [4.0, 6.0, 8.0])
+            .unwrap();
+        assert_eq!(position, [4.0, 2.0, 3.0]);
+        assert_eq!(scale, [2.0, 2.0, 2.0]);
+    }
+
+    #[test]
+    fn mesh_compile_rejects_non_uniform_parent_scale_with_child_rotation() {
+        let mut parent = node("parent", None);
+        parent.transform.scale = [2.0, 1.0, 1.0];
+        let mut child = node("child", Some("parent"));
+        child.transform.rotation[1] = 0.5;
+        child
+            .components
+            .insert("render".to_owned(), json!({ "mesh": "chair" }));
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: None,
+            nodes: vec![parent, child],
+        };
+        let mut manifest = json!({
+            "id": "game",
+            "version": "0.1.0",
+            "sdkVersion": "0.6.0",
+            "startWorld": "world",
+            "worlds": { "world": {} }
+        });
+        let error = scene.compile_into_manifest(&mut manifest).unwrap_err();
+        assert!(error.contains("cannot compile losslessly"));
     }
 
     #[test]
