@@ -53,6 +53,7 @@ fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
     let mut source_index = None;
     let mut parent_id = None;
     let mut tree_depth = 4usize;
+    let mut focus_paths = Vec::new();
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -82,6 +83,10 @@ fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
                     .parse::<usize>()
                     .map_err(|_| "--tree-depth must be a non-negative integer".to_owned())?;
             }
+            "--focus-path" => {
+                index += 1;
+                focus_paths.push(required_arg(args, index, "--focus-path")?.to_owned());
+            }
             value => return Err(format!("unknown import-roblox-scene option {value}")),
         }
         index += 1;
@@ -89,6 +94,12 @@ fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
     let reference_path =
         reference.ok_or_else(|| "import-roblox-scene requires --reference".to_owned())?;
     let reference_scene = read_reference_scene(&reference_path)?;
+    if reference_scene.instances.is_empty() {
+        return Err(
+            "reference scene has no normalized source hierarchy; rerun import-roblox-reference from the original Roblox XML"
+                .to_owned(),
+        );
+    }
     let output = output.unwrap_or_else(|| {
         base_scene
             .clone()
@@ -137,15 +148,20 @@ fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
                 .and_then(Value::as_str)
                 != Some("import-roblox-scene")
     });
-    let generated_ids =
-        generated_scene_nodes(&reference_scene, &root_id, parent_id.as_deref(), tree_depth);
+    let generated_ids = generated_scene_nodes(
+        &reference_scene,
+        &root_id,
+        parent_id.as_deref(),
+        tree_depth,
+        &focus_paths,
+    );
     scene.nodes.extend(generated_ids);
     scene.validate()?;
     let scene_source = serialize_authoring_scene(&scene)?;
     write_text(&output, &scene_source)?;
     write_source_index(&source_index, &reference_scene)?;
     println!(
-        "Imported Roblox source hierarchy: {} source nodes ({} in scene tree, depth {}) -> {}",
+        "Imported Roblox source hierarchy: {} source nodes ({} in scene tree, depth {}, {} focus paths) -> {}",
         reference_scene.instances.len(),
         scene
             .nodes
@@ -159,6 +175,7 @@ fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
             })
             .count(),
         tree_depth,
+        focus_paths.len(),
         output.display()
     );
     println!("  complete source index -> {}", source_index.display());
@@ -170,6 +187,7 @@ fn generated_scene_nodes(
     root_id: &str,
     parent_id: Option<&str>,
     tree_depth: usize,
+    focus_paths: &[String],
 ) -> Vec<AuthoringNode> {
     let mut nodes = vec![AuthoringNode {
         id: root_id.to_owned(),
@@ -200,23 +218,26 @@ fn generated_scene_nodes(
     let included = reference
         .instances
         .iter()
-        .filter(|instance| instance.path.split('/').count() <= tree_depth)
+        .filter(|instance| {
+            instance.path.split('/').count() <= tree_depth
+                || focus_paths.iter().any(|focus| {
+                    instance.path == *focus
+                        || instance.path.starts_with(&format!("{focus}/"))
+                        || focus.starts_with(&format!("{}/", instance.path))
+                })
+        })
         .map(|instance| instance.path.as_str())
         .collect::<BTreeSet<_>>();
-    let mut ids = BTreeMap::new();
     for instance in &reference.instances {
         if !included.contains(instance.path.as_str()) {
             continue;
         }
         let id = source_node_id(&instance.path);
-        let parent = instance
-            .parent_path
-            .as_str()
-            .strip_prefix("")
-            .filter(|path| included.contains(path))
-            .map(source_node_id)
-            .unwrap_or_else(|| root_id.to_owned());
-        ids.insert(instance.path.clone(), id.clone());
+        let parent = if included.contains(instance.parent_path.as_str()) {
+            source_node_id(&instance.parent_path)
+        } else {
+            root_id.to_owned()
+        };
         let mut properties =
             BTreeMap::from([("generatedBy".to_owned(), json!("import-roblox-scene"))]);
         let geometry_count = reference

@@ -639,6 +639,26 @@ fn validate_assets(manifest: &Map<String, Value>, project_root: &Path) -> Result
                     "manifest.assets.{kind}.{id}.path exceeds the asset size limit: {path}"
                 )));
             }
+            if kind == "models"
+                && let Some(bounds) = object.get("bounds")
+            {
+                let values = bounds.as_array().ok_or_else(|| {
+                    BuildError(format!(
+                        "manifest.assets.models.{id}.bounds must be an array of three positive finite numbers"
+                    ))
+                })?;
+                if values.len() != 3
+                    || values.iter().any(|value| {
+                        value
+                            .as_f64()
+                            .is_none_or(|value| !value.is_finite() || value <= 0.0)
+                    })
+                {
+                    return Err(BuildError(format!(
+                        "manifest.assets.models.{id}.bounds must be an array of three positive finite numbers"
+                    )));
+                }
+            }
         }
     }
     Ok(())

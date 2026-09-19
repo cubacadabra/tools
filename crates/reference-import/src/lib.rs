@@ -1521,13 +1521,13 @@ mod tests {
 
         let mesh_options = |output: PathBuf, collision_output: PathBuf| MeshExportOptions {
             scene_path: first.clone(),
-            output_path: output,
+            output_path: output.clone(),
             path_prefixes: vec!["Folder:Place[1]".to_owned()],
             exclude_paths: Vec::new(),
             scale: 1.0,
             origin: [0.0; 3],
             collision_output: Some(collision_output),
-            bounds_output: None,
+            bounds_output: Some(output.with_extension("bounds.json")),
             mesh_overrides: None,
         };
         let first_collision = temp.path().join("first-collision.json");
@@ -1540,6 +1540,12 @@ mod tests {
         assert_eq!(mesh.geometry_count, 1);
         assert_eq!(mesh.triangle_count, 12);
         assert_eq!(mesh.vertex_count, 36);
+        assert_eq!(mesh.bounds.minimum, [6.0, 3.0, -5.0]);
+        assert_eq!(mesh.bounds.maximum, [14.0, 5.0, 1.0]);
+        let bounds: serde_json::Value =
+            serde_json::from_slice(&fs::read(first_mesh.with_extension("bounds.json")).unwrap())
+                .unwrap();
+        assert_eq!(bounds["size"], serde_json::json!([8.0, 2.0, 6.0]));
         let bytes = fs::read(&first_mesh).unwrap();
         let json_length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
         let document: serde_json::Value =
