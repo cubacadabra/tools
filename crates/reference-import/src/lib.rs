@@ -47,6 +47,7 @@ pub struct MeshExportOptions {
     pub path_prefixes: Vec<String>,
     pub exclude_paths: Vec<String>,
     pub scale: f32,
+    pub origin: [f32; 3],
     pub collision_output: Option<PathBuf>,
     pub mesh_overrides: Option<PathBuf>,
 }
@@ -997,7 +998,7 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
             append_static_geometry(&mut vertices, geometry);
         }
         for vertex in &mut vertices {
-            vertex.position = scale3(vertex.position, options.scale);
+            vertex.position = scale3(sub3(vertex.position, options.origin), options.scale);
         }
         if options.collision_output.is_some() && geometry.can_collide {
             collision_triangles.extend(vertices.chunks_exact(3).map(|triangle| {
@@ -1160,6 +1161,10 @@ fn subtract3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 
 fn scale3(value: [f32; 3], scale: f32) -> [f32; 3] {
     [value[0] * scale, value[1] * scale, value[2] * scale]
+}
+
+fn sub3(left: [f32; 3], right: [f32; 3]) -> [f32; 3] {
+    [left[0] - right[0], left[1] - right[1], left[2] - right[2]]
 }
 
 fn multiply3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
@@ -1426,6 +1431,7 @@ mod tests {
             path_prefixes: vec!["Folder:Place[1]".to_owned()],
             exclude_paths: Vec::new(),
             scale: 1.0,
+            origin: [0.0; 3],
             collision_output: Some(collision_output),
             mesh_overrides: None,
         };
@@ -1509,6 +1515,7 @@ mod tests {
             path_prefixes: vec!["Main/".into(), "Rooms/".into()],
             exclude_paths: vec!["exclude-this".into()],
             scale: 0.5,
+            origin: [0.0; 3],
             collision_output: Some(collision_path.clone()),
             mesh_overrides: Some(overrides),
         })

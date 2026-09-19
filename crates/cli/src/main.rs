@@ -40,6 +40,7 @@ fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
     let mut path_prefixes = Vec::new();
     let mut exclude_paths = Vec::new();
     let mut scale = 1.0;
+    let mut origin = [0.0; 3];
     let mut collision_output = None;
     let mut mesh_overrides = None;
     let mut index = 0;
@@ -66,6 +67,22 @@ fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
                 scale = required_arg(args, index, "--scale")?
                     .parse::<f32>()
                     .map_err(|_| "--scale must be a positive number".to_owned())?;
+            }
+            "--origin" => {
+                index += 1;
+                origin = args
+                    .get(index)
+                    .map(String::as_str)
+                    .ok_or_else(|| "--origin requires a value".to_owned())?
+                    .split(',')
+                    .map(|value| {
+                        value.trim().parse::<f32>().map_err(|_| {
+                            "--origin must be three comma-separated numbers".to_owned()
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+                    .try_into()
+                    .map_err(|_| "--origin must be three comma-separated numbers".to_owned())?;
             }
             "--collision-output" => {
                 index += 1;
@@ -95,6 +112,7 @@ fn export_reference_mesh_command(args: &[String]) -> Result<(), String> {
         path_prefixes,
         exclude_paths,
         scale,
+        origin,
         collision_output,
         mesh_overrides,
     })?;

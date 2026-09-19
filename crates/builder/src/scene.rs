@@ -306,6 +306,35 @@ impl AuthoringScene {
         Ok(previous)
     }
 
+    pub fn set_scale(&mut self, id: &str, scale: [f32; 3]) -> Result<[f32; 3], String> {
+        if scale
+            .iter()
+            .any(|value| !value.is_finite() || *value <= 0.0)
+        {
+            return Err(format!(
+                "scene node {id} scale must contain positive finite values"
+            ));
+        }
+        let node = self
+            .node_mut(id)
+            .ok_or_else(|| format!("scene node {id} was not found"))?;
+        if node.editor.locked {
+            return Err(format!(
+                "scene node {} ({}) is locked{}",
+                node.id,
+                node.name,
+                node.editor
+                    .lock_reason
+                    .as_deref()
+                    .map(|reason| format!(": {reason}"))
+                    .unwrap_or_default()
+            ));
+        }
+        let previous = node.transform.scale;
+        node.transform.scale = scale;
+        Ok(previous)
+    }
+
     /// Expand the supported component combinations into the existing runtime
     /// manifest. Unknown components are rejected rather than being silently
     /// dropped from a build.
@@ -355,16 +384,6 @@ impl AuthoringScene {
                     .ok_or_else(|| component_error(node, "render must be an object"))?;
                 if let Some(mesh) = render.get("mesh").and_then(Value::as_str) {
                     let scale = world_transform.scale;
-                    let uniform_scale = if approximately_equal(scale[0], scale[1])
-                        && approximately_equal(scale[1], scale[2])
-                    {
-                        scale[0]
-                    } else {
-                        return Err(component_error(
-                            node,
-                            "non-uniform render scale is not supported by the runtime mesh adapter",
-                        ));
-                    };
                     if world_transform.rotation[0].abs() > 0.0001
                         || world_transform.rotation[2].abs() > 0.0001
                     {
@@ -377,7 +396,8 @@ impl AuthoringScene {
                         "kind": "mesh",
                         "asset": mesh,
                         "position": world_transform.position,
-                        "scale": uniform_scale,
+                        "scale": scale[0],
+                        "scale3": scale,
                         "yaw": world_transform.rotation[1],
                         "color": render.get("color").cloned().unwrap_or_else(|| json!("#FFFFFF")),
                     }));
@@ -460,10 +480,6 @@ fn affine_transform(transform: Affine3A) -> AuthoringWorldTransform {
         rotation: [x, y, z],
         scale: scale.to_array(),
     }
-}
-
-fn approximately_equal(left: f32, right: f32) -> bool {
-    (left - right).abs() <= 0.0001
 }
 
 fn validate_transform(node: &AuthoringNode) -> Result<(), String> {
@@ -651,6 +667,7 @@ mod tests {
     #[test]
     fn components_compile_to_the_existing_runtime_collections() {
         let mut mesh = node("mesh", Some("root"));
+        mesh.transform.scale = [1.0, 1.5, 0.75];
         mesh.components
             .insert("render".to_owned(), json!({ "mesh": "casino" }));
         let mut sign = node("sign", Some("root"));
@@ -676,6 +693,7 @@ mod tests {
         scene.compile_into_manifest(&mut manifest).unwrap();
         let world = &manifest["worlds"]["world"];
         assert_eq!(world["decorations"][0]["asset"], "casino");
+        assert_eq!(world["decorations"][0]["scale3"], json!([1.0, 1.5, 0.75]));
         assert_eq!(world["signs"][0]["text"], "TABLES");
         assert_eq!(world["interactions"][0]["id"], "table");
     }
