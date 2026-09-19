@@ -13,14 +13,18 @@ TOOLS_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = TOOLS_ROOT.parent
 sys.path.insert(0, str(TOOLS_ROOT / "src"))
 
-PROJECTS = (
+BASE_PROJECTS = (
     WORKSPACE_ROOT / "first-game",
     WORKSPACE_ROOT / "second-game",
     WORKSPACE_ROOT / "third-game",
-    WORKSPACE_ROOT / "examples/adventure-101",
-    WORKSPACE_ROOT / "examples/survival-101",
-    WORKSPACE_ROOT / "examples/the-wild-west",
 )
+EXAMPLE_PROJECTS = tuple(
+    sorted(
+        (manifest.parent for manifest in (WORKSPACE_ROOT / "examples").glob("*/manifest.json")),
+        key=lambda path: path.name,
+    )
+)
+PROJECTS = BASE_PROJECTS + EXAMPLE_PROJECTS
 
 
 def native_build(project: Path, output: Path) -> None:

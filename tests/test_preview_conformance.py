@@ -48,9 +48,11 @@ class PreviewConformanceTests(unittest.TestCase):
         ROOT / "first-game",
         ROOT / "second-game",
         ROOT / "third-game",
-        ROOT / "examples/adventure-101",
-        ROOT / "examples/survival-101",
-        ROOT / "examples/the-wild-west",
+    ) + tuple(
+        sorted(
+            (manifest.parent for manifest in (ROOT / "examples").glob("*/manifest.json")),
+            key=lambda path: path.name,
+        )
     )
 
     def test_all_supported_game_sources_use_and_build_with_the_shared_pipeline(self) -> None:
