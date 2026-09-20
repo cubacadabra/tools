@@ -201,6 +201,31 @@ mod tests {
             manifest["worlds"]["world"]["blocks"][0]["collidable"],
             false
         );
+        assert_eq!(manifest["worlds"]["world"]["blocks"][0]["castShadow"], true);
+    }
+
+    #[test]
+    fn primitive_cast_shadow_flag_compiles_to_a_non_shadowing_block() {
+        let mut block = node("decor", None);
+        block.components.insert(
+            "primitive".to_owned(),
+            json!({
+                "shape": "box",
+                "size": [1.0, 1.0, 1.0],
+                "castShadow": false
+            }),
+        );
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![block],
+        };
+        let mut manifest = json!({"startWorld": "world", "worlds": {"world": {}}});
+        scene.compile_into_manifest(&mut manifest).unwrap();
+        assert_eq!(
+            manifest["worlds"]["world"]["blocks"][0]["castShadow"],
+            false
+        );
     }
 
     #[test]

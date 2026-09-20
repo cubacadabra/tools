@@ -358,6 +358,7 @@ struct PromotedPrimitive {
     material: String,
     runtime_material: Option<&'static str>,
     can_collide: bool,
+    cast_shadow: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -419,6 +420,7 @@ fn select_promoted_primitives(
                     .as_deref()
                     .and_then(cubacadabra_reference_import::roblox_material_runtime_name),
                 can_collide: geometry.can_collide,
+                cast_shadow: geometry.cast_shadow,
             });
             selection
                 .statuses
@@ -470,9 +472,6 @@ fn can_promote_part(geometry: &GeometryInstance) -> Result<(), &'static str> {
     }
     if geometry.reflectance > 0.0001 {
         return Err("unsupported-reflectance");
-    }
-    if !geometry.cast_shadow {
-        return Err("unsupported-shadow");
     }
     if geometry.material.name.as_deref().is_some_and(|name| {
         !matches!(
@@ -808,6 +807,7 @@ fn generated_scene_nodes(
             ("representation".to_owned(), json!("primitive")),
             ("sourceColor".to_owned(), json!(promoted.material.clone())),
             ("sourceCanCollide".to_owned(), json!(promoted.can_collide)),
+            ("sourceCastShadow".to_owned(), json!(promoted.cast_shadow)),
             (
                 "sourceFrame".to_owned(),
                 json!("geometry-transform-and-bounds"),
@@ -828,6 +828,7 @@ fn generated_scene_nodes(
                 "size": promoted.size,
                 "material": promoted.material.clone(),
                 "collidable": promoted.can_collide,
+                "castShadow": promoted.cast_shadow,
             });
             if let Some(runtime_material) = promoted.runtime_material {
                 primitive["runtimeMaterial"] = json!(runtime_material);
@@ -1031,7 +1032,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_block_shapes_and_dynamic_parts() {
+    fn rejects_non_block_shapes_and_dynamic_parts_but_promotes_non_shadowing_parts() {
         let mut value = reference_fixture();
         value["geometry"][0]["shape"] = json!(2);
         value["geometry"][1]["anchored"] = json!(false);
@@ -1054,9 +1055,21 @@ mod tests {
         );
         assert_eq!(
             selection.statuses["Workspace:Workspace[1]/Folder:Imported[1]/Part:RotX[1]"],
-            PromotionStatus::Fallback {
-                reason: "unsupported-shadow"
+            PromotionStatus::Promoted {
+                node_id: primitive_node_id(
+                    "Workspace:Workspace[1]/Folder:Imported[1]/Part:RotX[1]"
+                )
             }
+        );
+        assert!(
+            !selection
+                .promoted
+                .iter()
+                .find(|part| {
+                    part.source_path == "Workspace:Workspace[1]/Folder:Imported[1]/Part:RotX[1]"
+                })
+                .expect("CastShadow=false Part should be promoted")
+                .cast_shadow
         );
     }
 

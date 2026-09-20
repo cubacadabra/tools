@@ -98,6 +98,10 @@ impl AuthoringScene {
                         .get("collidable")
                         .and_then(Value::as_bool)
                         .unwrap_or(true),
+                    "castShadow": primitive
+                        .get("castShadow")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true),
                 });
                 if let Some(material) = primitive.get("material") {
                     block

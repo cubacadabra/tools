@@ -69,9 +69,12 @@ primitive. Parts from services such as ServerStorage remain source-only. The
 current slice accepts
 anchored, ordinary block Parts with supported axis-aligned rotations and no
 mesh, transparency, or reflectance overrides. Promotion preserves position,
-rotation, size, color, supported Roblox material mappings, and `CanCollide`:
-collidable Parts receive a native box collision component, while non-collidable
-Parts remain editable visual-only primitives. Unsupported material mappings
+rotation, size, color, supported Roblox material mappings, `CanCollide`, and
+`CastShadow`: collidable Parts receive a native box collision component, while
+non-collidable Parts remain editable visual-only primitives. Parts with
+`CastShadow=false` remain visible and lit but are excluded from the runtime
+directional shadow-caster geometry. The native block field defaults to `true`
+for older authoring scenes and manifests. Unsupported material mappings
 remain in the source/fallback pipeline so the fallback GLB retains their
 appearance. Unsupported Parts remain in the source/fallback pipeline with a
 machine-readable reason. The legacy `--editable-part-name` and

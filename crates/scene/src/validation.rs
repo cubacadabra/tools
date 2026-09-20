@@ -164,6 +164,15 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                     "primitive collidable must be a boolean",
                 ));
             }
+            if value
+                .get("castShadow")
+                .is_some_and(|cast_shadow| !cast_shadow.is_boolean())
+            {
+                return Err(component_error(
+                    node,
+                    "primitive castShadow must be a boolean",
+                ));
+            }
         }
         if matches!(name.as_str(), "ladder" | "hazard") {
             let Some(size) = value.get("size").and_then(vector_value) else {
