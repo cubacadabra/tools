@@ -63,6 +63,13 @@ lighting and post-effect settings, computed visible bounds, and source hashes.
 Roblox smooth-terrain voxel blobs are recorded by size and SHA-256 but are not
 decoded yet; that limitation is explicit in the generated scene.
 
+`import-roblox-scene` can promote selected physical Parts into native authoring
+primitives. Repeat `--editable-part-name` for the source display names to
+promote; `--editable-part-path-prefix` can limit the match to one source area.
+Only collidable `Part` geometry with a runtime-supported axis-aligned rotation
+is promoted by this first primitive slice. Other source records remain
+available in the imported source hierarchy.
+
 Bake a selected imported hierarchy into a compact static GLB for the normal
 Cubacadabra package renderer:
 

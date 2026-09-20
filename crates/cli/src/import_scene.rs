@@ -10,8 +10,10 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
     let mut focus_paths = Vec::new();
     let mut reset_generated_source_tree = false;
     let mut editable_instances = Vec::new();
+    let mut editable_part_names = Vec::new();
     let mut editable_instance_map = None;
     let mut editable_path_prefix = None;
+    let mut editable_part_path_prefix = None;
     let mut editable_parent_id = None;
     let mut editable_id_prefix = "imported-object".to_owned();
     let mut editable_display_prefix = None;
@@ -67,6 +69,14 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
                     mesh: mesh.to_owned(),
                 });
             }
+            "--editable-part-name" => {
+                index += 1;
+                let name = required_arg(args, index, "--editable-part-name")?;
+                if name.is_empty() {
+                    return Err("--editable-part-name requires a non-empty name".to_owned());
+                }
+                editable_part_names.push(name.to_owned());
+            }
             "--editable-instance-map" => {
                 index += 1;
                 editable_instance_map = Some(PathBuf::from(required_arg(
@@ -79,6 +89,11 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
                 index += 1;
                 editable_path_prefix =
                     Some(required_arg(args, index, "--editable-path-prefix")?.to_owned());
+            }
+            "--editable-part-path-prefix" => {
+                index += 1;
+                editable_part_path_prefix =
+                    Some(required_arg(args, index, "--editable-part-path-prefix")?.to_owned());
             }
             "--editable-parent-id" => {
                 index += 1;
@@ -146,6 +161,28 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
     } else {
         Vec::new()
     };
+    let promoted_primitives = reference_scene
+        .geometry
+        .iter()
+        .filter(|geometry| {
+            geometry.class == "Part"
+                && geometry.can_collide
+                && source_rotation_is_axis_aligned(geometry.transform.rotation)
+                && editable_part_names
+                    .iter()
+                    .any(|name| name == &geometry.name)
+                && editable_part_path_prefix
+                    .as_deref()
+                    .is_none_or(|prefix| geometry.path.starts_with(prefix))
+        })
+        .map(|geometry| PromotedPrimitive {
+            source_path: geometry.path.clone(),
+            position: geometry.transform.position,
+            rotation: [0.0, source_yaw(geometry.transform.rotation), 0.0],
+            size: geometry.size,
+            material: source_color(geometry.color),
+        })
+        .collect::<Vec<_>>();
     for spec in &editable_instances {
         for instance in reference_scene.instances.iter().filter(|instance| {
             instance.class == "Model"
@@ -169,13 +206,13 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
     }
     promoted_instances.sort_by(|left, right| left.source_path.cmp(&right.source_path));
     promoted_instances.dedup_by(|left, right| left.source_path == right.source_path);
-    if !promoted_instances.is_empty()
+    if (!promoted_instances.is_empty() || !promoted_primitives.is_empty())
         && editable_parent_id
             .as_deref()
             .is_some_and(|id| scene.node(id).is_none())
     {
         return Err(format!(
-            "editable imported-instance parent {:?} was not found",
+            "editable imported representation parent {:?} was not found",
             editable_parent_id.as_deref().unwrap_or_default()
         ));
     }
@@ -201,7 +238,9 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
             .as_ref()
             .and_then(|source| source.properties.get("representation"))
             .and_then(Value::as_str)
-            == Some("editable-imported-instance");
+            .is_some_and(|representation| {
+                matches!(representation, "editable-imported-instance" | "primitive")
+            });
         let legacy_editable = !node.editor.locked
             && node
                 .source
@@ -222,6 +261,7 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
         &focus_paths,
         &source_index_reference,
         &promoted_instances,
+        &promoted_primitives,
         editable_parent_id.as_deref(),
         editable_display_prefix.as_deref(),
         &editable_id_prefix,
@@ -280,6 +320,15 @@ struct PromotedInstance {
     position: [f32; 3],
     rotation: [f32; 3],
     scale: [f32; 3],
+}
+
+#[derive(Clone, Debug)]
+struct PromotedPrimitive {
+    source_path: String,
+    position: [f32; 3],
+    rotation: [f32; 3],
+    size: [f32; 3],
+    material: String,
 }
 
 fn read_editable_instance_map(path: &Path) -> Result<Vec<PromotedInstance>, String> {
@@ -360,6 +409,7 @@ fn generated_scene_nodes(
     focus_paths: &[String],
     source_index_reference: &str,
     promoted_instances: &[PromotedInstance],
+    promoted_primitives: &[PromotedPrimitive],
     editable_parent_id: Option<&str>,
     editable_display_prefix: Option<&str>,
     editable_id_prefix: &str,
@@ -506,9 +556,94 @@ fn generated_scene_nodes(
             }),
         });
     }
+    let mut primitive_number = 0;
+    for promoted in promoted_primitives {
+        let Some(instance) = reference
+            .instances
+            .iter()
+            .find(|instance| instance.path == promoted.source_path)
+        else {
+            continue;
+        };
+        primitive_number += 1;
+        let id = format!("imported-part-{}", short_hash(&instance.path));
+        let mut properties = BTreeMap::from([
+            ("generatedBy".to_owned(), json!("import-roblox-scene")),
+            ("representation".to_owned(), json!("primitive")),
+            ("sourceColor".to_owned(), json!(promoted.material.clone())),
+            (
+                "sourceFrame".to_owned(),
+                json!("geometry-transform-and-bounds"),
+            ),
+        ]);
+        if let Some(material) = reference
+            .geometry
+            .iter()
+            .find(|geometry| geometry.path == promoted.source_path)
+            .and_then(|geometry| geometry.material.name.as_deref())
+        {
+            properties.insert("sourceMaterial".to_owned(), json!(material));
+        }
+        nodes.push(AuthoringNode {
+            id,
+            parent_id: editable_parent_id.map(str::to_owned),
+            name: format!("{} — {}", instance.name, primitive_number),
+            transform: Transform {
+                position: promoted.position,
+                rotation: promoted.rotation,
+                scale: [1.0; 3],
+            },
+            components: BTreeMap::from([
+                (
+                    "primitive".to_owned(),
+                    json!({
+                        "shape": "box",
+                        "size": promoted.size,
+                        "material": promoted.material.clone(),
+                    }),
+                ),
+                ("collision".to_owned(), json!({"kind": "box"})),
+            ]),
+            editor: EditorMetadata::default(),
+            source: Some(SourceMetadata {
+                format: "roblox".to_owned(),
+                class: Some(instance.class.clone()),
+                path: Some(instance.path.clone()),
+                properties,
+            }),
+        });
+    }
     nodes
 }
 
 fn source_yaw(rotation: [[f32; 3]; 3]) -> f32 {
     rotation[0][2].atan2(rotation[0][0])
+}
+
+fn source_color(color: [f32; 3]) -> String {
+    let channel = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    format!(
+        "#{:02X}{:02X}{:02X}",
+        channel(color[0]),
+        channel(color[1]),
+        channel(color[2])
+    )
+}
+
+fn source_rotation_is_axis_aligned(rotation: [[f32; 3]; 3]) -> bool {
+    let tolerance = 0.0001;
+    let rows_are_axes = rotation.iter().all(|row| {
+        row.iter().filter(|value| value.abs() > tolerance).count() == 1
+            && row
+                .iter()
+                .all(|value| value.abs() <= tolerance || (value.abs() - 1.0).abs() <= tolerance)
+    });
+    let columns_are_axes = (0..3).all(|column| {
+        rotation
+            .iter()
+            .filter(|row| row[column].abs() > tolerance)
+            .count()
+            == 1
+    });
+    rows_are_axes && columns_are_axes
 }
