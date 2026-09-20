@@ -1,11 +1,12 @@
-use cubacadabra_builder::{
-    AuthoringNode, AuthoringScene, BuildOptions, EditorMetadata, SourceMetadata, Transform,
-    build_game, parse_authoring_scene, serialize_authoring_scene,
-};
+use cubacadabra_builder::{BuildOptions, build_game};
 use cubacadabra_project::create_game;
 use cubacadabra_reference_import::{
     ImportOptions, MeshExportOptions, ReferenceScene, export_reference_mesh, import_reference,
     read_reference_scene,
+};
+use cubacadabra_scene::{
+    AuthoringNode, AuthoringScene, EditorMetadata, SourceMetadata, Transform,
+    parse_authoring_scene, serialize_authoring_scene,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};

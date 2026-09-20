@@ -5,8 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-glam = "0.30"
-serde = { version = "1", features = ["derive"] }
+cubacadabra-scene = { path = "../scene" }
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 tempfile = "3"

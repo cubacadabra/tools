@@ -142,9 +142,35 @@ fn write_project(
         ),
     )
     .map_err(|error| format!("could not write manifest.json: {error}"))?;
+    fs::write(
+        project.join("scene.json"),
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(&starter_scene()).unwrap()
+        ),
+    )
+    .map_err(|error| format!("could not write scene.json: {error}"))?;
     fs::write(project.join("src/main.luau"), source(title, game_id))
         .map_err(|error| format!("could not write src/main.luau: {error}"))?;
     Ok(())
+}
+
+fn starter_scene() -> serde_json::Value {
+    json!({
+        "formatVersion": 1,
+        "worldId": "starter-world",
+        "nodes": [{
+            "id": "world-starter-world",
+            "name": "Starter World",
+            "transform": {
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "scale": [1, 1, 1]
+            },
+            "components": {},
+            "editor": { "visible": true, "locked": false }
+        }]
+    })
 }
 
 fn manifest(title: &str, game_id: &str) -> serde_json::Value {

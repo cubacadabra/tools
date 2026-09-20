@@ -163,8 +163,7 @@ dependencies = [
 name = "cubacadabra-builder"
 version = "0.4.0"
 dependencies = [
- "glam",
- "serde",
+ "cubacadabra-scene",
  "serde_json",
  "sha2",
  "tempfile",
@@ -178,6 +177,7 @@ dependencies = [
  "cubacadabra-builder",
  "cubacadabra-project",
  "cubacadabra-reference-import",
+ "cubacadabra-scene",
  "serde_json",
  "sha2",
 ]
@@ -200,6 +200,15 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+]
+
+[[package]]
+name = "cubacadabra-scene"
+version = "0.4.0"
+dependencies = [
+ "glam",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

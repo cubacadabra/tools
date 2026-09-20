@@ -1,8 +1,8 @@
 //! The project-owned authoring scene format.
 //!
 //! This is deliberately an entity/component document rather than a copy of
-//! Roblox's class hierarchy.  The builder is the adapter between this
-//! editable source and the compact runtime manifest.
+//! Roblox's class hierarchy. Builders and editor hosts consume this model;
+//! they do not own its serialized representation.
 
 use glam::{Affine3A, EulerRot, Quat, Vec3};
 use serde::{Deserialize, Serialize};
@@ -414,6 +414,7 @@ impl AuthoringScene {
             .as_object_mut()
             .ok_or_else(|| format!("scene target world {world_id:?} must be an object"))?;
 
+        let mut blocks = Vec::new();
         let mut decorations = Vec::new();
         let mut signs = Vec::new();
         let mut interactions = Vec::new();
@@ -425,6 +426,27 @@ impl AuthoringScene {
             }
             let world = self.world_affine(&node.id, &nodes, &mut world_cache)?;
             let world_transform = affine_transform(world);
+            if let Some(primitive) = node.components.get("primitive") {
+                let primitive = primitive
+                    .as_object()
+                    .ok_or_else(|| component_error(node, "primitive must be an object"))?;
+                let size = primitive
+                    .get("size")
+                    .and_then(vector_value)
+                    .ok_or_else(|| component_error(node, "primitive requires a size"))?;
+                let mut block = json!({
+                    "id": node.id,
+                    "position": world_transform.position,
+                    "size": size,
+                });
+                if let Some(material) = primitive.get("material") {
+                    block
+                        .as_object_mut()
+                        .expect("primitive block is an object")
+                        .insert("color".to_owned(), material.clone());
+                }
+                blocks.push(block);
+            }
             if let Some(render) = node.components.get("render") {
                 let render = render
                     .as_object()
@@ -515,6 +537,9 @@ impl AuthoringScene {
                 interactions.push(Value::Object(output));
             }
         }
+        if !blocks.is_empty() {
+            world.insert("blocks".to_owned(), Value::Array(blocks));
+        }
         world.insert("decorations".to_owned(), Value::Array(decorations));
         world.insert("signs".to_owned(), Value::Array(signs));
         world.insert("interactions".to_owned(), Value::Array(interactions));
@@ -593,7 +618,10 @@ fn validate_transform(node: &AuthoringNode) -> Result<(), String> {
 
 fn validate_components(node: &AuthoringNode) -> Result<(), String> {
     for (name, value) in &node.components {
-        if !matches!(name.as_str(), "render" | "text" | "interaction") {
+        if !matches!(
+            name.as_str(),
+            "render" | "text" | "interaction" | "primitive" | "collision"
+        ) {
             return Err(format!(
                 "scene node {} ({}) uses unsupported component {:?}",
                 node.id, node.name, name
@@ -613,6 +641,38 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                 "render component requires a non-empty mesh asset",
             ));
         }
+        if name == "primitive" {
+            let shape = value.get("shape").and_then(Value::as_str).unwrap_or("box");
+            if shape != "box" {
+                return Err(component_error(
+                    node,
+                    "primitive shape must currently be `box`",
+                ));
+            }
+            let Some(size) = value.get("size").and_then(vector_value) else {
+                return Err(component_error(node, "primitive component requires a size"));
+            };
+            if size
+                .iter()
+                .any(|value| !value.is_finite() || *value < MIN_AUTHORING_SCALE)
+            {
+                return Err(component_error(
+                    node,
+                    "primitive size must contain finite values above the minimum size",
+                ));
+            }
+        }
+        if name == "collision"
+            && value
+                .get("kind")
+                .and_then(Value::as_str)
+                .is_some_and(|kind| kind != "box")
+        {
+            return Err(component_error(
+                node,
+                "collision kind must currently be `box`",
+            ));
+        }
     }
     Ok(())
 }
@@ -625,6 +685,15 @@ fn copy_component_value(source: &Map<String, Value>, target: &mut Map<String, Va
     if let Some(value) = source.get(key) {
         target.insert(key.to_owned(), value.clone());
     }
+}
+
+fn vector_value(value: &Value) -> Option<[f32; 3]> {
+    let values = value.as_array()?;
+    Some([
+        values.first()?.as_f64()? as f32,
+        values.get(1)?.as_f64()? as f32,
+        values.get(2)?.as_f64()? as f32,
+    ])
 }
 
 #[cfg(test)]
@@ -733,6 +802,42 @@ mod tests {
         });
         let error = scene.compile_into_manifest(&mut manifest).unwrap_err();
         assert!(error.contains("cannot compile losslessly"));
+    }
+
+    #[test]
+    fn primitive_box_compiles_to_a_runtime_block() {
+        let mut block = node("block", None);
+        block.transform.position = [2.0, 1.0, -3.0];
+        block.components.insert(
+            "primitive".to_owned(),
+            json!({
+                "shape": "box",
+                "size": [4.0, 1.0, 4.0],
+                "material": "signal"
+            }),
+        );
+        block
+            .components
+            .insert("collision".to_owned(), json!({ "kind": "box" }));
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![block],
+        };
+        let mut manifest = json!({
+            "id": "game",
+            "version": "0.1.0",
+            "sdkVersion": "0.6.0",
+            "startWorld": "world",
+            "worlds": { "world": {} }
+        });
+        scene.compile_into_manifest(&mut manifest).unwrap();
+        assert_eq!(manifest["worlds"]["world"]["blocks"][0]["id"], "block");
+        assert_eq!(
+            manifest["worlds"]["world"]["blocks"][0]["position"],
+            json!([2.0, 1.0, -3.0])
+        );
+        assert_eq!(manifest["worlds"]["world"]["blocks"][0]["color"], "signal");
     }
 
     #[test]

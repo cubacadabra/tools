@@ -4,6 +4,7 @@ members = [
     "crates/project",
     "crates/reference-import",
     "crates/cli",
+    "crates/scene",
 ]
 resolver = "3"
 

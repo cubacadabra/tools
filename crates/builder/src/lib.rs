@@ -16,13 +16,7 @@ use std::{
 
 mod collision;
 mod maze;
-mod scene;
-
-pub use scene::{
-    AUTHORING_SCENE_FORMAT_VERSION, AuthoringNode, AuthoringScene, AuthoringWorldTransform,
-    EditorMetadata, MIN_AUTHORING_SCALE, SourceMetadata, Transform, parse_authoring_scene,
-    serialize_authoring_scene,
-};
+use cubacadabra_scene::parse_authoring_scene;
 
 const PREVIEW_SDK_VERSION: &str = "0.3.0";
 const TERRAIN_SDK_VERSION: &str = "0.4.0";
