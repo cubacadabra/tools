@@ -2,7 +2,7 @@ use cubacadabra_builder::{BuildOptions, build_game};
 use cubacadabra_project::create_game;
 use cubacadabra_reference_import::{
     ImportOptions, MeshExportOptions, ReferenceScene, export_reference_mesh, import_reference,
-    read_reference_scene,
+    read_reference_scene, reference_instance_fingerprint, reference_instance_frame,
 };
 use cubacadabra_scene::{
     AuthoringNode, AuthoringScene, EditorMetadata, SourceMetadata, Transform,
@@ -58,6 +58,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "import-roblox-scene" => import_roblox_scene_command(&args[1..]),
         "migrate-source-index" => migrate_source_index_command(&args[1..]),
         "export-reference-mesh" => export_reference_mesh_command(&args[1..]),
+        "export-reference-instances" => export_reference_instances_command(&args[1..]),
         command => Err(format!("unknown command {command:?}; use --help")),
     }
 }
@@ -74,7 +75,7 @@ pub(crate) fn required_arg<'a>(
 
 fn print_help() {
     println!(
-        "Cubacadabra creator tools\n\nCommands:\n  build-game                Build a portable game package\n  create-game               Create a starter project\n  import-roblox-reference   Extract a deterministic static reference scene from Roblox XML\n  import-roblox-scene       Generate a native scene tree and sharded source hierarchy index\n  migrate-source-index      Migrate a v1 source hierarchy into sharded JSON\n  export-reference-mesh     Bake a reference-scene hierarchy into a package GLB\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games\n  cubacadabra import-roblox-reference --place Place.rbxmx --terrain PlaceTerrain.rbxmx --project default.project.json --output /tmp/reference-scene.json\n  cubacadabra import-roblox-scene --reference /tmp/reference-scene.json --base-scene scene.json --output scene.json --source-index imports/roblox/place/index.json\n  cubacadabra migrate-source-index --input source-hierarchy.json --output imports/roblox/place/index.json\n  cubacadabra export-reference-mesh --scene /tmp/reference-scene.json --output assets/models/reference.glb --path-prefix 'Folder:Place[1]/Folder:Main[1]/Model:MainIsland[1]'"
+        "Cubacadabra creator tools\n\nCommands:\n  build-game                Build a portable game package\n  create-game               Create a starter project\n  import-roblox-reference   Extract a deterministic static reference scene from Roblox XML\n  import-roblox-scene       Generate a native scene tree and sharded source hierarchy index\n  migrate-source-index      Migrate a v1 source hierarchy into sharded JSON\n  export-reference-mesh     Bake a reference-scene hierarchy into a package GLB\n  export-reference-instances Bake repeated source models into reusable local-space GLBs\n\nExamples:\n  cubacadabra build-game ../first-game\n  cubacadabra build-game --source ../first-game --output /tmp/first-game\n  cubacadabra create-game --title \"My Game\" --path ~/games\n  cubacadabra import-roblox-reference --place Place.rbxmx --terrain PlaceTerrain.rbxmx --project default.project.json --output /tmp/reference-scene.json\n  cubacadabra import-roblox-scene --reference /tmp/reference-scene.json --base-scene scene.json --output scene.json --source-index imports/roblox/place/index.json\n  cubacadabra migrate-source-index --input source-hierarchy.json --output imports/roblox/place/index.json\n  cubacadabra export-reference-mesh --scene /tmp/reference-scene.json --output assets/models/reference.glb --path-prefix 'Folder:Place[1]/Folder:Main[1]/Model:MainIsland[1]'"
     );
 }
 

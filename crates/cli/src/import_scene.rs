@@ -8,6 +8,13 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
     let mut parent_id = None;
     let mut tree_depth = 4usize;
     let mut focus_paths = Vec::new();
+    let mut reset_generated_source_tree = false;
+    let mut editable_instances = Vec::new();
+    let mut editable_instance_map = None;
+    let mut editable_path_prefix = None;
+    let mut editable_parent_id = None;
+    let mut editable_id_prefix = "imported-object".to_owned();
+    let mut editable_display_prefix = None;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -40,6 +47,52 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
             "--focus-path" => {
                 index += 1;
                 focus_paths.push(required_arg(args, index, "--focus-path")?.to_owned());
+            }
+            "--reset-generated-source-tree" => {
+                reset_generated_source_tree = true;
+            }
+            "--editable-instance" => {
+                index += 1;
+                let value = required_arg(args, index, "--editable-instance")?;
+                let (name, mesh) = value.split_once('=').ok_or_else(|| {
+                    "--editable-instance must be formatted as source-name=mesh-asset".to_owned()
+                })?;
+                if name.is_empty() || mesh.is_empty() {
+                    return Err(
+                        "--editable-instance must include a source name and mesh asset".to_owned(),
+                    );
+                }
+                editable_instances.push(EditableInstanceSpec {
+                    source_name: name.to_owned(),
+                    mesh: mesh.to_owned(),
+                });
+            }
+            "--editable-instance-map" => {
+                index += 1;
+                editable_instance_map = Some(PathBuf::from(required_arg(
+                    args,
+                    index,
+                    "--editable-instance-map",
+                )?));
+            }
+            "--editable-path-prefix" => {
+                index += 1;
+                editable_path_prefix =
+                    Some(required_arg(args, index, "--editable-path-prefix")?.to_owned());
+            }
+            "--editable-parent-id" => {
+                index += 1;
+                editable_parent_id =
+                    Some(required_arg(args, index, "--editable-parent-id")?.to_owned());
+            }
+            "--editable-id-prefix" => {
+                index += 1;
+                editable_id_prefix = required_arg(args, index, "--editable-id-prefix")?.to_owned();
+            }
+            "--editable-display-prefix" => {
+                index += 1;
+                editable_display_prefix =
+                    Some(required_arg(args, index, "--editable-display-prefix")?.to_owned());
             }
             value => return Err(format!("unknown import-roblox-scene option {value}")),
         }
@@ -87,6 +140,44 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
             .find(|node| node.id == "imported-environment")
             .map(|node| node.id.clone())
     });
+    let editable_parent_id = editable_parent_id.or_else(|| parent_id.clone());
+    let mut promoted_instances = if let Some(path) = editable_instance_map {
+        read_editable_instance_map(&path)?
+    } else {
+        Vec::new()
+    };
+    for spec in &editable_instances {
+        for instance in reference_scene.instances.iter().filter(|instance| {
+            instance.class == "Model"
+                && instance.name == spec.source_name
+                && editable_path_prefix
+                    .as_deref()
+                    .is_none_or(|prefix| instance.path.starts_with(prefix))
+        }) {
+            let Ok(frame) = reference_instance_frame(&reference_scene, &instance.path) else {
+                continue;
+            };
+            promoted_instances.push(PromotedInstance {
+                source_path: instance.path.clone(),
+                mesh: spec.mesh.clone(),
+                position: frame.position,
+                rotation: [0.0, source_yaw(frame.rotation), 0.0],
+                scale: [1.0; 3],
+            });
+        }
+    }
+    promoted_instances.sort_by(|left, right| left.source_path.cmp(&right.source_path));
+    promoted_instances.dedup_by(|left, right| left.source_path == right.source_path);
+    if !promoted_instances.is_empty()
+        && editable_parent_id
+            .as_deref()
+            .is_some_and(|id| scene.node(id).is_none())
+    {
+        return Err(format!(
+            "editable imported-instance parent {:?} was not found",
+            editable_parent_id.as_deref().unwrap_or_default()
+        ));
+    }
     if let Some(parent_id) = &parent_id
         && scene.node(parent_id).is_none()
     {
@@ -98,13 +189,29 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
     let source_hash = short_hash(&reference_scene.source.place.sha256);
     let root_id = format!("source-hierarchy-{source_hash}");
     scene.nodes.retain(|node| {
-        node.id != root_id
+        let generated_source = node
+            .source
+            .as_ref()
+            .and_then(|source| source.properties.get("generatedBy"))
+            .and_then(Value::as_str)
+            == Some("import-roblox-scene");
+        let editable_generated = node
+            .source
+            .as_ref()
+            .and_then(|source| source.properties.get("representation"))
+            .and_then(Value::as_str)
+            == Some("editable-imported-instance");
+        let legacy_editable = !node.editor.locked
             && node
                 .source
                 .as_ref()
-                .and_then(|source| source.properties.get("generatedBy"))
-                .and_then(Value::as_str)
-                != Some("import-roblox-scene")
+                .and_then(|source| source.path.as_deref())
+                .is_some_and(|path| {
+                    promoted_instances
+                        .iter()
+                        .any(|instance| instance.source_path == path)
+                });
+        !(reset_generated_source_tree && generated_source || editable_generated || legacy_editable)
     });
     let generated_ids = generated_scene_nodes(
         &reference_scene,
@@ -113,8 +220,21 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
         tree_depth,
         &focus_paths,
         &source_index_reference,
+        &promoted_instances,
+        editable_parent_id.as_deref(),
+        editable_display_prefix.as_deref(),
+        &editable_id_prefix,
     );
-    scene.nodes.extend(generated_ids);
+    let existing_ids = scene
+        .nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<BTreeSet<_>>();
+    scene.nodes.extend(
+        generated_ids
+            .into_iter()
+            .filter(|node| !existing_ids.contains(&node.id)),
+    );
     scene.validate()?;
     let scene_source = serialize_authoring_scene(&scene)?;
     write_text(&output, &scene_source)?;
@@ -145,13 +265,89 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
     Ok(())
 }
 
-pub(crate) fn generated_scene_nodes(
+#[derive(Clone, Debug)]
+struct EditableInstanceSpec {
+    source_name: String,
+    mesh: String,
+}
+
+#[derive(Clone, Debug)]
+struct PromotedInstance {
+    source_path: String,
+    mesh: String,
+    position: [f32; 3],
+    rotation: [f32; 3],
+    scale: [f32; 3],
+}
+
+fn read_editable_instance_map(path: &Path) -> Result<Vec<PromotedInstance>, String> {
+    let source = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "could not read editable instance map {}: {error}",
+            path.display()
+        )
+    })?;
+    let value: Value = serde_json::from_str(&source)
+        .map_err(|error| format!("editable instance map is not valid JSON: {error}"))?;
+    let entries = value
+        .get("instances")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "editable instance map requires an instances array".to_owned())?;
+    entries
+        .iter()
+        .map(|entry| {
+            let object = entry
+                .as_object()
+                .ok_or_else(|| "editable instance map entries must be objects".to_owned())?;
+            Ok(PromotedInstance {
+                source_path: object
+                    .get("sourcePath")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "editable instance map entry requires sourcePath".to_owned())?
+                    .to_owned(),
+                mesh: object
+                    .get("asset")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "editable instance map entry requires asset".to_owned())?
+                    .to_owned(),
+                position: vector3(object.get("position"), "position")?,
+                rotation: vector3(object.get("rotation"), "rotation")?,
+                scale: vector3(object.get("scale"), "scale")?,
+            })
+        })
+        .collect()
+}
+
+fn vector3(value: Option<&Value>, label: &str) -> Result<[f32; 3], String> {
+    let values = value
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("editable instance map entry requires {label}"))?;
+    let values = values
+        .iter()
+        .map(|value| {
+            value
+                .as_f64()
+                .filter(|value| value.is_finite())
+                .map(|value| value as f32)
+                .ok_or_else(|| format!("editable instance map {label} must contain finite numbers"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    values
+        .try_into()
+        .map_err(|_| format!("editable instance map {label} must contain three numbers"))
+}
+
+fn generated_scene_nodes(
     reference: &ReferenceScene,
     root_id: &str,
     parent_id: Option<&str>,
     tree_depth: usize,
     focus_paths: &[String],
     source_index_reference: &str,
+    promoted_instances: &[PromotedInstance],
+    editable_parent_id: Option<&str>,
+    editable_display_prefix: Option<&str>,
+    editable_id_prefix: &str,
 ) -> Vec<AuthoringNode> {
     let mut nodes = vec![AuthoringNode {
         id: root_id.to_owned(),
@@ -240,5 +436,54 @@ pub(crate) fn generated_scene_nodes(
             }),
         });
     }
+    let mut editable_number = 0;
+    for promoted in promoted_instances {
+        let Some(instance) = reference
+            .instances
+            .iter()
+            .find(|instance| instance.path == promoted.source_path)
+        else {
+            continue;
+        };
+        editable_number += 1;
+        let id = format!("{}-{}", editable_id_prefix, short_hash(&instance.path));
+        let display_name = editable_display_prefix
+            .map(|prefix| format!("{prefix} {editable_number}"))
+            .unwrap_or_else(|| format!("{} — {}", instance.name, editable_number));
+        let mut properties = BTreeMap::from([
+            ("generatedBy".to_owned(), json!("import-roblox-scene")),
+            (
+                "representation".to_owned(),
+                json!("editable-imported-instance"),
+            ),
+            (
+                "sourceFrame".to_owned(),
+                json!("inferred-from-first-descendant-geometry"),
+            ),
+        ]);
+        properties.insert("asset".to_owned(), json!(promoted.mesh));
+        nodes.push(AuthoringNode {
+            id,
+            parent_id: editable_parent_id.map(str::to_owned),
+            name: display_name,
+            transform: Transform {
+                position: promoted.position,
+                rotation: promoted.rotation,
+                scale: promoted.scale,
+            },
+            components: BTreeMap::from([("render".to_owned(), json!({"mesh": promoted.mesh}))]),
+            editor: EditorMetadata::default(),
+            source: Some(SourceMetadata {
+                format: "roblox".to_owned(),
+                class: Some(instance.class.clone()),
+                path: Some(instance.path.clone()),
+                properties,
+            }),
+        });
+    }
     nodes
+}
+
+fn source_yaw(rotation: [[f32; 3]; 3]) -> f32 {
+    rotation[0][2].atan2(rotation[0][0])
 }

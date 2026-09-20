@@ -208,6 +208,31 @@ fn local_affine(transform: &Transform) -> Affine3A {
 
 pub(crate) fn affine_transform(transform: Affine3A) -> AuthoringWorldTransform {
     let (scale, rotation, position) = transform.to_scale_rotation_translation();
+
+    // A transform containing only Y rotation is a common authoring case for
+    // imported furniture. glam's general XYZ Euler decomposition can choose
+    // an equivalent representation with non-zero X/Z angles for some Y
+    // angles. The runtime mesh adapter intentionally supports Y rotation only,
+    // so preserve that canonical representation when the affine basis proves
+    // that the transform is actually Y-only.
+    let x_axis = transform.transform_vector3(Vec3::X);
+    let y_axis = transform.transform_vector3(Vec3::Y);
+    let z_axis = transform.transform_vector3(Vec3::Z);
+    let tolerance = 0.0001;
+    if x_axis.y.abs() <= tolerance
+        && z_axis.y.abs() <= tolerance
+        && y_axis.x.abs() <= tolerance
+        && y_axis.z.abs() <= tolerance
+        && x_axis.length_squared() > f32::EPSILON
+    {
+        let yaw = (-x_axis.z).atan2(x_axis.x);
+        return AuthoringWorldTransform {
+            position: position.to_array(),
+            rotation: [0.0, yaw, 0.0],
+            scale: scale.to_array(),
+        };
+    }
+
     let (x, y, z) = rotation.to_euler(EulerRot::XYZ);
     AuthoringWorldTransform {
         position: position.to_array(),

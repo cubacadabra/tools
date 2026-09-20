@@ -360,6 +360,24 @@ mod tests {
     }
 
     #[test]
+    fn world_transform_keeps_y_only_rotation_canonical_for_meshes() {
+        let mut mesh = node("mesh", None);
+        mesh.transform.rotation = [0.0, -2.879817, 0.0];
+        mesh.components
+            .insert("render".to_owned(), json!({ "mesh": "chair" }));
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: None,
+            nodes: vec![mesh],
+        };
+
+        let world = scene.world_transform("mesh").unwrap();
+        assert!(world.rotation[0].abs() < 0.0001);
+        assert!((world.rotation[1] + 2.879817).abs() < 0.0001);
+        assert!(world.rotation[2].abs() < 0.0001);
+    }
+
+    #[test]
     fn components_compile_to_the_existing_runtime_collections() {
         let mut mesh = node("mesh", Some("root"));
         mesh.transform.scale = [1.0, 1.5, 0.75];

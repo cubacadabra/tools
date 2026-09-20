@@ -18,6 +18,17 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
     }
     let scene = read_reference_scene(&options.scene_path)?;
     let overrides = mesh_overrides::load(options.mesh_overrides.as_deref())?;
+    let local_frame = if options.local_space {
+        let root = options.instance_root.as_deref().ok_or_else(|| {
+            "--local-space requires --instance-root so the source frame can be inferred".to_owned()
+        })?;
+        Some(reference_instance_frame(&scene, root)?)
+    } else {
+        None
+    };
+    if options.local_space && options.origin != [0.0; 3] {
+        return Err("--origin cannot be combined with --local-space".to_owned());
+    }
     let selected = scene
         .geometry
         .iter()
@@ -31,6 +42,10 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
                     .exclude_paths
                     .iter()
                     .any(|path| geometry.path.contains(path))
+                && options
+                    .instance_root
+                    .as_deref()
+                    .is_none_or(|root| geometry.path.starts_with(&format!("{root}/")))
                 && geometry
                     .size
                     .iter()
@@ -56,7 +71,14 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
             append_static_geometry(&mut vertices, geometry);
         }
         for vertex in &mut vertices {
-            vertex.position = scale3(sub3(vertex.position, options.origin), options.scale);
+            if let Some(frame) = local_frame {
+                vertex.position =
+                    inverse_rotate_vector(frame.rotation, sub3(vertex.position, frame.position));
+                vertex.normal = inverse_rotate_vector(frame.rotation, vertex.normal);
+            } else {
+                vertex.position = sub3(vertex.position, options.origin);
+            }
+            vertex.position = scale3(vertex.position, options.scale);
         }
         if options.collision_output.is_some() && geometry.can_collide {
             collision_triangles.extend(vertices.chunks_exact(3).map(|triangle| {
@@ -275,6 +297,14 @@ pub(crate) fn rotate_vector(rows: [[f32; 3]; 3], vector: [f32; 3]) -> [f32; 3] {
         dot3(rows[0], vector),
         dot3(rows[1], vector),
         dot3(rows[2], vector),
+    ]
+}
+
+fn inverse_rotate_vector(rows: [[f32; 3]; 3], vector: [f32; 3]) -> [f32; 3] {
+    [
+        rows[0][0] * vector[0] + rows[1][0] * vector[1] + rows[2][0] * vector[2],
+        rows[0][1] * vector[0] + rows[1][1] * vector[1] + rows[2][1] * vector[2],
+        rows[0][2] * vector[0] + rows[1][2] * vector[1] + rows[2][2] * vector[2],
     ]
 }
 

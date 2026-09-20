@@ -5,6 +5,8 @@ pub(crate) fn export_reference_mesh_command(args: &[String]) -> Result<(), Strin
     let mut output = None;
     let mut path_prefixes = Vec::new();
     let mut exclude_paths = Vec::new();
+    let mut instance_root = None;
+    let mut local_space = false;
     let mut scale = 1.0;
     let mut origin = [0.0; 3];
     let mut collision_output = None;
@@ -28,6 +30,13 @@ pub(crate) fn export_reference_mesh_command(args: &[String]) -> Result<(), Strin
             "--exclude-path" => {
                 index += 1;
                 exclude_paths.push(required_arg(args, index, "--exclude-path")?.to_owned());
+            }
+            "--instance-root" => {
+                index += 1;
+                instance_root = Some(required_arg(args, index, "--instance-root")?.to_owned());
+            }
+            "--local-space" => {
+                local_space = true;
             }
             "--scale" => {
                 index += 1;
@@ -82,6 +91,8 @@ pub(crate) fn export_reference_mesh_command(args: &[String]) -> Result<(), Strin
         output_path: output,
         path_prefixes,
         exclude_paths,
+        instance_root,
+        local_space,
         scale,
         origin,
         collision_output,
@@ -100,6 +111,167 @@ pub(crate) fn export_reference_mesh_command(args: &[String]) -> Result<(), Strin
         result.bounds.maximum[0] - result.bounds.minimum[0],
         result.bounds.maximum[1] - result.bounds.minimum[1],
         result.bounds.maximum[2] - result.bounds.minimum[2]
+    );
+    Ok(())
+}
+
+pub(crate) fn export_reference_instances_command(args: &[String]) -> Result<(), String> {
+    let mut scene = None;
+    let mut path_prefix = None;
+    let mut instance_name = None;
+    let mut asset_prefix = None;
+    let mut asset_directory = None;
+    let mut asset_path_prefix = "assets/models".to_owned();
+    let mut mapping_output = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--scene" => {
+                index += 1;
+                scene = Some(PathBuf::from(required_arg(args, index, "--scene")?));
+            }
+            "--path-prefix" => {
+                index += 1;
+                path_prefix = Some(required_arg(args, index, "--path-prefix")?.to_owned());
+            }
+            "--instance-name" => {
+                index += 1;
+                instance_name = Some(required_arg(args, index, "--instance-name")?.to_owned());
+            }
+            "--asset-prefix" => {
+                index += 1;
+                asset_prefix = Some(required_arg(args, index, "--asset-prefix")?.to_owned());
+            }
+            "--asset-directory" => {
+                index += 1;
+                asset_directory = Some(PathBuf::from(required_arg(
+                    args,
+                    index,
+                    "--asset-directory",
+                )?));
+            }
+            "--asset-path-prefix" => {
+                index += 1;
+                asset_path_prefix = required_arg(args, index, "--asset-path-prefix")?.to_owned();
+            }
+            "--mapping-output" => {
+                index += 1;
+                mapping_output = Some(PathBuf::from(required_arg(
+                    args,
+                    index,
+                    "--mapping-output",
+                )?));
+            }
+            value => return Err(format!("unknown export-reference-instances option {value}")),
+        }
+        index += 1;
+    }
+    let scene_path =
+        scene.ok_or_else(|| "export-reference-instances requires --scene".to_owned())?;
+    let path_prefix = path_prefix
+        .ok_or_else(|| "export-reference-instances requires --path-prefix".to_owned())?;
+    let instance_name = instance_name
+        .ok_or_else(|| "export-reference-instances requires --instance-name".to_owned())?;
+    let asset_prefix = asset_prefix
+        .ok_or_else(|| "export-reference-instances requires --asset-prefix".to_owned())?;
+    let asset_directory = asset_directory
+        .ok_or_else(|| "export-reference-instances requires --asset-directory".to_owned())?;
+    let mapping_output = mapping_output
+        .ok_or_else(|| "export-reference-instances requires --mapping-output".to_owned())?;
+    let reference = read_reference_scene(&scene_path)?;
+    let mut roots = reference
+        .instances
+        .iter()
+        .filter(|instance| {
+            instance.class == "Model"
+                && instance.name == instance_name
+                && instance.path.starts_with(&path_prefix)
+        })
+        .collect::<Vec<_>>();
+    roots.sort_by(|left, right| left.path.cmp(&right.path));
+    if roots.is_empty() {
+        return Err(format!(
+            "no Model instances named {instance_name:?} matched {path_prefix:?}"
+        ));
+    }
+    fs::create_dir_all(&asset_directory).map_err(|error| {
+        format!(
+            "could not create reference asset directory {}: {error}",
+            asset_directory.display()
+        )
+    })?;
+    let mut asset_ids = BTreeMap::<String, String>::new();
+    let mut assets = Vec::new();
+    let mut instances = Vec::new();
+    for root in roots {
+        let fingerprint = reference_instance_fingerprint(&reference, &root.path)?;
+        let asset_id = if let Some(asset_id) = asset_ids.get(&fingerprint) {
+            asset_id.clone()
+        } else {
+            let asset_id = if asset_ids.is_empty() {
+                asset_prefix.clone()
+            } else {
+                format!("{}-{}", asset_prefix, asset_ids.len() + 1)
+            };
+            let output_path = asset_directory.join(format!("{asset_id}.glb"));
+            let result = export_reference_mesh(&MeshExportOptions {
+                scene_path: scene_path.clone(),
+                output_path,
+                path_prefixes: vec![root.path.clone()],
+                exclude_paths: Vec::new(),
+                instance_root: Some(root.path.clone()),
+                local_space: true,
+                scale: 1.0,
+                origin: [0.0; 3],
+                collision_output: None,
+                bounds_output: None,
+                mesh_overrides: None,
+            })?;
+            let bounds = [
+                result.bounds.maximum[0] - result.bounds.minimum[0],
+                result.bounds.maximum[1] - result.bounds.minimum[1],
+                result.bounds.maximum[2] - result.bounds.minimum[2],
+            ];
+            assets.push(json!({
+                "id": asset_id,
+                "path": format!("{asset_path_prefix}/{asset_id}.glb"),
+                "bounds": bounds,
+                "fingerprint": fingerprint,
+            }));
+            asset_ids.insert(fingerprint.clone(), asset_id.clone());
+            asset_id
+        };
+        let frame = reference_instance_frame(&reference, &root.path)?;
+        instances.push(json!({
+            "sourcePath": root.path,
+            "asset": asset_id,
+            "position": frame.position,
+            "rotation": [0.0, frame.rotation[0][2].atan2(frame.rotation[0][0]), 0.0],
+            "scale": [1.0, 1.0, 1.0],
+        }));
+    }
+    let asset_count = assets.len();
+    let instance_count = instances.len();
+    let mapping = json!({
+        "formatVersion": 1,
+        "instanceName": instance_name,
+        "assets": assets,
+        "instances": instances,
+    });
+    write_text(
+        &mapping_output,
+        &format!(
+            "{}\n",
+            serde_json::to_string_pretty(&mapping)
+                .map_err(|error| format!("could not encode editable instance map: {error}"))?
+        ),
+    )?;
+    println!(
+        "Exported {} {} instances into {} reusable assets -> {}",
+        instance_count,
+        instance_name,
+        asset_count,
+        mapping_output.display()
     );
     Ok(())
 }

@@ -28,6 +28,8 @@ pub struct MeshExportOptions {
     pub output_path: PathBuf,
     pub path_prefixes: Vec<String>,
     pub exclude_paths: Vec<String>,
+    pub instance_root: Option<String>,
+    pub local_space: bool,
     pub scale: f32,
     pub origin: [f32; 3],
     pub collision_output: Option<PathBuf>,
@@ -115,6 +117,16 @@ pub struct SceneSummary {
 pub struct Bounds {
     pub minimum: [f32; 3],
     pub maximum: [f32; 3],
+}
+
+/// The inferred authoring frame for a source model whose Roblox XML does not
+/// carry a model CFrame. Reference geometry stores world-space transforms, so
+/// the first descendant geometry provides a deterministic pivot and basis for
+/// extracting a reusable local-space asset.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ReferenceInstanceFrame {
+    pub position: [f32; 3],
+    pub rotation: [[f32; 3]; 3],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
