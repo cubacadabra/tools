@@ -18,6 +18,8 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
     let mut editable_parent_id = None;
     let mut editable_id_prefix = "imported-object".to_owned();
     let mut editable_display_prefix = None;
+    let mut promotion_report_output = None;
+    let mut compact_output = false;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -110,6 +112,17 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
                 editable_display_prefix =
                     Some(required_arg(args, index, "--editable-display-prefix")?.to_owned());
             }
+            "--promotion-report-output" => {
+                index += 1;
+                promotion_report_output = Some(PathBuf::from(required_arg(
+                    args,
+                    index,
+                    "--promotion-report-output",
+                )?));
+            }
+            "--compact-output" => {
+                compact_output = true;
+            }
             value => return Err(format!("unknown import-roblox-scene option {value}")),
         }
         index += 1;
@@ -162,11 +175,12 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
     } else {
         Vec::new()
     };
-    let promoted_primitives = select_promoted_primitives(
+    let promotion = select_promoted_primitives(
         &reference_scene,
         &editable_part_names,
         editable_part_path_prefix.as_deref(),
     );
+    let promoted_primitives = promotion.promoted;
     for spec in &editable_instances {
         for instance in reference_scene.instances.iter().filter(|instance| {
             instance.class == "Model"
@@ -217,14 +231,18 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
             .and_then(|source| source.properties.get("generatedBy"))
             .and_then(Value::as_str)
             == Some("import-roblox-scene");
-        let editable_generated = node
-            .source
-            .as_ref()
-            .and_then(|source| source.properties.get("representation"))
-            .and_then(Value::as_str)
-            .is_some_and(|representation| {
-                matches!(representation, "editable-imported-instance" | "primitive")
-            });
+        let editable_generated = !node.editor.locked
+            && node
+                .source
+                .as_ref()
+                .and_then(|source| source.properties.get("representation"))
+                .and_then(Value::as_str)
+                .is_some_and(|representation| {
+                    matches!(
+                        representation,
+                        "editable-imported-instance" | "primitive" | "native-group"
+                    )
+                });
         let legacy_editable = !node.editor.locked
             && node
                 .source
@@ -249,6 +267,7 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
         editable_parent_id.as_deref(),
         editable_display_prefix.as_deref(),
         &editable_id_prefix,
+        &promotion.statuses,
     );
     let existing_ids = scene
         .nodes
@@ -261,9 +280,21 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
             .filter(|node| !existing_ids.contains(&node.id)),
     );
     scene.validate()?;
-    let scene_source = serialize_authoring_scene(&scene)?;
+    let scene_source = if compact_output {
+        scene.validate()?;
+        format!(
+            "{}\n",
+            serde_json::to_string(&scene)
+                .map_err(|error| format!("could not encode compact authoring scene: {error}"))?
+        )
+    } else {
+        serialize_authoring_scene(&scene)?
+    };
     write_text(&output, &scene_source)?;
     let shard_count = write_source_index(&source_index, &reference_scene)?;
+    if let Some(path) = promotion_report_output {
+        write_promotion_report(&path, &promotion.stats)?;
+    }
     println!(
         "Imported Roblox source hierarchy: {} source nodes ({} in scene tree, depth {}, {} focus paths) -> {}",
         reference_scene.instances.len(),
@@ -287,6 +318,13 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
         shard_count,
         source_index.display()
     );
+    println!(
+        "  Parts: {} total, {} promoted, {} fallback",
+        promotion.stats.total_parts, promotion.stats.promoted_parts, promotion.stats.fallback_parts
+    );
+    for (reason, count) in &promotion.stats.fallback_reasons {
+        println!("    {reason}: {count}");
+    }
     Ok(())
 }
 
@@ -316,29 +354,143 @@ struct PromotedPrimitive {
     can_collide: bool,
 }
 
+#[derive(Clone, Debug, Default)]
+struct PromotionStats {
+    total_parts: usize,
+    promoted_parts: usize,
+    fallback_parts: usize,
+    fallback_reasons: BTreeMap<String, usize>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct PromotionSelection {
+    promoted: Vec<PromotedPrimitive>,
+    statuses: BTreeMap<String, PromotionStatus>,
+    stats: PromotionStats,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PromotionStatus {
+    Promoted { node_id: String },
+    Fallback { reason: &'static str },
+}
+
 fn select_promoted_primitives(
     reference: &ReferenceScene,
     names: &[String],
     path_prefix: Option<&str>,
-) -> Vec<PromotedPrimitive> {
-    reference
-        .geometry
+) -> PromotionSelection {
+    let mut selection = PromotionSelection::default();
+    for geometry in &reference.geometry {
+        if geometry.class != "Part" {
+            continue;
+        }
+        selection.stats.total_parts += 1;
+        if !names.is_empty() && !names.iter().any(|name| name == &geometry.name) {
+            record_fallback(&mut selection, geometry, "name-filtered");
+            continue;
+        }
+        if path_prefix.is_some_and(|prefix| !geometry.path.starts_with(prefix)) {
+            record_fallback(&mut selection, geometry, "path-filtered");
+            continue;
+        }
+        let Some(reason) = can_promote_part(geometry).err() else {
+            let node_id = primitive_node_id(&geometry.path);
+            selection.promoted.push(PromotedPrimitive {
+                source_path: geometry.path.clone(),
+                position: geometry.transform.position,
+                rotation: source_rotation_to_euler(geometry.transform.rotation),
+                size: geometry.size,
+                material: source_color(geometry.color),
+                can_collide: geometry.can_collide,
+            });
+            selection
+                .statuses
+                .insert(geometry.path.clone(), PromotionStatus::Promoted { node_id });
+            selection.stats.promoted_parts += 1;
+            continue;
+        };
+        record_fallback(&mut selection, geometry, reason);
+    }
+    selection
+}
+
+fn record_fallback(
+    selection: &mut PromotionSelection,
+    geometry: &GeometryInstance,
+    reason: &'static str,
+) {
+    selection.stats.fallback_parts += 1;
+    *selection
+        .stats
+        .fallback_reasons
+        .entry(reason.to_owned())
+        .or_default() += 1;
+    selection
+        .statuses
+        .insert(geometry.path.clone(), PromotionStatus::Fallback { reason });
+}
+
+fn can_promote_part(geometry: &GeometryInstance) -> Result<(), &'static str> {
+    if geometry.class != "Part" {
+        return Err("unsupported-class");
+    }
+    // Roblox Enum.PartType uses Block = 1; missing Shape is treated as the
+    // ordinary Part default for older normalized fixtures.
+    if geometry.shape.is_some_and(|shape| shape != 1) {
+        return Err("unsupported-shape");
+    }
+    if geometry.mesh.is_some() {
+        return Err("unsupported-mesh");
+    }
+    if !geometry.anchored {
+        return Err("unsupported-dynamic");
+    }
+    if !source_rotation_is_axis_aligned(geometry.transform.rotation) {
+        return Err("unsupported-transform");
+    }
+    if geometry.transparency > 0.0001 {
+        return Err("unsupported-transparency");
+    }
+    if geometry.reflectance > 0.0001 {
+        return Err("unsupported-reflectance");
+    }
+    if !geometry.cast_shadow {
+        return Err("unsupported-shadow");
+    }
+    if geometry
+        .size
         .iter()
-        .filter(|geometry| {
-            geometry.class == "Part"
-                && source_rotation_is_axis_aligned(geometry.transform.rotation)
-                && names.iter().any(|name| name == &geometry.name)
-                && path_prefix.is_none_or(|prefix| geometry.path.starts_with(prefix))
-        })
-        .map(|geometry| PromotedPrimitive {
-            source_path: geometry.path.clone(),
-            position: geometry.transform.position,
-            rotation: source_rotation_to_euler(geometry.transform.rotation),
-            size: geometry.size,
-            material: source_color(geometry.color),
-            can_collide: geometry.can_collide,
-        })
-        .collect()
+        .any(|value| !value.is_finite() || *value < 0.05)
+    {
+        return Err("unsupported-size");
+    }
+    Ok(())
+}
+
+fn primitive_node_id(source_path: &str) -> String {
+    format!("imported-part-{}", short_hash(source_path))
+}
+
+fn write_promotion_report(path: &Path, stats: &PromotionStats) -> Result<(), String> {
+    let report = json!({
+        "formatVersion": 1,
+        "kind": "roblox-native-promotion-report",
+        "parts": {
+            "total": stats.total_parts,
+            "promoted": stats.promoted_parts,
+            "fallback": stats.fallback_parts,
+            "fallbackReasons": stats.fallback_reasons,
+        }
+    });
+    write_text(
+        path,
+        &format!(
+            "{}\n",
+            serde_json::to_string_pretty(&report)
+                .map_err(|error| format!("could not encode promotion report: {error}"))?
+        ),
+    )
 }
 
 fn read_editable_instance_map(path: &Path) -> Result<Vec<PromotedInstance>, String> {
@@ -423,6 +575,7 @@ fn generated_scene_nodes(
     editable_parent_id: Option<&str>,
     editable_display_prefix: Option<&str>,
     editable_id_prefix: &str,
+    promotion_statuses: &BTreeMap<String, PromotionStatus>,
 ) -> Vec<AuthoringNode> {
     let mut nodes = vec![AuthoringNode {
         id: root_id.to_owned(),
@@ -463,6 +616,17 @@ fn generated_scene_nodes(
         })
         .map(|instance| instance.path.as_str())
         .collect::<BTreeSet<_>>();
+    let promoted_paths = promoted_instances
+        .iter()
+        .map(|instance| instance.source_path.as_str())
+        .chain(
+            promoted_primitives
+                .iter()
+                .map(|primitive| primitive.source_path.as_str()),
+        )
+        .collect::<Vec<_>>();
+    let (native_groups, native_group_ids) =
+        native_group_hierarchy(reference, &promoted_paths, editable_parent_id);
     for instance in &reference.instances {
         if !included.contains(instance.path.as_str()) {
             continue;
@@ -482,6 +646,22 @@ fn generated_scene_nodes(
             .count();
         if geometry_count > 0 {
             properties.insert("geometryCount".to_owned(), json!(geometry_count));
+        }
+        if let Some(status) = promotion_statuses.get(&instance.path) {
+            match status {
+                PromotionStatus::Promoted { node_id } => {
+                    properties.insert("promotionStatus".to_owned(), json!("promoted"));
+                    properties.insert("nativeRepresentationId".to_owned(), json!(node_id));
+                }
+                PromotionStatus::Fallback { reason } => {
+                    properties.insert("promotionStatus".to_owned(), json!("fallback"));
+                    properties.insert("promotionReason".to_owned(), json!(reason));
+                }
+            }
+        }
+        if let Some(native_id) = native_group_ids.get(&instance.path) {
+            properties.insert("representation".to_owned(), json!("native-group"));
+            properties.insert("nativeRepresentationId".to_owned(), json!(native_id));
         }
         nodes.push(AuthoringNode {
             id,
@@ -511,6 +691,16 @@ fn generated_scene_nodes(
             }),
         });
     }
+    nodes.extend(native_groups);
+    let native_parent = |source_path: &str| {
+        reference
+            .instances
+            .iter()
+            .find(|instance| instance.path == source_path)
+            .and_then(|instance| native_group_ids.get(&instance.parent_path))
+            .cloned()
+            .or_else(|| editable_parent_id.map(str::to_owned))
+    };
     let mut editable_number = 0;
     for promoted in promoted_instances {
         let Some(instance) = reference
@@ -535,11 +725,12 @@ fn generated_scene_nodes(
                 "sourceFrame".to_owned(),
                 json!("inferred-from-first-descendant-geometry"),
             ),
+            ("regenerationPolicy".to_owned(), json!("source-generated")),
         ]);
         properties.insert("asset".to_owned(), json!(promoted.mesh));
         nodes.push(AuthoringNode {
             id,
-            parent_id: editable_parent_id.map(str::to_owned),
+            parent_id: native_parent(&instance.path),
             name: display_name,
             transform: Transform {
                 position: promoted.position,
@@ -576,7 +767,7 @@ fn generated_scene_nodes(
             continue;
         };
         primitive_number += 1;
-        let id = format!("imported-part-{}", short_hash(&instance.path));
+        let id = primitive_node_id(&instance.path);
         let mut properties = BTreeMap::from([
             ("generatedBy".to_owned(), json!("import-roblox-scene")),
             ("representation".to_owned(), json!("primitive")),
@@ -586,6 +777,7 @@ fn generated_scene_nodes(
                 "sourceFrame".to_owned(),
                 json!("geometry-transform-and-bounds"),
             ),
+            ("regenerationPolicy".to_owned(), json!("source-generated")),
         ]);
         if let Some(material) = reference
             .geometry
@@ -608,7 +800,7 @@ fn generated_scene_nodes(
         }
         nodes.push(AuthoringNode {
             id,
-            parent_id: editable_parent_id.map(str::to_owned),
+            parent_id: native_parent(&instance.path),
             name: format!("{} — {}", instance.name, primitive_number),
             transform: Transform {
                 position: promoted.position,
@@ -628,7 +820,71 @@ fn generated_scene_nodes(
     nodes
 }
 
+fn native_group_hierarchy(
+    reference: &ReferenceScene,
+    promoted_paths: &[&str],
+    fallback_parent_id: Option<&str>,
+) -> (Vec<AuthoringNode>, BTreeMap<String, String>) {
+    let instances = reference
+        .instances
+        .iter()
+        .map(|instance| (instance.path.as_str(), instance))
+        .collect::<BTreeMap<_, _>>();
+    let mut paths = BTreeSet::new();
+    for promoted_path in promoted_paths {
+        let Some(instance) = instances.get(promoted_path) else {
+            continue;
+        };
+        let mut ancestor_path = instance.parent_path.as_str();
+        while !ancestor_path.is_empty() {
+            let Some(ancestor) = instances.get(ancestor_path) else {
+                break;
+            };
+            if matches!(ancestor.class.as_str(), "Model" | "Folder") {
+                paths.insert(ancestor.path.clone());
+            }
+            ancestor_path = ancestor.parent_path.as_str();
+        }
+    }
+    let mut ordered_paths = paths.into_iter().collect::<Vec<_>>();
+    ordered_paths.sort_by_key(|path| (path.split('/').count(), path.clone()));
+    let mut ids = BTreeMap::new();
+    let mut nodes = Vec::new();
+    for path in ordered_paths {
+        let Some(instance) = instances.get(path.as_str()) else {
+            continue;
+        };
+        let id = format!("imported-group-{}", short_hash(&path));
+        let parent_id = instances
+            .get(instance.parent_path.as_str())
+            .and_then(|parent| ids.get(parent.path.as_str()))
+            .cloned()
+            .or_else(|| fallback_parent_id.map(str::to_owned));
+        ids.insert(path.clone(), id.clone());
+        nodes.push(AuthoringNode {
+            id,
+            parent_id,
+            name: instance.name.clone(),
+            transform: Transform::default(),
+            components: BTreeMap::new(),
+            editor: EditorMetadata::default(),
+            source: Some(SourceMetadata {
+                format: "roblox".to_owned(),
+                class: Some(instance.class.clone()),
+                path: Some(path),
+                properties: BTreeMap::from([
+                    ("generatedBy".to_owned(), json!("import-roblox-scene")),
+                    ("representation".to_owned(), json!("native-group")),
+                    ("regenerationPolicy".to_owned(), json!("source-generated")),
+                ]),
+            }),
+        });
+    }
+    (nodes, ids)
+}
+
 fn source_rotation_to_euler(rotation: [[f32; 3]; 3]) -> [f32; 3] {
+    let rotation = canonical_axis_rotation(rotation).unwrap_or(rotation);
     let matrix = Mat3::from_cols(
         Vec3::new(rotation[0][0], rotation[1][0], rotation[2][0]),
         Vec3::new(rotation[0][1], rotation[1][1], rotation[2][1]),
@@ -636,6 +892,22 @@ fn source_rotation_to_euler(rotation: [[f32; 3]; 3]) -> [f32; 3] {
     );
     let (x, y, z) = Quat::from_mat3(&matrix).to_euler(EulerRot::XYZ);
     [x, y, z]
+}
+
+fn canonical_axis_rotation(rotation: [[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
+    if !source_rotation_is_axis_aligned(rotation) {
+        return None;
+    }
+    let mut canonical = [[0.0; 3]; 3];
+    for (row_index, row) in rotation.iter().enumerate() {
+        let column_index = row
+            .iter()
+            .enumerate()
+            .max_by(|left, right| left.1.abs().total_cmp(&right.1.abs()))
+            .map(|(index, _)| index)?;
+        canonical[row_index][column_index] = row[column_index].signum();
+    }
+    Some(canonical)
 }
 
 fn source_yaw(rotation: [[f32; 3]; 3]) -> f32 {
@@ -718,6 +990,40 @@ mod tests {
         ]));
     }
 
+    #[test]
+    fn rejects_non_block_shapes_and_dynamic_parts() {
+        let mut value = reference_fixture();
+        value["geometry"][0]["shape"] = json!(2);
+        value["geometry"][1]["anchored"] = json!(false);
+        value["geometry"][2]["castShadow"] = json!(false);
+        let reference: ReferenceScene = serde_json::from_value(value).unwrap();
+        let selection = select_promoted_primitives(&reference, &[], None);
+        assert!(
+            !selection
+                .promoted
+                .iter()
+                .any(|part| part.source_path == "Workspace/Imported/DirtTrack")
+        );
+        assert_eq!(
+            selection.statuses["Workspace/Imported/DirtTrack"],
+            PromotionStatus::Fallback {
+                reason: "unsupported-shape"
+            }
+        );
+        assert_eq!(
+            selection.statuses["Workspace/Imported/Decor"],
+            PromotionStatus::Fallback {
+                reason: "unsupported-dynamic"
+            }
+        );
+        assert_eq!(
+            selection.statuses["Workspace/Imported/RotX"],
+            PromotionStatus::Fallback {
+                reason: "unsupported-shadow"
+            }
+        );
+    }
+
     fn reference_fixture() -> Value {
         let identity = source_rows(Mat3::IDENTITY);
         let part = |path: &str, name: &str, rotation: [[f32; 3]; 3], can_collide: bool| {
@@ -761,7 +1067,8 @@ mod tests {
                 part("Workspace/Imported/Decor", "Decor", identity, false),
                 part("Workspace/Imported/RotX", "RotX", source_rows(Mat3::from_rotation_x(FRAC_PI_2)), true),
                 part("Workspace/Imported/RotZ", "RotZ", source_rows(Mat3::from_rotation_z(-FRAC_PI_2)), true),
-                part("Workspace/Imported/Tilt", "Tilt", source_rows(Mat3::from_rotation_y(PI / 4.0)), true)
+                part("Workspace/Imported/Tilt", "Tilt", source_rows(Mat3::from_rotation_y(PI / 4.0)), true),
+                part("Workspace/Elsewhere/DirtTrack", "DirtTrack", identity, true)
             ],
             "cameras": [], "lights": [], "textures": [], "texts": [], "spawns": [],
             "projectLighting": null, "terrain": null
@@ -769,12 +1076,13 @@ mod tests {
     }
 
     #[test]
-    fn import_promotes_selected_parts_with_path_filter_and_reruns_idempotently() {
+    fn import_promotes_all_supported_parts_with_stable_paths_and_groups() {
         let temp = tempfile::tempdir().unwrap();
         let reference = temp.path().join("reference.json");
         let base = temp.path().join("scene.json");
         let output = temp.path().join("out-scene.json");
         let source_index = temp.path().join("imports/roblox/place/index.json");
+        let report = temp.path().join("promotion-report.json");
         fs::write(
             &reference,
             serde_json::to_vec(&reference_fixture()).unwrap(),
@@ -794,18 +1102,8 @@ mod tests {
             output.to_str().unwrap(),
             "--source-index",
             source_index.to_str().unwrap(),
-            "--editable-part-name",
-            "DirtTrack",
-            "--editable-part-name",
-            "Decor",
-            "--editable-part-name",
-            "RotX",
-            "--editable-part-name",
-            "RotZ",
-            "--editable-part-name",
-            "Tilt",
-            "--editable-part-path-prefix",
-            "Workspace/Imported",
+            "--promotion-report-output",
+            report.to_str().unwrap(),
         ]
         .into_iter()
         .map(str::to_owned)
@@ -819,13 +1117,13 @@ mod tests {
             .iter()
             .filter(|node| node.id.starts_with("imported-part-"))
             .collect::<Vec<_>>();
-        assert_eq!(promoted.len(), 4);
+        assert_eq!(promoted.len(), 5);
         assert_eq!(
             promoted
                 .iter()
                 .filter(|node| node.components.contains_key("collision"))
                 .count(),
-            3
+            4
         );
         let decor = scene
             .nodes
@@ -851,6 +1149,25 @@ mod tests {
                 .iter()
                 .all(|node| !node.name.starts_with("Tilt —"))
         );
+        assert_eq!(
+            scene
+                .nodes
+                .iter()
+                .filter(|node| node.id.starts_with("imported-group-"))
+                .count(),
+            1
+        );
+        let dirt_tracks = scene
+            .nodes
+            .iter()
+            .filter(|node| node.name.starts_with("DirtTrack —"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            dirt_tracks.len(),
+            2,
+            "duplicate names must remain distinct by path"
+        );
+        assert_ne!(dirt_tracks[0].id, dirt_tracks[1].id);
         let outside = scene
             .nodes
             .iter()
@@ -862,13 +1179,27 @@ mod tests {
             })
             .unwrap();
         assert!(outside.editor.locked);
-        assert!(
-            !outside
-                .source
-                .as_ref()
-                .unwrap()
-                .properties
-                .contains_key("representation")
+        assert_eq!(
+            outside.source.as_ref().unwrap().properties["promotionStatus"],
+            "promoted"
         );
+        let tilt = scene
+            .nodes
+            .iter()
+            .find(|node| {
+                node.source
+                    .as_ref()
+                    .and_then(|source| source.path.as_deref())
+                    == Some("Workspace/Imported/Tilt")
+            })
+            .unwrap();
+        assert_eq!(
+            tilt.source.as_ref().unwrap().properties["promotionReason"],
+            "unsupported-transform"
+        );
+        let report: Value = serde_json::from_str(&fs::read_to_string(report).unwrap()).unwrap();
+        assert_eq!(report["parts"]["total"], 6);
+        assert_eq!(report["parts"]["promoted"], 5);
+        assert_eq!(report["parts"]["fallback"], 1);
     }
 }

@@ -63,14 +63,27 @@ lighting and post-effect settings, computed visible bounds, and source hashes.
 Roblox smooth-terrain voxel blobs are recorded by size and SHA-256 but are not
 decoded yet; that limitation is explicit in the generated scene.
 
-`import-roblox-scene` can promote selected physical Parts into native authoring
-primitives. Repeat `--editable-part-name` for the source display names to
-promote; `--editable-part-path-prefix` can limit the match to one source area.
-`Part` geometry with a runtime-supported axis-aligned rotation is promoted by
-this first primitive slice. Promotion preserves the source `CanCollide` state:
-collidable Parts receive a native box collision component, while non-collidable
-Parts remain editable primitives without collision. Other source records remain
-available in the imported source hierarchy.
+`import-roblox-scene` automatically promotes every losslessly representable
+physical `Part` into a native authoring primitive. The current slice accepts
+anchored, ordinary block Parts with supported axis-aligned rotations and no
+mesh, transparency, or reflectance overrides. Promotion preserves position,
+rotation, size, color, and `CanCollide`: collidable Parts receive a native box
+collision component, while non-collidable Parts remain editable primitives
+without collision. Unsupported Parts remain in the source/fallback pipeline
+with a machine-readable reason. The legacy `--editable-part-name` and
+`--editable-part-path-prefix` options remain available as narrow filters for
+targeted imports.
+
+Promoted Parts receive stable IDs derived from their source paths, are grouped
+under generated native Model/Folder representations, and are linked back from
+the locked source nodes. Re-running the import replaces only source-generated
+representations. Use `--promotion-report-output` for actual conversion counts.
+When baking a fallback GLB, pass `--exclude-authoring-scene scene.json` to
+`export-reference-mesh`; it removes promoted primitive paths from both the
+render mesh and its generated collision data so the native and fallback
+representations do not overlap.
+Large generated scenes may also use `--compact-output` to stay below the
+repository's 4 MB JSON artifact limit without changing their data.
 
 Bake a selected imported hierarchy into a compact static GLB for the normal
 Cubacadabra package renderer:

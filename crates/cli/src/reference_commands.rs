@@ -5,6 +5,7 @@ pub(crate) fn export_reference_mesh_command(args: &[String]) -> Result<(), Strin
     let mut output = None;
     let mut path_prefixes = Vec::new();
     let mut exclude_paths = Vec::new();
+    let mut exclude_authoring_scene = None;
     let mut instance_root = None;
     let mut local_space = false;
     let mut scale = 1.0;
@@ -30,6 +31,14 @@ pub(crate) fn export_reference_mesh_command(args: &[String]) -> Result<(), Strin
             "--exclude-path" => {
                 index += 1;
                 exclude_paths.push(required_arg(args, index, "--exclude-path")?.to_owned());
+            }
+            "--exclude-authoring-scene" => {
+                index += 1;
+                exclude_authoring_scene = Some(PathBuf::from(required_arg(
+                    args,
+                    index,
+                    "--exclude-authoring-scene",
+                )?));
             }
             "--instance-root" => {
                 index += 1;
@@ -86,11 +95,35 @@ pub(crate) fn export_reference_mesh_command(args: &[String]) -> Result<(), Strin
     }
     let scene = scene.ok_or_else(|| "export-reference-mesh requires --scene".to_owned())?;
     let output = output.ok_or_else(|| "export-reference-mesh requires --output".to_owned())?;
+    let exclude_exact_paths = exclude_authoring_scene
+        .map(|path| {
+            let source = fs::read_to_string(&path).map_err(|error| {
+                format!("could not read authoring scene {}: {error}", path.display())
+            })?;
+            let scene = parse_authoring_scene(&source)?;
+            Ok::<Vec<String>, String>(
+                scene
+                    .nodes
+                    .iter()
+                    .filter(|node| {
+                        node.source
+                            .as_ref()
+                            .and_then(|source| source.properties.get("representation"))
+                            .and_then(Value::as_str)
+                            == Some("primitive")
+                    })
+                    .filter_map(|node| node.source.as_ref()?.path.clone())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .transpose()?
+        .unwrap_or_default();
     let result = export_reference_mesh(&MeshExportOptions {
         scene_path: scene,
         output_path: output,
         path_prefixes,
         exclude_paths,
+        exclude_exact_paths,
         instance_root,
         local_space,
         scale,
@@ -220,6 +253,7 @@ pub(crate) fn export_reference_instances_command(args: &[String]) -> Result<(), 
                 output_path,
                 path_prefixes: vec![root.path.clone()],
                 exclude_paths: Vec::new(),
+                exclude_exact_paths: Vec::new(),
                 instance_root: Some(root.path.clone()),
                 local_space: true,
                 scale: 1.0,

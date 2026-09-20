@@ -42,6 +42,10 @@ pub fn export_reference_mesh(options: &MeshExportOptions) -> Result<MeshExportRe
                     .exclude_paths
                     .iter()
                     .any(|path| geometry.path.contains(path))
+                && !options
+                    .exclude_exact_paths
+                    .iter()
+                    .any(|path| geometry.path == *path)
                 && options
                     .instance_root
                     .as_deref()

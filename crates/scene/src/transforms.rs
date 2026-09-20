@@ -264,9 +264,6 @@ pub(crate) fn axis_aligned_runtime_size(
     transform: Affine3A,
     local_size: [f32; 3],
 ) -> Result<[f32; 3], &'static str> {
-    if !runtime_mesh_transform_is_lossless(transform) {
-        return Err("contains shear and cannot compile losslessly");
-    }
     let axes = [
         transform.transform_vector3(Vec3::X),
         transform.transform_vector3(Vec3::Y),
@@ -291,7 +288,11 @@ pub(crate) fn axis_aligned_runtime_size(
                 .any(|(axis, value)| axis != world_axis && *value > tolerance)
             || used_world_axes[world_axis]
         {
-            return Err("has non-axis-aligned rotation unsupported by the runtime adapter");
+            return Err(if runtime_mesh_transform_is_lossless(transform) {
+                "has non-axis-aligned rotation unsupported by the runtime adapter"
+            } else {
+                "contains shear and cannot compile losslessly"
+            });
         }
         used_world_axes[world_axis] = true;
         world_size[world_axis] = local_size[local_axis] * magnitude;

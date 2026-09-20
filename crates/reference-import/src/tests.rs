@@ -104,6 +104,7 @@ fn imports_deterministic_static_reference_scene() {
         output_path: output.clone(),
         path_prefixes: vec!["Folder:Place[1]".to_owned()],
         exclude_paths: Vec::new(),
+        exclude_exact_paths: Vec::new(),
         instance_root: None,
         local_space: false,
         scale: 1.0,
@@ -194,6 +195,7 @@ fn export_selection_scale_and_overrides_share_visual_and_collision_geometry() {
         output_path: mesh_path.clone(),
         path_prefixes: vec!["Main/".into(), "Rooms/".into()],
         exclude_paths: vec!["exclude-this".into()],
+        exclude_exact_paths: Vec::new(),
         instance_root: None,
         local_space: false,
         scale: 0.5,
@@ -223,6 +225,47 @@ fn export_selection_scale_and_overrides_share_visual_and_collision_geometry() {
         expected,
         "visual and collision transforms must match"
     );
+}
+
+#[test]
+fn exact_source_exclusion_removes_promoted_geometry_but_keeps_fallback() {
+    let temp = tempfile::tempdir().unwrap();
+    let place = temp.path().join("Place.rbxmx");
+    let scene_path = temp.path().join("scene.json");
+    fs::write(&place, PLACE).unwrap();
+    import_reference(&ImportOptions {
+        place_path: place,
+        terrain_path: None,
+        project_path: None,
+        output_path: scene_path.clone(),
+    })
+    .unwrap();
+    let mut scene: Value = serde_json::from_slice(&fs::read(&scene_path).unwrap()).unwrap();
+    let mut promoted = scene["geometry"][0].clone();
+    promoted["path"] = json!("Main/promoted");
+    let mut fallback = promoted.clone();
+    fallback["path"] = json!("Main/fallback");
+    scene["geometry"] = json!([promoted, fallback]);
+    fs::write(&scene_path, serde_json::to_vec(&scene).unwrap()).unwrap();
+
+    let output = temp.path().join("mesh.glb");
+    let result = export_reference_mesh(&MeshExportOptions {
+        scene_path,
+        output_path: output,
+        path_prefixes: vec!["Main/".into()],
+        exclude_paths: Vec::new(),
+        exclude_exact_paths: vec!["Main/promoted".into()],
+        instance_root: None,
+        local_space: false,
+        scale: 1.0,
+        origin: [0.0; 3],
+        collision_output: None,
+        bounds_output: None,
+        mesh_overrides: None,
+    })
+    .unwrap();
+    assert_eq!(result.geometry_count, 1);
+    assert_eq!(result.triangle_count, 12);
 }
 
 #[test]

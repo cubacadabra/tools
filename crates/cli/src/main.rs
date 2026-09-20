@@ -1,8 +1,9 @@
 use cubacadabra_builder::{BuildOptions, build_game};
 use cubacadabra_project::create_game;
 use cubacadabra_reference_import::{
-    ImportOptions, MeshExportOptions, ReferenceScene, export_reference_mesh, import_reference,
-    read_reference_scene, reference_instance_fingerprint, reference_instance_frame,
+    GeometryInstance, ImportOptions, MeshExportOptions, ReferenceScene, export_reference_mesh,
+    import_reference, read_reference_scene, reference_instance_fingerprint,
+    reference_instance_frame,
 };
 use cubacadabra_scene::{
     AuthoringNode, AuthoringScene, EditorMetadata, SourceMetadata, Transform,

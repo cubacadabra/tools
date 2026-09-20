@@ -28,6 +28,7 @@ pub struct MeshExportOptions {
     pub output_path: PathBuf,
     pub path_prefixes: Vec<String>,
     pub exclude_paths: Vec<String>,
+    pub exclude_exact_paths: Vec<String>,
     pub instance_root: Option<String>,
     pub local_space: bool,
     pub scale: f32,
