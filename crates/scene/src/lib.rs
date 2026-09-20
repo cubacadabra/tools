@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const AUTHORING_SCENE_FORMAT_VERSION: u32 = 1;
 pub const MIN_AUTHORING_SCALE: f32 = 0.05;
+const AUTHORING_FLOAT_PRECISION: f64 = 1_000_000.0;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -118,9 +119,38 @@ pub fn parse_authoring_scene(source: &str) -> Result<AuthoringScene, String> {
 
 pub fn serialize_authoring_scene(scene: &AuthoringScene) -> Result<String, String> {
     scene.validate()?;
-    serde_json::to_string_pretty(scene)
+    let mut value = serde_json::to_value(scene)
+        .map_err(|error| format!("could not prepare scene.json for serialization: {error}"))?;
+    normalize_authoring_numbers(&mut value);
+    serde_json::to_string_pretty(&value)
         .map(|source| format!("{source}\n"))
         .map_err(|error| format!("could not serialize scene.json: {error}"))
+}
+
+fn normalize_authoring_numbers(value: &mut Value) {
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                normalize_authoring_numbers(value);
+            }
+        }
+        Value::Object(values) => {
+            for value in values.values_mut() {
+                normalize_authoring_numbers(value);
+            }
+        }
+        Value::Number(number) if !number.is_i64() && !number.is_u64() => {
+            if let Some(number_value) = number.as_f64() {
+                let rounded =
+                    (number_value * AUTHORING_FLOAT_PRECISION).round() / AUTHORING_FLOAT_PRECISION;
+                let rounded = if rounded == -0.0 { 0.0 } else { rounded };
+                if let Some(normalized) = serde_json::Number::from_f64(rounded) {
+                    *number = normalized;
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 impl AuthoringScene {
@@ -418,6 +448,10 @@ impl AuthoringScene {
         let mut decorations = Vec::new();
         let mut signs = Vec::new();
         let mut interactions = Vec::new();
+        let mut ladders = Vec::new();
+        let mut checkpoints = Vec::new();
+        let mut hazards = Vec::new();
+        let mut safe_zones = Vec::new();
         let nodes = self.index()?;
         let mut world_cache = BTreeMap::new();
         for node in &self.nodes {
@@ -434,6 +468,9 @@ impl AuthoringScene {
                     .get("size")
                     .and_then(vector_value)
                     .ok_or_else(|| component_error(node, "primitive requires a size"))?;
+                let size = axis_aligned_runtime_size(world, size).map_err(|message| {
+                    component_error(node, &format!("primitive transform {message}"))
+                })?;
                 let mut block = json!({
                     "id": primitive
                         .get("runtimeId")
@@ -448,6 +485,17 @@ impl AuthoringScene {
                         .expect("primitive block is an object")
                         .insert("color".to_owned(), material.clone());
                 }
+                if let Some(material) = primitive.get("runtimeMaterial") {
+                    block
+                        .as_object_mut()
+                        .expect("primitive block is an object")
+                        .insert("material".to_owned(), material.clone());
+                }
+                copy_component_value(
+                    primitive,
+                    block.as_object_mut().expect("primitive block is an object"),
+                    "outline",
+                );
                 blocks.push(block);
             }
             if let Some(render) = node.components.get("render") {
@@ -502,6 +550,12 @@ impl AuthoringScene {
                     .as_object()
                     .ok_or_else(|| component_error(node, "text must be an object"))?;
                 let mut sign = Map::new();
+                if !runtime_mesh_transform_is_lossless(world) {
+                    return Err(component_error(
+                        node,
+                        "text transform contains shear and cannot compile losslessly",
+                    ));
+                }
                 sign.insert(
                     "text".to_owned(),
                     text.get("text")
@@ -509,6 +563,15 @@ impl AuthoringScene {
                         .unwrap_or_else(|| json!(node.name)),
                 );
                 sign.insert("position".to_owned(), json!(world_transform.position));
+                if world_transform.rotation[0].abs() > 0.0001
+                    || world_transform.rotation[2].abs() > 0.0001
+                {
+                    return Err(component_error(
+                        node,
+                        "text rotation is limited to the runtime sign adapter's Y axis",
+                    ));
+                }
+                sign.insert("yaw".to_owned(), json!(world_transform.rotation[1]));
                 copy_component_value(text, &mut sign, "maxWidth");
                 copy_component_value(text, &mut sign, "color");
                 copy_component_value(text, &mut sign, "id");
@@ -541,16 +604,127 @@ impl AuthoringScene {
                         .unwrap_or_else(|| Value::String(node.name.clone())),
                 );
                 output.insert("position".to_owned(), json!(world_transform.position));
-                for key in ["radius", "color", "visual"] {
+                let scale = uniform_runtime_scale(world).map_err(|message| {
+                    component_error(node, &format!("interaction transform {message}"))
+                })?;
+                output.insert(
+                    "radius".to_owned(),
+                    json!(
+                        interaction
+                            .get("radius")
+                            .and_then(Value::as_f64)
+                            .unwrap_or(4.0)
+                            * f64::from(scale)
+                    ),
+                );
+                for key in ["color", "visual"] {
                     copy_component_value(interaction, &mut output, key);
                 }
                 interactions.push(Value::Object(output));
+            }
+            if let Some(ladder) = node.components.get("ladder") {
+                let ladder = ladder
+                    .as_object()
+                    .ok_or_else(|| component_error(node, "ladder must be an object"))?;
+                let size = ladder
+                    .get("size")
+                    .and_then(vector_value)
+                    .ok_or_else(|| component_error(node, "ladder requires a size"))?;
+                let size = axis_aligned_runtime_size(world, size).map_err(|message| {
+                    component_error(node, &format!("ladder transform {message}"))
+                })?;
+                let mut output = Map::new();
+                copy_component_value(ladder, &mut output, "id");
+                output.insert("position".to_owned(), json!(world_transform.position));
+                output.insert("size".to_owned(), json!(size));
+                let climb_axis = runtime_ladder_axis(
+                    world,
+                    ladder
+                        .get("climbAxis")
+                        .and_then(Value::as_str)
+                        .unwrap_or("z"),
+                )
+                .map_err(|message| component_error(node, message))?;
+                output.insert("climbAxis".to_owned(), json!(climb_axis));
+                for key in ["color", "climbSpeed"] {
+                    copy_component_value(ladder, &mut output, key);
+                }
+                ladders.push(Value::Object(output));
+            }
+            if let Some(checkpoint) = node.components.get("checkpoint") {
+                let checkpoint = checkpoint
+                    .as_object()
+                    .ok_or_else(|| component_error(node, "checkpoint must be an object"))?;
+                let scale = uniform_runtime_scale(world).map_err(|message| {
+                    component_error(node, &format!("checkpoint transform {message}"))
+                })?;
+                let mut output = Map::new();
+                copy_component_value(checkpoint, &mut output, "id");
+                output.insert("position".to_owned(), json!(world_transform.position));
+                output.insert(
+                    "radius".to_owned(),
+                    json!(
+                        checkpoint
+                            .get("radius")
+                            .and_then(Value::as_f64)
+                            .unwrap_or(2.7)
+                            * f64::from(scale)
+                    ),
+                );
+                checkpoints.push(Value::Object(output));
+            }
+            if let Some(hazard) = node.components.get("hazard") {
+                let hazard = hazard
+                    .as_object()
+                    .ok_or_else(|| component_error(node, "hazard must be an object"))?;
+                let size = hazard
+                    .get("size")
+                    .and_then(vector_value)
+                    .ok_or_else(|| component_error(node, "hazard requires a size"))?;
+                let size = axis_aligned_runtime_size(world, size).map_err(|message| {
+                    component_error(node, &format!("hazard transform {message}"))
+                })?;
+                let mut output = Map::new();
+                copy_component_value(hazard, &mut output, "id");
+                output.insert("position".to_owned(), json!(world_transform.position));
+                output.insert("size".to_owned(), json!(size));
+                for key in ["kind", "damagePerSecond"] {
+                    copy_component_value(hazard, &mut output, key);
+                }
+                hazards.push(Value::Object(output));
+            }
+            if let Some(safe_zone) = node.components.get("safeZone") {
+                let safe_zone = safe_zone
+                    .as_object()
+                    .ok_or_else(|| component_error(node, "safeZone must be an object"))?;
+                let scale = uniform_runtime_scale(world).map_err(|message| {
+                    component_error(node, &format!("safeZone transform {message}"))
+                })?;
+                let mut output = Map::new();
+                copy_component_value(safe_zone, &mut output, "id");
+                output.insert("position".to_owned(), json!(world_transform.position));
+                output.insert(
+                    "radius".to_owned(),
+                    json!(
+                        safe_zone
+                            .get("radius")
+                            .and_then(Value::as_f64)
+                            .unwrap_or(5.0)
+                            * f64::from(scale)
+                    ),
+                );
+                copy_component_value(safe_zone, &mut output, "healPerSecond");
+                safe_zones.push(Value::Object(output));
             }
         }
         world.insert("blocks".to_owned(), Value::Array(blocks));
         world.insert("decorations".to_owned(), Value::Array(decorations));
         world.insert("signs".to_owned(), Value::Array(signs));
         world.insert("interactions".to_owned(), Value::Array(interactions));
+        world.insert("ladders".to_owned(), Value::Array(ladders));
+        world.insert("checkpoints".to_owned(), Value::Array(checkpoints));
+        world.insert("hazards".to_owned(), Value::Array(hazards));
+        world.insert("safeZones".to_owned(), Value::Array(safe_zones));
         Ok(())
     }
 }
@@ -597,6 +771,85 @@ fn runtime_mesh_transform_is_lossless(transform: Affine3A) -> bool {
         .all(|(left, right)| (left - right).abs() <= 0.001)
 }
 
+fn axis_aligned_runtime_size(
+    transform: Affine3A,
+    local_size: [f32; 3],
+) -> Result<[f32; 3], &'static str> {
+    if !runtime_mesh_transform_is_lossless(transform) {
+        return Err("contains shear and cannot compile losslessly");
+    }
+    let axes = [
+        transform.transform_vector3(Vec3::X),
+        transform.transform_vector3(Vec3::Y),
+        transform.transform_vector3(Vec3::Z),
+    ];
+    let mut world_size = [0.0; 3];
+    let mut used_world_axes = [false; 3];
+    for (local_axis, vector) in axes.into_iter().enumerate() {
+        let absolute = vector.abs().to_array();
+        let world_axis = absolute
+            .iter()
+            .enumerate()
+            .max_by(|left, right| left.1.total_cmp(right.1))
+            .map(|(axis, _)| axis)
+            .expect("a 3D axis always has a largest component");
+        let magnitude = absolute[world_axis];
+        let tolerance = magnitude.max(1.0) * 0.0001;
+        if magnitude <= f32::EPSILON
+            || absolute
+                .iter()
+                .enumerate()
+                .any(|(axis, value)| axis != world_axis && *value > tolerance)
+            || used_world_axes[world_axis]
+        {
+            return Err("has non-axis-aligned rotation unsupported by the runtime adapter");
+        }
+        used_world_axes[world_axis] = true;
+        world_size[world_axis] = local_size[local_axis] * magnitude;
+    }
+    Ok(world_size)
+}
+
+fn uniform_runtime_scale(transform: Affine3A) -> Result<f32, &'static str> {
+    if !runtime_mesh_transform_is_lossless(transform) {
+        return Err("contains shear and cannot compile losslessly");
+    }
+    let scale = affine_transform(transform).scale.map(f32::abs);
+    if scale
+        .iter()
+        .skip(1)
+        .any(|value| (*value - scale[0]).abs() > 0.0001)
+    {
+        return Err("uses non-uniform scale unsupported by the runtime radius adapter");
+    }
+    Ok(scale[0])
+}
+
+fn runtime_ladder_axis(
+    transform: Affine3A,
+    local_axis: &str,
+) -> Result<&'static str, &'static str> {
+    let vector = if local_axis.eq_ignore_ascii_case("x") {
+        transform.transform_vector3(Vec3::X)
+    } else {
+        transform.transform_vector3(Vec3::Z)
+    };
+    let absolute = vector.abs().to_array();
+    let world_axis = absolute
+        .iter()
+        .enumerate()
+        .max_by(|left, right| left.1.total_cmp(right.1))
+        .map(|(axis, _)| axis)
+        .expect("a 3D axis always has a largest component");
+    match world_axis {
+        0 => Ok("x"),
+        2 => Ok("z"),
+        _ => Err(
+            "ladder rotation maps its climb axis vertically, which the runtime does not support",
+        ),
+    }
+}
+
 fn validate_transform(node: &AuthoringNode) -> Result<(), String> {
     let values = node
         .transform
@@ -628,7 +881,15 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
     for (name, value) in &node.components {
         if !matches!(
             name.as_str(),
-            "render" | "text" | "interaction" | "primitive" | "collision"
+            "render"
+                | "text"
+                | "interaction"
+                | "primitive"
+                | "collision"
+                | "ladder"
+                | "checkpoint"
+                | "hazard"
+                | "safeZone"
         ) {
             return Err(format!(
                 "scene node {} ({}) uses unsupported component {:?}",
@@ -669,6 +930,35 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                     "primitive size must contain finite values above the minimum size",
                 ));
             }
+        }
+        if matches!(name.as_str(), "ladder" | "hazard") {
+            let Some(size) = value.get("size").and_then(vector_value) else {
+                return Err(component_error(
+                    node,
+                    &format!("{name} component requires a size"),
+                ));
+            };
+            if size
+                .iter()
+                .any(|value| !value.is_finite() || *value < MIN_AUTHORING_SCALE)
+            {
+                return Err(component_error(
+                    node,
+                    &format!("{name} size must contain finite values above the minimum size"),
+                ));
+            }
+        }
+        if matches!(name.as_str(), "checkpoint" | "safeZone")
+            && value.get("radius").is_some_and(|radius| {
+                radius
+                    .as_f64()
+                    .is_none_or(|radius| !radius.is_finite() || radius <= 0.0)
+            })
+        {
+            return Err(component_error(
+                node,
+                &format!("{name} component requires a finite positive radius"),
+            ));
         }
         if name == "collision"
             && value
@@ -768,6 +1058,27 @@ mod tests {
                 .set_scale("root", [MIN_AUTHORING_SCALE - 0.01, 1.0, 1.0])
                 .is_err()
         );
+    }
+
+    #[test]
+    fn serialization_normalizes_authoring_float_noise() {
+        let mut root = node("root", None);
+        root.transform.position = [1.2000000476837158, 3.812197685241699, -0.0];
+        root.components.insert(
+            "interaction".to_owned(),
+            json!({ "id": "use", "radius": 3.812197685241699 }),
+        );
+        let source = serialize_authoring_scene(&AuthoringScene {
+            format_version: 1,
+            world_id: None,
+            nodes: vec![root],
+        })
+        .unwrap();
+
+        assert!(source.contains("1.2"));
+        assert!(source.contains("3.812198"));
+        assert!(!source.contains("1.2000000476837158"));
+        assert!(!source.contains("3.812197685241699"));
     }
 
     #[test]
@@ -873,6 +1184,66 @@ mod tests {
         scene.compile_into_manifest(&mut manifest).unwrap();
 
         assert_eq!(manifest["worlds"]["world"]["blocks"][0]["id"], "platform");
+    }
+
+    #[test]
+    fn primitive_box_bakes_parent_scale_into_runtime_size() {
+        let mut group = node("group", None);
+        group.transform.scale = [2.0, 2.0, 2.0];
+        let mut block = node("block", Some("group"));
+        block.components.insert(
+            "primitive".to_owned(),
+            json!({ "shape": "box", "size": [4.0, 1.0, 4.0] }),
+        );
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![group, block],
+        };
+        let mut manifest = json!({ "startWorld": "world", "worlds": { "world": {} } });
+
+        scene.compile_into_manifest(&mut manifest).unwrap();
+
+        assert_eq!(
+            manifest["worlds"]["world"]["blocks"][0]["size"],
+            json!([8.0, 2.0, 8.0])
+        );
+    }
+
+    #[test]
+    fn primitive_box_rejects_non_axis_aligned_rotation_and_shear() {
+        let mut rotated = node("rotated", None);
+        rotated.transform.rotation[1] = 0.25;
+        rotated.components.insert(
+            "primitive".to_owned(),
+            json!({ "shape": "box", "size": [4.0, 1.0, 4.0] }),
+        );
+        let mut manifest = json!({ "startWorld": "world", "worlds": { "world": {} } });
+        let error = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![rotated],
+        }
+        .compile_into_manifest(&mut manifest)
+        .unwrap_err();
+        assert!(error.contains("non-axis-aligned rotation"));
+
+        let mut parent = node("parent", None);
+        parent.transform.scale = [2.0, 1.0, 1.0];
+        let mut sheared = node("sheared", Some("parent"));
+        sheared.transform.rotation[1] = 0.5;
+        sheared.components.insert(
+            "primitive".to_owned(),
+            json!({ "shape": "box", "size": [4.0, 1.0, 4.0] }),
+        );
+        let error = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![parent, sheared],
+        }
+        .compile_into_manifest(&mut manifest)
+        .unwrap_err();
+        assert!(error.contains("shear"));
     }
 
     #[test]
@@ -982,10 +1353,39 @@ mod tests {
             "interaction".to_owned(),
             json!({ "id": "table", "label": "PLAY", "radius": 7.5 }),
         );
+        let mut ladder = node("ladder", Some("root"));
+        ladder.components.insert(
+            "ladder".to_owned(),
+            json!({ "id": "up", "size": [2, 6, 1], "climbAxis": "z" }),
+        );
+        let mut checkpoint = node("checkpoint", Some("root"));
+        checkpoint.components.insert(
+            "checkpoint".to_owned(),
+            json!({ "id": "save", "radius": 3 }),
+        );
+        let mut hazard = node("hazard", Some("root"));
+        hazard.components.insert(
+            "hazard".to_owned(),
+            json!({ "id": "hurt", "kind": "damage", "size": [4, 1, 4], "damagePerSecond": 10 }),
+        );
+        let mut safe_zone = node("safe", Some("root"));
+        safe_zone.components.insert(
+            "safeZone".to_owned(),
+            json!({ "id": "camp", "radius": 5, "healPerSecond": 4 }),
+        );
         let scene = AuthoringScene {
             format_version: 1,
             world_id: None,
-            nodes: vec![node("root", None), mesh, sign, interaction],
+            nodes: vec![
+                node("root", None),
+                mesh,
+                sign,
+                interaction,
+                ladder,
+                checkpoint,
+                hazard,
+                safe_zone,
+            ],
         };
         let mut manifest = json!({
             "startWorld": "world",
@@ -997,5 +1397,9 @@ mod tests {
         assert_eq!(world["decorations"][0]["scale3"], json!([1.0, 1.5, 0.75]));
         assert_eq!(world["signs"][0]["text"], "TABLES");
         assert_eq!(world["interactions"][0]["id"], "table");
+        assert_eq!(world["ladders"][0]["id"], "up");
+        assert_eq!(world["checkpoints"][0]["id"], "save");
+        assert_eq!(world["hazards"][0]["damagePerSecond"], 10);
+        assert_eq!(world["safeZones"][0]["healPerSecond"], 4);
     }
 }
