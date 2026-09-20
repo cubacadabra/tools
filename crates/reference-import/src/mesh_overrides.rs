@@ -1,6 +1,9 @@
 //! Explicit, locally authored normalized meshes for otherwise unresolved source
 //! asset IDs. No network lookup or game-specific mesh identity lives here.
 use super::*;
+use crate::mesh_export::{
+    StaticMeshVertex, add3, append_static_triangle, channel, multiply3, rotate_vector,
+};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
