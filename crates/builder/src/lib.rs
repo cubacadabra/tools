@@ -212,6 +212,10 @@ pub fn build_game(options: &BuildOptions) -> Result<BuildResult> {
         manifest,
         manifest_path.parent().unwrap_or(Path::new(".")),
     )?;
+    collision::expand_authoring_instances(
+        manifest,
+        manifest_path.parent().unwrap_or(Path::new(".")),
+    )?;
     validate_assets(manifest, manifest_path.parent().unwrap_or(Path::new(".")))?;
 
     let authority_source = source_root.join("server.luau");

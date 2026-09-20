@@ -4,6 +4,9 @@ use std::collections::BTreeMap;
 
 pub const AUTHORING_SCENE_FORMAT_VERSION: u32 = 1;
 pub const MIN_AUTHORING_SCALE: f32 = 0.05;
+/// Temporary builder handoff emitted while compiling mesh collision components.
+/// The builder expands and removes this field before writing a runtime manifest.
+pub const AUTHORING_COLLISION_INSTANCES_KEY: &str = "authoringCollisionInstances";
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

@@ -164,6 +164,7 @@ name = "cubacadabra-builder"
 version = "0.4.0"
 dependencies = [
  "cubacadabra-scene",
+ "glam",
  "serde_json",
  "sha2",
  "tempfile",

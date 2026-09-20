@@ -293,6 +293,35 @@ pub(crate) fn validate_assets(manifest: &Map<String, Value>, project_root: &Path
                     )));
                 }
             }
+            if kind == "models"
+                && let Some(collision) = object.get("collision")
+            {
+                let collision = collision.as_str().ok_or_else(|| {
+                    BuildError(format!(
+                        "manifest.assets.models.{id}.collision must be a relative JSON path"
+                    ))
+                })?;
+                if collision.starts_with('/')
+                    || collision.contains("..")
+                    || !collision.starts_with("assets/")
+                    || !collision.to_ascii_lowercase().ends_with(".json")
+                {
+                    return Err(BuildError(format!(
+                        "manifest.assets.models.{id}.collision is invalid: {collision}"
+                    )));
+                }
+                let collision_path = project_root.join(collision);
+                let collision_metadata = fs::metadata(&collision_path).map_err(|_| {
+                    BuildError(format!(
+                        "manifest.assets.models.{id}.collision was not found: {collision}"
+                    ))
+                })?;
+                if collision_metadata.len() > crate::collision::MAX_JSON_BYTES {
+                    return Err(BuildError(format!(
+                        "manifest.assets.models.{id}.collision exceeds the asset size limit: {collision}"
+                    )));
+                }
+            }
         }
     }
     Ok(())

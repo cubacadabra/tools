@@ -214,6 +214,7 @@ pub(crate) fn export_reference_instances_command(args: &[String]) -> Result<(), 
                 format!("{}-{}", asset_prefix, asset_ids.len() + 1)
             };
             let output_path = asset_directory.join(format!("{asset_id}.glb"));
+            let collision_path = asset_directory.join(format!("{asset_id}.collision.json"));
             let result = export_reference_mesh(&MeshExportOptions {
                 scene_path: scene_path.clone(),
                 output_path,
@@ -223,7 +224,7 @@ pub(crate) fn export_reference_instances_command(args: &[String]) -> Result<(), 
                 local_space: true,
                 scale: 1.0,
                 origin: [0.0; 3],
-                collision_output: None,
+                collision_output: Some(collision_path),
                 bounds_output: None,
                 mesh_overrides: None,
             })?;
@@ -235,6 +236,7 @@ pub(crate) fn export_reference_instances_command(args: &[String]) -> Result<(), 
             assets.push(json!({
                 "id": asset_id,
                 "path": format!("{asset_path_prefix}/{asset_id}.glb"),
+                "collision": format!("{asset_path_prefix}/{asset_id}.collision.json"),
                 "bounds": bounds,
                 "fingerprint": fingerprint,
             }));

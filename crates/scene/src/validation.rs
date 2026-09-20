@@ -185,16 +185,29 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                 &format!("{name} component requires a finite positive radius"),
             ));
         }
-        if name == "collision"
-            && value
-                .get("kind")
-                .and_then(Value::as_str)
-                .is_some_and(|kind| kind != "box")
-        {
-            return Err(component_error(
-                node,
-                "collision kind must currently be `box`",
-            ));
+        if name == "collision" {
+            let kind = value.get("kind").and_then(Value::as_str).unwrap_or("box");
+            match kind {
+                "box" => {}
+                "mesh" => {
+                    if value
+                        .get("asset")
+                        .and_then(Value::as_str)
+                        .is_none_or(|asset| asset.trim().is_empty())
+                    {
+                        return Err(component_error(
+                            node,
+                            "mesh collision requires a non-empty asset",
+                        ));
+                    }
+                }
+                _ => {
+                    return Err(component_error(
+                        node,
+                        "collision kind must be `box` or `mesh`",
+                    ));
+                }
+            }
         }
     }
     Ok(())

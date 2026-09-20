@@ -1,9 +1,9 @@
-use crate::AuthoringScene;
 use crate::transforms::{
     affine_transform, axis_aligned_runtime_size, runtime_ladder_axis,
     runtime_mesh_transform_is_lossless, uniform_runtime_scale,
 };
 use crate::validation::{component_error, copy_component_value, vector_value};
+use crate::{AUTHORING_COLLISION_INSTANCES_KEY, AuthoringScene};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
@@ -48,6 +48,7 @@ impl AuthoringScene {
         let mut checkpoints = Vec::new();
         let mut hazards = Vec::new();
         let mut safe_zones = Vec::new();
+        let mut collision_instances = Vec::new();
         let nodes = self.index()?;
         let mut world_cache = BTreeMap::new();
         for node in &self.nodes {
@@ -56,6 +57,25 @@ impl AuthoringScene {
             }
             let world = self.world_affine(&node.id, &nodes, &mut world_cache)?;
             let world_transform = affine_transform(world);
+            if let Some(collision) = node.components.get("collision")
+                && collision.get("kind").and_then(Value::as_str) == Some("mesh")
+            {
+                if !runtime_mesh_transform_is_lossless(world) {
+                    return Err(component_error(
+                        node,
+                        "collision transform contains shear and cannot compile losslessly",
+                    ));
+                }
+                collision_instances.push(json!({
+                    "asset": collision
+                        .get("asset")
+                        .and_then(Value::as_str)
+                        .expect("mesh collision asset validated above"),
+                    "position": world_transform.position,
+                    "rotation": world_transform.rotation,
+                    "scale": world_transform.scale,
+                }));
+            }
             if let Some(primitive) = node.components.get("primitive") {
                 let primitive = primitive
                     .as_object()
@@ -321,6 +341,14 @@ impl AuthoringScene {
         world.insert("checkpoints".to_owned(), Value::Array(checkpoints));
         world.insert("hazards".to_owned(), Value::Array(hazards));
         world.insert("safeZones".to_owned(), Value::Array(safe_zones));
+        if collision_instances.is_empty() {
+            world.remove(AUTHORING_COLLISION_INSTANCES_KEY);
+        } else {
+            world.insert(
+                AUTHORING_COLLISION_INSTANCES_KEY.to_owned(),
+                Value::Array(collision_instances),
+            );
+        }
         Ok(())
     }
 }

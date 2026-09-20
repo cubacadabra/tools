@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 cubacadabra-scene = { path = "../scene" }
+glam = "0.30"
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 tempfile = "3"

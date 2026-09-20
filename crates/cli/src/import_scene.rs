@@ -160,6 +160,7 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
             promoted_instances.push(PromotedInstance {
                 source_path: instance.path.clone(),
                 mesh: spec.mesh.clone(),
+                collision_asset: None,
                 position: frame.position,
                 rotation: [0.0, source_yaw(frame.rotation), 0.0],
                 scale: [1.0; 3],
@@ -275,6 +276,7 @@ struct EditableInstanceSpec {
 struct PromotedInstance {
     source_path: String,
     mesh: String,
+    collision_asset: Option<String>,
     position: [f32; 3],
     rotation: [f32; 3],
     scale: [f32; 3],
@@ -289,6 +291,15 @@ fn read_editable_instance_map(path: &Path) -> Result<Vec<PromotedInstance>, Stri
     })?;
     let value: Value = serde_json::from_str(&source)
         .map_err(|error| format!("editable instance map is not valid JSON: {error}"))?;
+    let collision_assets = value
+        .get("assets")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+        .filter(|asset| asset.get("collision").and_then(Value::as_str).is_some())
+        .filter_map(|asset| asset.get("id").and_then(Value::as_str))
+        .collect::<BTreeSet<_>>();
     let entries = value
         .get("instances")
         .and_then(Value::as_array)
@@ -299,17 +310,21 @@ fn read_editable_instance_map(path: &Path) -> Result<Vec<PromotedInstance>, Stri
             let object = entry
                 .as_object()
                 .ok_or_else(|| "editable instance map entries must be objects".to_owned())?;
+            let mesh = object
+                .get("asset")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "editable instance map entry requires asset".to_owned())?
+                .to_owned();
             Ok(PromotedInstance {
                 source_path: object
                     .get("sourcePath")
                     .and_then(Value::as_str)
                     .ok_or_else(|| "editable instance map entry requires sourcePath".to_owned())?
                     .to_owned(),
-                mesh: object
-                    .get("asset")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| "editable instance map entry requires asset".to_owned())?
-                    .to_owned(),
+                collision_asset: collision_assets
+                    .contains(mesh.as_str())
+                    .then(|| mesh.clone()),
+                mesh,
                 position: vector3(object.get("position"), "position")?,
                 rotation: vector3(object.get("rotation"), "rotation")?,
                 scale: vector3(object.get("scale"), "scale")?,
@@ -471,7 +486,17 @@ fn generated_scene_nodes(
                 rotation: promoted.rotation,
                 scale: promoted.scale,
             },
-            components: BTreeMap::from([("render".to_owned(), json!({"mesh": promoted.mesh}))]),
+            components: {
+                let mut components =
+                    BTreeMap::from([("render".to_owned(), json!({"mesh": promoted.mesh}))]);
+                if let Some(asset) = &promoted.collision_asset {
+                    components.insert(
+                        "collision".to_owned(),
+                        json!({"kind": "mesh", "asset": asset}),
+                    );
+                }
+                components
+            },
             editor: EditorMetadata::default(),
             source: Some(SourceMetadata {
                 format: "roblox".to_owned(),

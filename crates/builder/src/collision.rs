@@ -3,8 +3,11 @@
 //! The runtime consumes only inline world-space triangles. `source` is a
 //! creator convenience and is deliberately removed before a package is built.
 
-use serde_json::{Map, Value};
+use cubacadabra_scene::AUTHORING_COLLISION_INSTANCES_KEY;
+use glam::{EulerRot, Quat, Vec3};
+use serde_json::{Map, Value, json};
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Component, Path, PathBuf},
 };
@@ -45,6 +48,225 @@ pub(crate) fn resolve_manifest_sources(
         world.insert("collision".to_owned(), resolved);
     }
     Ok(())
+}
+
+/// Expand editor-only mesh collision references emitted by the scene compiler
+/// into the runtime's single world-space triangle document.
+pub(crate) fn expand_authoring_instances(
+    manifest: &mut Map<String, Value>,
+    project_root: &Path,
+) -> super::Result<()> {
+    let model_collision_paths = model_collision_paths(manifest)?;
+    expand_world(manifest, &model_collision_paths, project_root, "manifest")?;
+    if let Some(worlds) = manifest.get_mut("worlds").and_then(Value::as_object_mut) {
+        for (world_id, world) in worlds {
+            let world = world.as_object_mut().ok_or_else(|| {
+                super::BuildError(format!("manifest.worlds.{world_id} must be an object"))
+            })?;
+            expand_world(
+                world,
+                &model_collision_paths,
+                project_root,
+                &format!("manifest.worlds.{world_id}"),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn model_collision_paths(manifest: &Map<String, Value>) -> super::Result<BTreeMap<String, String>> {
+    let Some(models) = manifest
+        .get("assets")
+        .and_then(Value::as_object)
+        .and_then(|assets| assets.get("models"))
+        .and_then(Value::as_object)
+    else {
+        return Ok(BTreeMap::new());
+    };
+    let mut paths = BTreeMap::new();
+    for (asset_id, definition) in models {
+        let Some(collision) = definition
+            .as_object()
+            .and_then(|definition| definition.get("collision"))
+        else {
+            continue;
+        };
+        let collision = collision.as_str().ok_or_else(|| {
+            super::BuildError(format!(
+                "manifest.assets.models.{asset_id}.collision must be a relative JSON path"
+            ))
+        })?;
+        paths.insert(asset_id.clone(), collision.to_owned());
+    }
+    Ok(paths)
+}
+
+fn expand_world(
+    world: &mut Map<String, Value>,
+    model_collision_paths: &BTreeMap<String, String>,
+    project_root: &Path,
+    field: &str,
+) -> super::Result<()> {
+    let Some(instances) = world.remove(AUTHORING_COLLISION_INSTANCES_KEY) else {
+        return Ok(());
+    };
+    let instances = instances.as_array().ok_or_else(|| {
+        super::BuildError(format!(
+            "{field}.{AUTHORING_COLLISION_INSTANCES_KEY} must be an array"
+        ))
+    })?;
+    let mut merged = world
+        .get("collision")
+        .cloned()
+        .unwrap_or_else(|| json!({"formatVersion": FORMAT_VERSION, "triangles": []}));
+    validate_inline(&merged, &format!("{field}.collision"))?;
+    let triangles = merged
+        .get_mut("triangles")
+        .and_then(Value::as_array_mut)
+        .expect("validated collision triangles array");
+    let existing_count = triangles.len();
+    for (index, instance) in instances.iter().enumerate() {
+        let instance = instance.as_object().ok_or_else(|| {
+            super::BuildError(format!(
+                "{field}.{AUTHORING_COLLISION_INSTANCES_KEY}[{index}] must be an object"
+            ))
+        })?;
+        let asset_id = instance.get("asset").and_then(Value::as_str).ok_or_else(|| {
+            super::BuildError(format!(
+                "{field}.{AUTHORING_COLLISION_INSTANCES_KEY}[{index}].asset must be a model asset id"
+            ))
+        })?;
+        let collision_path = model_collision_paths.get(asset_id).ok_or_else(|| {
+            super::BuildError(format!(
+                "{field}.{AUTHORING_COLLISION_INSTANCES_KEY}[{index}] refers to model asset {asset_id:?} without a collision sidecar"
+            ))
+        })?;
+        let source_path = resolve_source_path(
+            project_root,
+            collision_path,
+            &format!("manifest.assets.models.{asset_id}.collision"),
+        )?;
+        let source = read_source_json(
+            &source_path,
+            &format!("manifest.assets.models.{asset_id}.collision"),
+        )?;
+        validate_inline(
+            &source,
+            &format!("manifest.assets.models.{asset_id}.collision"),
+        )?;
+        let transform = parse_collision_transform(instance, field, index)?;
+        let source_triangles = source
+            .get("triangles")
+            .and_then(Value::as_array)
+            .expect("validated collision triangles array");
+        for (triangle_index, triangle) in source_triangles.iter().enumerate() {
+            let triangle = triangle.as_array().expect("validated collision triangle");
+            let points = triangle
+                .iter()
+                .enumerate()
+                .map(|(point_index, point)| {
+                    let point = point.as_array().expect("validated collision point");
+                    let point = [
+                        point[0].as_f64().unwrap() as f32,
+                        point[1].as_f64().unwrap() as f32,
+                        point[2].as_f64().unwrap() as f32,
+                    ];
+                    let transformed = transform_point(point, transform);
+                    if transformed.iter().any(|value| !value.is_finite()) {
+                        return Err(super::BuildError(format!(
+                            "{field}.{AUTHORING_COLLISION_INSTANCES_KEY}[{index}] produced a non-finite collision point at triangle {triangle_index}, point {point_index}"
+                        )));
+                    }
+                    Ok(json!(transformed))
+                })
+                .collect::<super::Result<Vec<_>>>()?;
+            triangles.push(Value::Array(points));
+        }
+    }
+    if triangles.len() != existing_count {
+        let count = triangles.len();
+        world.insert("collision".to_owned(), merged);
+        validate_inline(
+            world.get("collision").expect("collision just inserted"),
+            &format!("{field}.collision"),
+        )?;
+        println!("Expanded {field} mesh collision to {count} triangles");
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct CollisionTransform {
+    position: [f32; 3],
+    rotation: [f32; 3],
+    scale: [f32; 3],
+}
+
+fn parse_collision_transform(
+    instance: &Map<String, Value>,
+    field: &str,
+    index: usize,
+) -> super::Result<CollisionTransform> {
+    let vector = |name: &str| -> super::Result<[f32; 3]> {
+        let values = instance
+            .get(name)
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                super::BuildError(format!(
+                    "{field}.{AUTHORING_COLLISION_INSTANCES_KEY}[{index}].{name} must contain three numbers"
+                ))
+            })?;
+        if values.len() != 3 {
+            return Err(super::BuildError(format!(
+                "{field}.{AUTHORING_COLLISION_INSTANCES_KEY}[{index}].{name} must contain three numbers"
+            )));
+        }
+        values
+            .iter()
+            .map(|value| {
+                let value = value
+                    .as_f64()
+                    .filter(|value| value.is_finite())
+                    .ok_or_else(|| {
+                        super::BuildError(format!(
+                            "{field}.{AUTHORING_COLLISION_INSTANCES_KEY}[{index}].{name} must contain finite numbers"
+                        ))
+                    })? as f32;
+                if value.is_finite() {
+                    Ok(value)
+                } else {
+                    Err(super::BuildError(format!(
+                        "{field}.{AUTHORING_COLLISION_INSTANCES_KEY}[{index}].{name} must contain finite numbers"
+                    )))
+                }
+            })
+            .collect::<super::Result<Vec<_>>>()?
+            .try_into()
+            .map_err(|_| unreachable!())
+    };
+    let scale = vector("scale")?;
+    if scale.iter().any(|value| *value <= 0.0) {
+        return Err(super::BuildError(format!(
+            "{field}.{AUTHORING_COLLISION_INSTANCES_KEY}[{index}].scale must be positive"
+        )));
+    }
+    Ok(CollisionTransform {
+        position: vector("position")?,
+        rotation: vector("rotation")?,
+        scale,
+    })
+}
+
+fn transform_point(point: [f32; 3], transform: CollisionTransform) -> [f32; 3] {
+    let rotation = Quat::from_euler(
+        EulerRot::XYZ,
+        transform.rotation[0],
+        transform.rotation[1],
+        transform.rotation[2],
+    );
+    (rotation * (Vec3::from_array(point) * Vec3::from_array(transform.scale))
+        + Vec3::from_array(transform.position))
+    .to_array()
 }
 
 fn resolve_definition(value: &Value, project_root: &Path, field: &str) -> super::Result<Value> {
@@ -318,6 +540,53 @@ mod tests {
         assert_eq!(built["collision"], source);
         assert_eq!(built["worlds"]["hub"]["collision"], source);
         assert!(built["collision"]["source"].is_null());
+    }
+
+    #[test]
+    fn expands_mesh_collision_sidecars_in_instance_world_space() {
+        let project = tempfile::tempdir().unwrap();
+        fs::create_dir_all(project.path().join("assets/models")).unwrap();
+        fs::write(
+            project.path().join("assets/models/chair.collision.json"),
+            json!({"formatVersion": 1, "triangles": [triangle()]}).to_string(),
+        )
+        .unwrap();
+        let mut manifest = Map::new();
+        manifest.insert(
+            "assets".to_owned(),
+            json!({
+                "models": {
+                    "chair": {
+                        "path": "assets/models/chair.glb",
+                        "collision": "assets/models/chair.collision.json"
+                    }
+                }
+            }),
+        );
+        manifest.insert(
+            "worlds".to_owned(),
+            json!({
+                "world": {
+                    "collision": {"formatVersion": 1, "triangles": [triangle()]},
+                    AUTHORING_COLLISION_INSTANCES_KEY: [{
+                        "asset": "chair",
+                        "position": [10.0, 2.0, 4.0],
+                        "rotation": [0.0, 0.0, 0.0],
+                        "scale": [2.0, 1.0, 1.0]
+                    }]
+                }
+            }),
+        );
+
+        expand_authoring_instances(&mut manifest, project.path()).unwrap();
+
+        let world = &manifest["worlds"]["world"];
+        assert!(world.get(AUTHORING_COLLISION_INSTANCES_KEY).is_none());
+        assert_eq!(world["collision"]["triangles"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            world["collision"]["triangles"][1],
+            json!([[10.0, 2.0, 4.0], [12.0, 2.0, 4.0], [10.0, 2.0, 5.0]])
+        );
     }
 
     #[test]

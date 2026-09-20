@@ -210,6 +210,45 @@ mod tests {
     }
 
     #[test]
+    fn mesh_collision_compiles_as_a_world_transform_handoff() {
+        let mut chair = node("chair", None);
+        chair.transform.position = [10.0, 2.0, 4.0];
+        chair.transform.rotation[1] = 0.5;
+        chair.transform.scale = [2.0, 1.5, 0.75];
+        chair
+            .components
+            .insert("render".to_owned(), json!({ "mesh": "chair" }));
+        chair.components.insert(
+            "collision".to_owned(),
+            json!({ "kind": "mesh", "asset": "chair" }),
+        );
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![chair],
+        };
+        let mut manifest = json!({
+            "startWorld": "world",
+            "worlds": { "world": {} }
+        });
+
+        scene.compile_into_manifest(&mut manifest).unwrap();
+
+        assert_eq!(
+            manifest["worlds"]["world"][AUTHORING_COLLISION_INSTANCES_KEY][0]["asset"],
+            "chair"
+        );
+        assert_eq!(
+            manifest["worlds"]["world"][AUTHORING_COLLISION_INSTANCES_KEY][0]["position"],
+            json!([10.0, 2.0, 4.0])
+        );
+        assert_eq!(
+            manifest["worlds"]["world"][AUTHORING_COLLISION_INSTANCES_KEY][0]["scale"],
+            json!([2.0, 1.5, 0.75])
+        );
+    }
+
+    #[test]
     fn primitive_box_bakes_parent_scale_into_runtime_size() {
         let mut group = node("group", None);
         group.transform.scale = [2.0, 2.0, 2.0];
