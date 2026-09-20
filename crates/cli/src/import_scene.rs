@@ -1,6 +1,8 @@
 use super::*;
 use glam::{EulerRot, Mat3, Quat, Vec3};
 
+const WORKSPACE_ROOT: &str = "Workspace:Workspace[1]";
+
 pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
     let mut reference = None;
     let mut base_scene = None;
@@ -319,8 +321,11 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
         source_index.display()
     );
     println!(
-        "  Parts: {} total, {} promoted, {} fallback",
-        promotion.stats.total_parts, promotion.stats.promoted_parts, promotion.stats.fallback_parts
+        "  Parts: Workspace {} total, {} promoted, {} fallback (all source: {})",
+        promotion.stats.workspace_parts,
+        promotion.stats.promoted_parts,
+        promotion.stats.fallback_parts,
+        promotion.stats.source_parts
     );
     for (reason, count) in &promotion.stats.fallback_reasons {
         println!("    {reason}: {count}");
@@ -351,12 +356,14 @@ struct PromotedPrimitive {
     rotation: [f32; 3],
     size: [f32; 3],
     material: String,
+    runtime_material: Option<&'static str>,
     can_collide: bool,
 }
 
 #[derive(Clone, Debug, Default)]
 struct PromotionStats {
-    total_parts: usize,
+    source_parts: usize,
+    workspace_parts: usize,
     promoted_parts: usize,
     fallback_parts: usize,
     fallback_reasons: BTreeMap<String, usize>,
@@ -385,7 +392,11 @@ fn select_promoted_primitives(
         if geometry.class != "Part" {
             continue;
         }
-        selection.stats.total_parts += 1;
+        selection.stats.source_parts += 1;
+        if !is_workspace_path(&geometry.path) {
+            continue;
+        }
+        selection.stats.workspace_parts += 1;
         if !names.is_empty() && !names.iter().any(|name| name == &geometry.name) {
             record_fallback(&mut selection, geometry, "name-filtered");
             continue;
@@ -402,6 +413,11 @@ fn select_promoted_primitives(
                 rotation: source_rotation_to_euler(geometry.transform.rotation),
                 size: geometry.size,
                 material: source_color(geometry.color),
+                runtime_material: geometry
+                    .material
+                    .name
+                    .as_deref()
+                    .and_then(cubacadabra_reference_import::roblox_material_runtime_name),
                 can_collide: geometry.can_collide,
             });
             selection
@@ -458,6 +474,14 @@ fn can_promote_part(geometry: &GeometryInstance) -> Result<(), &'static str> {
     if !geometry.cast_shadow {
         return Err("unsupported-shadow");
     }
+    if geometry.material.name.as_deref().is_some_and(|name| {
+        !matches!(
+            name.to_ascii_lowercase().as_str(),
+            "plastic" | "smoothplastic"
+        ) && cubacadabra_reference_import::roblox_material_runtime_name(name).is_none()
+    }) {
+        return Err("unsupported-material");
+    }
     if geometry
         .size
         .iter()
@@ -472,12 +496,23 @@ fn primitive_node_id(source_path: &str) -> String {
     format!("imported-part-{}", short_hash(source_path))
 }
 
+fn is_workspace_path(path: &str) -> bool {
+    path == WORKSPACE_ROOT || path.starts_with(&format!("{WORKSPACE_ROOT}/"))
+}
+
 fn write_promotion_report(path: &Path, stats: &PromotionStats) -> Result<(), String> {
     let report = json!({
         "formatVersion": 1,
         "kind": "roblox-native-promotion-report",
         "parts": {
-            "total": stats.total_parts,
+            "total": stats.workspace_parts,
+            "sourceTotal": stats.source_parts,
+            "workspace": {
+                "total": stats.workspace_parts,
+                "promoted": stats.promoted_parts,
+                "fallback": stats.fallback_parts,
+                "fallbackReasons": stats.fallback_reasons,
+            },
             "promoted": stats.promoted_parts,
             "fallback": stats.fallback_parts,
             "fallbackReasons": stats.fallback_reasons,
@@ -787,14 +822,19 @@ fn generated_scene_nodes(
         {
             properties.insert("sourceMaterial".to_owned(), json!(material));
         }
-        let mut components = BTreeMap::from([(
-            "primitive".to_owned(),
-            json!({
+        let mut components = BTreeMap::from([("primitive".to_owned(), {
+            let mut primitive = json!({
                 "shape": "box",
                 "size": promoted.size,
                 "material": promoted.material.clone(),
-            }),
-        )]);
+                "collidable": promoted.can_collide,
+            });
+            if let Some(runtime_material) = promoted.runtime_material {
+                primitive["runtimeMaterial"] = json!(runtime_material);
+                properties.insert("runtimeMaterial".to_owned(), json!(runtime_material));
+            }
+            primitive
+        })]);
         if promoted.can_collide {
             components.insert("collision".to_owned(), json!({"kind": "box"}));
         }
@@ -998,28 +1038,47 @@ mod tests {
         value["geometry"][2]["castShadow"] = json!(false);
         let reference: ReferenceScene = serde_json::from_value(value).unwrap();
         let selection = select_promoted_primitives(&reference, &[], None);
-        assert!(
-            !selection
-                .promoted
-                .iter()
-                .any(|part| part.source_path == "Workspace/Imported/DirtTrack")
-        );
+        assert!(!selection.promoted.iter().any(|part| part.source_path
+            == "Workspace:Workspace[1]/Folder:Imported[1]/Part:DirtTrack[1]"));
         assert_eq!(
-            selection.statuses["Workspace/Imported/DirtTrack"],
+            selection.statuses["Workspace:Workspace[1]/Folder:Imported[1]/Part:DirtTrack[1]"],
             PromotionStatus::Fallback {
                 reason: "unsupported-shape"
             }
         );
         assert_eq!(
-            selection.statuses["Workspace/Imported/Decor"],
+            selection.statuses["Workspace:Workspace[1]/Folder:Imported[1]/Part:Decor[1]"],
             PromotionStatus::Fallback {
                 reason: "unsupported-dynamic"
             }
         );
         assert_eq!(
-            selection.statuses["Workspace/Imported/RotX"],
+            selection.statuses["Workspace:Workspace[1]/Folder:Imported[1]/Part:RotX[1]"],
             PromotionStatus::Fallback {
                 reason: "unsupported-shadow"
+            }
+        );
+    }
+
+    #[test]
+    fn preserves_supported_materials_and_keeps_unmapped_materials_in_fallback() {
+        let mut value = reference_fixture();
+        value["geometry"][0]["material"]["name"] = json!("Concrete");
+        let reference: ReferenceScene = serde_json::from_value(value).unwrap();
+        let selection = select_promoted_primitives(&reference, &[], None);
+        assert_eq!(selection.promoted[0].runtime_material, Some("builtin:rock"));
+
+        let mut value = reference_fixture();
+        value["geometry"][0]["material"]["name"] = json!("Fabric");
+        let reference: ReferenceScene = serde_json::from_value(value).unwrap();
+        let selection = select_promoted_primitives(&reference, &[], None);
+        assert!(!selection.promoted.iter().any(|part| {
+            part.source_path == "Workspace:Workspace[1]/Folder:Imported[1]/Part:DirtTrack[1]"
+        }));
+        assert_eq!(
+            selection.statuses["Workspace:Workspace[1]/Folder:Imported[1]/Part:DirtTrack[1]"],
+            PromotionStatus::Fallback {
+                reason: "unsupported-material"
             }
         );
     }
@@ -1029,7 +1088,7 @@ mod tests {
         let part = |path: &str, name: &str, rotation: [[f32; 3]; 3], can_collide: bool| {
             json!({
                 "path": path,
-                "parentPath": "Workspace/Imported",
+                "parentPath": "Workspace:Workspace[1]/Folder:Imported[1]",
                 "class": "Part",
                 "name": name,
                 "transform": {"position": [1.0, 2.0, 3.0], "rotation": rotation},
@@ -1044,31 +1103,33 @@ mod tests {
             })
         };
         let instances = [
-            json!({"path":"Workspace","parentPath":"","class":"Workspace","name":"Workspace"}),
-            json!({"path":"Workspace/Imported","parentPath":"Workspace","class":"Folder","name":"Imported"}),
-            json!({"path":"Workspace/Imported/DirtTrack","parentPath":"Workspace/Imported","class":"Part","name":"DirtTrack"}),
-            json!({"path":"Workspace/Imported/Decor","parentPath":"Workspace/Imported","class":"Part","name":"Decor"}),
-            json!({"path":"Workspace/Imported/RotX","parentPath":"Workspace/Imported","class":"Part","name":"RotX"}),
-            json!({"path":"Workspace/Imported/RotZ","parentPath":"Workspace/Imported","class":"Part","name":"RotZ"}),
-            json!({"path":"Workspace/Imported/Tilt","parentPath":"Workspace/Imported","class":"Part","name":"Tilt"}),
-            json!({"path":"Workspace/Elsewhere/DirtTrack","parentPath":"Workspace","class":"Part","name":"DirtTrack"}),
+            json!({"path":"Workspace:Workspace[1]","parentPath":"","class":"Workspace","name":"Workspace"}),
+            json!({"path":"Workspace:Workspace[1]/Folder:Imported[1]","parentPath":"Workspace:Workspace[1]","class":"Folder","name":"Imported"}),
+            json!({"path":"Workspace:Workspace[1]/Folder:Imported[1]/Part:DirtTrack[1]","parentPath":"Workspace:Workspace[1]/Folder:Imported[1]","class":"Part","name":"DirtTrack"}),
+            json!({"path":"Workspace:Workspace[1]/Folder:Imported[1]/Part:Decor[1]","parentPath":"Workspace:Workspace[1]/Folder:Imported[1]","class":"Part","name":"Decor"}),
+            json!({"path":"Workspace:Workspace[1]/Folder:Imported[1]/Part:RotX[1]","parentPath":"Workspace:Workspace[1]/Folder:Imported[1]","class":"Part","name":"RotX"}),
+            json!({"path":"Workspace:Workspace[1]/Folder:Imported[1]/Part:RotZ[1]","parentPath":"Workspace:Workspace[1]/Folder:Imported[1]","class":"Part","name":"RotZ"}),
+            json!({"path":"Workspace:Workspace[1]/Folder:Imported[1]/Part:Tilt[1]","parentPath":"Workspace:Workspace[1]/Folder:Imported[1]","class":"Part","name":"Tilt"}),
+            json!({"path":"Workspace:Workspace[1]/Part:Elsewhere[1]","parentPath":"Workspace:Workspace[1]","class":"Part","name":"DirtTrack"}),
+            json!({"path":"ServerStorage:ServerStorage[1]/Folder:Templates[1]/Part:Template[1]","parentPath":"ServerStorage:ServerStorage[1]/Folder:Templates[1]","class":"Part","name":"Template"}),
         ];
         json!({
             "formatVersion": 1,
             "kind": "roblox-static-reference-scene",
             "coordinateSystem": "Roblox source coordinates",
             "source": {"place": {"name": "Place.rbxmx", "bytes": 1, "sha256": "0123456789abcdef0123456789abcdef"}},
-            "summary": {"instanceCount": 8, "geometryCount": 5, "visibleGeometryCount": 5, "cameraCount": 0, "lightCount": 0, "textureCount": 0, "textCount": 0, "spawnCount": 0},
+            "summary": {"instanceCount": 9, "geometryCount": 7, "visibleGeometryCount": 7, "cameraCount": 0, "lightCount": 0, "textureCount": 0, "textCount": 0, "spawnCount": 0},
             "bounds": null,
             "classCounts": {},
             "instances": instances,
             "geometry": [
-                part("Workspace/Imported/DirtTrack", "DirtTrack", identity, true),
-                part("Workspace/Imported/Decor", "Decor", identity, false),
-                part("Workspace/Imported/RotX", "RotX", source_rows(Mat3::from_rotation_x(FRAC_PI_2)), true),
-                part("Workspace/Imported/RotZ", "RotZ", source_rows(Mat3::from_rotation_z(-FRAC_PI_2)), true),
-                part("Workspace/Imported/Tilt", "Tilt", source_rows(Mat3::from_rotation_y(PI / 4.0)), true),
-                part("Workspace/Elsewhere/DirtTrack", "DirtTrack", identity, true)
+                part("Workspace:Workspace[1]/Folder:Imported[1]/Part:DirtTrack[1]", "DirtTrack", identity, true),
+                part("Workspace:Workspace[1]/Folder:Imported[1]/Part:Decor[1]", "Decor", identity, false),
+                part("Workspace:Workspace[1]/Folder:Imported[1]/Part:RotX[1]", "RotX", source_rows(Mat3::from_rotation_x(FRAC_PI_2)), true),
+                part("Workspace:Workspace[1]/Folder:Imported[1]/Part:RotZ[1]", "RotZ", source_rows(Mat3::from_rotation_z(-FRAC_PI_2)), true),
+                part("Workspace:Workspace[1]/Folder:Imported[1]/Part:Tilt[1]", "Tilt", source_rows(Mat3::from_rotation_y(PI / 4.0)), true),
+                part("Workspace:Workspace[1]/Part:Elsewhere[1]", "DirtTrack", identity, true),
+                part("ServerStorage:ServerStorage[1]/Folder:Templates[1]/Part:Template[1]", "Template", identity, true)
             ],
             "cameras": [], "lights": [], "textures": [], "texts": [], "spawns": [],
             "projectLighting": null, "terrain": null
@@ -1175,7 +1236,7 @@ mod tests {
                 node.source
                     .as_ref()
                     .and_then(|source| source.path.as_deref())
-                    == Some("Workspace/Elsewhere/DirtTrack")
+                    == Some("Workspace:Workspace[1]/Part:Elsewhere[1]")
             })
             .unwrap();
         assert!(outside.editor.locked);
@@ -1190,7 +1251,7 @@ mod tests {
                 node.source
                     .as_ref()
                     .and_then(|source| source.path.as_deref())
-                    == Some("Workspace/Imported/Tilt")
+                    == Some("Workspace:Workspace[1]/Folder:Imported[1]/Part:Tilt[1]")
             })
             .unwrap();
         assert_eq!(
@@ -1198,6 +1259,7 @@ mod tests {
             "unsupported-transform"
         );
         let report: Value = serde_json::from_str(&fs::read_to_string(report).unwrap()).unwrap();
+        assert_eq!(report["parts"]["sourceTotal"], 7);
         assert_eq!(report["parts"]["total"], 6);
         assert_eq!(report["parts"]["promoted"], 5);
         assert_eq!(report["parts"]["fallback"], 1);

@@ -23,11 +23,11 @@ mod mesh_overrides;
 mod model;
 
 pub use importer::{import_reference, read_reference_scene};
-pub use mesh_export::export_reference_mesh;
 #[cfg(test)]
 pub(crate) use mesh_export::{
     StaticMeshGroup, StaticMeshVertex, append_static_geometry, write_static_glb,
 };
+pub use mesh_export::{export_reference_mesh, roblox_material_runtime_name};
 pub use model::*;
 
 /// Infer the stable local frame for a source model from its first descendant

@@ -350,18 +350,22 @@ pub(crate) fn channel(value: f32) -> u8 {
 
 // This is an import approximation, not a renderer rule for arbitrary glTF names.
 // Keep the original identity in material extras; source Color3 stays in COLOR_0.
-fn export_material_name(name: &str) -> &str {
+pub fn roblox_material_runtime_name(name: &str) -> Option<&'static str> {
     match name.to_ascii_lowercase().as_str() {
-        "grass" => "builtin:grass",
-        "leafygrass" => "builtin:leafygrass",
-        "ground" | "brick" => "builtin:ground",
+        "grass" => Some("builtin:grass"),
+        "leafygrass" => Some("builtin:leafygrass"),
+        "ground" | "brick" => Some("builtin:ground"),
         "rock" | "slate" | "concrete" | "granite" | "marble" | "pebble" | "cobblestone"
-        | "corrodedmetal" | "diamondplate" | "foil" | "metal" => "builtin:rock",
-        "sand" => "builtin:sand",
-        "mud" | "wood" | "woodplanks" => "builtin:mud",
-        "snow" | "ice" => "builtin:snow",
-        _ => name,
+        | "corrodedmetal" | "diamondplate" | "foil" | "metal" => Some("builtin:rock"),
+        "sand" => Some("builtin:sand"),
+        "mud" | "wood" | "woodplanks" => Some("builtin:mud"),
+        "snow" | "ice" => Some("builtin:snow"),
+        _ => None,
     }
+}
+
+fn export_material_name(name: &str) -> &str {
+    roblox_material_runtime_name(name).unwrap_or(name)
 }
 
 pub(crate) fn write_static_glb(path: &Path, groups: &[StaticMeshGroup]) -> Result<(), String> {

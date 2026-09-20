@@ -64,20 +64,25 @@ Roblox smooth-terrain voxel blobs are recorded by size and SHA-256 but are not
 decoded yet; that limitation is explicit in the generated scene.
 
 `import-roblox-scene` automatically promotes every losslessly representable
-physical `Part` into a native authoring primitive. The current slice accepts
+physical `Part` under `Workspace:Workspace[1]` into a native authoring
+primitive. Parts from services such as ServerStorage remain source-only. The
+current slice accepts
 anchored, ordinary block Parts with supported axis-aligned rotations and no
 mesh, transparency, or reflectance overrides. Promotion preserves position,
-rotation, size, color, and `CanCollide`: collidable Parts receive a native box
-collision component, while non-collidable Parts remain editable primitives
-without collision. Unsupported Parts remain in the source/fallback pipeline
-with a machine-readable reason. The legacy `--editable-part-name` and
+rotation, size, color, supported Roblox material mappings, and `CanCollide`:
+collidable Parts receive a native box collision component, while non-collidable
+Parts remain editable visual-only primitives. Unsupported material mappings
+remain in the source/fallback pipeline so the fallback GLB retains their
+appearance. Unsupported Parts remain in the source/fallback pipeline with a
+machine-readable reason. The legacy `--editable-part-name` and
 `--editable-part-path-prefix` options remain available as narrow filters for
 targeted imports.
 
 Promoted Parts receive stable IDs derived from their source paths, are grouped
 under generated native Model/Folder representations, and are linked back from
 the locked source nodes. Re-running the import replaces only source-generated
-representations. Use `--promotion-report-output` for actual conversion counts.
+representations. Use `--promotion-report-output` for actual conversion counts;
+the report separates all source Parts from the playable Workspace denominator.
 When baking a fallback GLB, pass `--exclude-authoring-scene scene.json` to
 `export-reference-mesh`; it removes promoted primitive paths from both the
 render mesh and its generated collision data so the native and fallback

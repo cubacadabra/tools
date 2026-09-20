@@ -94,6 +94,10 @@ impl AuthoringScene {
                         .unwrap_or(&node.id),
                     "position": world_transform.position,
                     "size": size,
+                    "collidable": primitive
+                        .get("collidable")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(true),
                 });
                 if let Some(material) = primitive.get("material") {
                     block

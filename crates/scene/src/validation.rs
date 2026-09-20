@@ -155,6 +155,15 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                     "primitive size must contain finite values above the minimum size",
                 ));
             }
+            if value
+                .get("collidable")
+                .is_some_and(|collidable| !collidable.is_boolean())
+            {
+                return Err(component_error(
+                    node,
+                    "primitive collidable must be a boolean",
+                ));
+            }
         }
         if matches!(name.as_str(), "ladder" | "hazard") {
             let Some(size) = value.get("size").and_then(vector_value) else {

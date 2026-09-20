@@ -180,6 +180,27 @@ mod tests {
             json!([2.0, 1.0, -3.0])
         );
         assert_eq!(manifest["worlds"]["world"]["blocks"][0]["color"], "signal");
+        assert_eq!(manifest["worlds"]["world"]["blocks"][0]["collidable"], true);
+    }
+
+    #[test]
+    fn primitive_collidable_flag_compiles_as_a_visual_only_block() {
+        let mut block = node("decor", None);
+        block.components.insert(
+            "primitive".to_owned(),
+            json!({"shape": "box", "size": [1.0, 1.0, 1.0], "collidable": false}),
+        );
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![block],
+        };
+        let mut manifest = json!({"startWorld": "world", "worlds": {"world": {}}});
+        scene.compile_into_manifest(&mut manifest).unwrap();
+        assert_eq!(
+            manifest["worlds"]["world"]["blocks"][0]["collidable"],
+            false
+        );
     }
 
     #[test]
