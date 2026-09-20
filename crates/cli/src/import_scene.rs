@@ -1,4 +1,5 @@
 use super::*;
+use glam::{EulerRot, Mat3, Quat, Vec3};
 
 pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
     let mut reference = None;
@@ -161,28 +162,11 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
     } else {
         Vec::new()
     };
-    let promoted_primitives = reference_scene
-        .geometry
-        .iter()
-        .filter(|geometry| {
-            geometry.class == "Part"
-                && geometry.can_collide
-                && source_rotation_is_axis_aligned(geometry.transform.rotation)
-                && editable_part_names
-                    .iter()
-                    .any(|name| name == &geometry.name)
-                && editable_part_path_prefix
-                    .as_deref()
-                    .is_none_or(|prefix| geometry.path.starts_with(prefix))
-        })
-        .map(|geometry| PromotedPrimitive {
-            source_path: geometry.path.clone(),
-            position: geometry.transform.position,
-            rotation: [0.0, source_yaw(geometry.transform.rotation), 0.0],
-            size: geometry.size,
-            material: source_color(geometry.color),
-        })
-        .collect::<Vec<_>>();
+    let promoted_primitives = select_promoted_primitives(
+        &reference_scene,
+        &editable_part_names,
+        editable_part_path_prefix.as_deref(),
+    );
     for spec in &editable_instances {
         for instance in reference_scene.instances.iter().filter(|instance| {
             instance.class == "Model"
@@ -329,6 +313,32 @@ struct PromotedPrimitive {
     rotation: [f32; 3],
     size: [f32; 3],
     material: String,
+    can_collide: bool,
+}
+
+fn select_promoted_primitives(
+    reference: &ReferenceScene,
+    names: &[String],
+    path_prefix: Option<&str>,
+) -> Vec<PromotedPrimitive> {
+    reference
+        .geometry
+        .iter()
+        .filter(|geometry| {
+            geometry.class == "Part"
+                && source_rotation_is_axis_aligned(geometry.transform.rotation)
+                && names.iter().any(|name| name == &geometry.name)
+                && path_prefix.is_none_or(|prefix| geometry.path.starts_with(prefix))
+        })
+        .map(|geometry| PromotedPrimitive {
+            source_path: geometry.path.clone(),
+            position: geometry.transform.position,
+            rotation: source_rotation_to_euler(geometry.transform.rotation),
+            size: geometry.size,
+            material: source_color(geometry.color),
+            can_collide: geometry.can_collide,
+        })
+        .collect()
 }
 
 fn read_editable_instance_map(path: &Path) -> Result<Vec<PromotedInstance>, String> {
@@ -571,6 +581,7 @@ fn generated_scene_nodes(
             ("generatedBy".to_owned(), json!("import-roblox-scene")),
             ("representation".to_owned(), json!("primitive")),
             ("sourceColor".to_owned(), json!(promoted.material.clone())),
+            ("sourceCanCollide".to_owned(), json!(promoted.can_collide)),
             (
                 "sourceFrame".to_owned(),
                 json!("geometry-transform-and-bounds"),
@@ -584,6 +595,17 @@ fn generated_scene_nodes(
         {
             properties.insert("sourceMaterial".to_owned(), json!(material));
         }
+        let mut components = BTreeMap::from([(
+            "primitive".to_owned(),
+            json!({
+                "shape": "box",
+                "size": promoted.size,
+                "material": promoted.material.clone(),
+            }),
+        )]);
+        if promoted.can_collide {
+            components.insert("collision".to_owned(), json!({"kind": "box"}));
+        }
         nodes.push(AuthoringNode {
             id,
             parent_id: editable_parent_id.map(str::to_owned),
@@ -593,17 +615,7 @@ fn generated_scene_nodes(
                 rotation: promoted.rotation,
                 scale: [1.0; 3],
             },
-            components: BTreeMap::from([
-                (
-                    "primitive".to_owned(),
-                    json!({
-                        "shape": "box",
-                        "size": promoted.size,
-                        "material": promoted.material.clone(),
-                    }),
-                ),
-                ("collision".to_owned(), json!({"kind": "box"})),
-            ]),
+            components,
             editor: EditorMetadata::default(),
             source: Some(SourceMetadata {
                 format: "roblox".to_owned(),
@@ -614,6 +626,16 @@ fn generated_scene_nodes(
         });
     }
     nodes
+}
+
+fn source_rotation_to_euler(rotation: [[f32; 3]; 3]) -> [f32; 3] {
+    let matrix = Mat3::from_cols(
+        Vec3::new(rotation[0][0], rotation[1][0], rotation[2][0]),
+        Vec3::new(rotation[0][1], rotation[1][1], rotation[2][1]),
+        Vec3::new(rotation[0][2], rotation[1][2], rotation[2][2]),
+    );
+    let (x, y, z) = Quat::from_mat3(&matrix).to_euler(EulerRot::XYZ);
+    [x, y, z]
 }
 
 fn source_yaw(rotation: [[f32; 3]; 3]) -> f32 {
@@ -645,5 +667,208 @@ fn source_rotation_is_axis_aligned(rotation: [[f32; 3]; 3]) -> bool {
             .count()
             == 1
     });
-    rows_are_axes && columns_are_axes
+    let determinant = rotation[0][0]
+        * (rotation[1][1] * rotation[2][2] - rotation[1][2] * rotation[2][1])
+        - rotation[0][1] * (rotation[1][0] * rotation[2][2] - rotation[1][2] * rotation[2][0])
+        + rotation[0][2] * (rotation[1][0] * rotation[2][1] - rotation[1][1] * rotation[2][0]);
+    rows_are_axes && columns_are_axes && (determinant - 1.0).abs() <= tolerance
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::f32::consts::{FRAC_PI_2, PI};
+
+    fn source_rows(matrix: Mat3) -> [[f32; 3]; 3] {
+        [
+            [matrix.x_axis.x, matrix.y_axis.x, matrix.z_axis.x],
+            [matrix.x_axis.y, matrix.y_axis.y, matrix.z_axis.y],
+            [matrix.x_axis.z, matrix.y_axis.z, matrix.z_axis.z],
+        ]
+    }
+
+    fn close(left: f32, right: f32) {
+        assert!((left - right).abs() < 0.0001, "{left} != {right}");
+    }
+
+    #[test]
+    fn converts_axis_aligned_xyz_rotations_without_dropping_axes() {
+        for (matrix, expected) in [
+            (Mat3::from_rotation_y(FRAC_PI_2), [0.0, FRAC_PI_2, 0.0]),
+            (Mat3::from_rotation_x(FRAC_PI_2), [FRAC_PI_2, 0.0, 0.0]),
+            (Mat3::from_rotation_z(-FRAC_PI_2), [0.0, 0.0, -FRAC_PI_2]),
+        ] {
+            let source = source_rows(matrix);
+            assert!(source_rotation_is_axis_aligned(source));
+            for (actual, expected) in source_rotation_to_euler(source).into_iter().zip(expected) {
+                close(actual, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_non_axis_aligned_and_reflected_matrices() {
+        assert!(!source_rotation_is_axis_aligned(source_rows(
+            Mat3::from_rotation_y(0.25),
+        )));
+        assert!(!source_rotation_is_axis_aligned([
+            [-1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ]));
+    }
+
+    fn reference_fixture() -> Value {
+        let identity = source_rows(Mat3::IDENTITY);
+        let part = |path: &str, name: &str, rotation: [[f32; 3]; 3], can_collide: bool| {
+            json!({
+                "path": path,
+                "parentPath": "Workspace/Imported",
+                "class": "Part",
+                "name": name,
+                "transform": {"position": [1.0, 2.0, 3.0], "rotation": rotation},
+                "size": [2.0, 1.0, 4.0],
+                "color": [0.5, 0.25, 0.1],
+                "material": {"value": 0, "name": "Plastic"},
+                "transparency": 0.0,
+                "reflectance": 0.0,
+                "anchored": true,
+                "canCollide": can_collide,
+                "castShadow": true
+            })
+        };
+        let instances = [
+            json!({"path":"Workspace","parentPath":"","class":"Workspace","name":"Workspace"}),
+            json!({"path":"Workspace/Imported","parentPath":"Workspace","class":"Folder","name":"Imported"}),
+            json!({"path":"Workspace/Imported/DirtTrack","parentPath":"Workspace/Imported","class":"Part","name":"DirtTrack"}),
+            json!({"path":"Workspace/Imported/Decor","parentPath":"Workspace/Imported","class":"Part","name":"Decor"}),
+            json!({"path":"Workspace/Imported/RotX","parentPath":"Workspace/Imported","class":"Part","name":"RotX"}),
+            json!({"path":"Workspace/Imported/RotZ","parentPath":"Workspace/Imported","class":"Part","name":"RotZ"}),
+            json!({"path":"Workspace/Imported/Tilt","parentPath":"Workspace/Imported","class":"Part","name":"Tilt"}),
+            json!({"path":"Workspace/Elsewhere/DirtTrack","parentPath":"Workspace","class":"Part","name":"DirtTrack"}),
+        ];
+        json!({
+            "formatVersion": 1,
+            "kind": "roblox-static-reference-scene",
+            "coordinateSystem": "Roblox source coordinates",
+            "source": {"place": {"name": "Place.rbxmx", "bytes": 1, "sha256": "0123456789abcdef0123456789abcdef"}},
+            "summary": {"instanceCount": 8, "geometryCount": 5, "visibleGeometryCount": 5, "cameraCount": 0, "lightCount": 0, "textureCount": 0, "textCount": 0, "spawnCount": 0},
+            "bounds": null,
+            "classCounts": {},
+            "instances": instances,
+            "geometry": [
+                part("Workspace/Imported/DirtTrack", "DirtTrack", identity, true),
+                part("Workspace/Imported/Decor", "Decor", identity, false),
+                part("Workspace/Imported/RotX", "RotX", source_rows(Mat3::from_rotation_x(FRAC_PI_2)), true),
+                part("Workspace/Imported/RotZ", "RotZ", source_rows(Mat3::from_rotation_z(-FRAC_PI_2)), true),
+                part("Workspace/Imported/Tilt", "Tilt", source_rows(Mat3::from_rotation_y(PI / 4.0)), true)
+            ],
+            "cameras": [], "lights": [], "textures": [], "texts": [], "spawns": [],
+            "projectLighting": null, "terrain": null
+        })
+    }
+
+    #[test]
+    fn import_promotes_selected_parts_with_path_filter_and_reruns_idempotently() {
+        let temp = tempfile::tempdir().unwrap();
+        let reference = temp.path().join("reference.json");
+        let base = temp.path().join("scene.json");
+        let output = temp.path().join("out-scene.json");
+        let source_index = temp.path().join("imports/roblox/place/index.json");
+        fs::write(
+            &reference,
+            serde_json::to_vec(&reference_fixture()).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            &base,
+            r#"{"formatVersion":1,"nodes":[{"id":"imported-environment","name":"Environment"}]}"#,
+        )
+        .unwrap();
+        let args = vec![
+            "--reference",
+            reference.to_str().unwrap(),
+            "--base-scene",
+            base.to_str().unwrap(),
+            "--output",
+            output.to_str().unwrap(),
+            "--source-index",
+            source_index.to_str().unwrap(),
+            "--editable-part-name",
+            "DirtTrack",
+            "--editable-part-name",
+            "Decor",
+            "--editable-part-name",
+            "RotX",
+            "--editable-part-name",
+            "RotZ",
+            "--editable-part-name",
+            "Tilt",
+            "--editable-part-path-prefix",
+            "Workspace/Imported",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+
+        import_roblox_scene_command(&args).unwrap();
+        import_roblox_scene_command(&args).unwrap();
+        let scene = parse_authoring_scene(&fs::read_to_string(&output).unwrap()).unwrap();
+        let promoted = scene
+            .nodes
+            .iter()
+            .filter(|node| node.id.starts_with("imported-part-"))
+            .collect::<Vec<_>>();
+        assert_eq!(promoted.len(), 4);
+        assert_eq!(
+            promoted
+                .iter()
+                .filter(|node| node.components.contains_key("collision"))
+                .count(),
+            3
+        );
+        let decor = scene
+            .nodes
+            .iter()
+            .find(|node| node.name.starts_with("Decor —"));
+        assert!(decor.is_some(), "non-colliding Parts remain editable");
+        assert!(decor.unwrap().components.get("collision").is_none());
+        let rot_x = scene
+            .nodes
+            .iter()
+            .find(|node| node.name.starts_with("RotX —"))
+            .unwrap();
+        close(rot_x.transform.rotation[0], FRAC_PI_2);
+        let rot_z = scene
+            .nodes
+            .iter()
+            .find(|node| node.name.starts_with("RotZ —"))
+            .unwrap();
+        close(rot_z.transform.rotation[2], -FRAC_PI_2);
+        assert!(
+            scene
+                .nodes
+                .iter()
+                .all(|node| !node.name.starts_with("Tilt —"))
+        );
+        let outside = scene
+            .nodes
+            .iter()
+            .find(|node| {
+                node.source
+                    .as_ref()
+                    .and_then(|source| source.path.as_deref())
+                    == Some("Workspace/Elsewhere/DirtTrack")
+            })
+            .unwrap();
+        assert!(outside.editor.locked);
+        assert!(
+            !outside
+                .source
+                .as_ref()
+                .unwrap()
+                .properties
+                .contains_key("representation")
+        );
+    }
 }

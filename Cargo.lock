@@ -179,8 +179,10 @@ dependencies = [
  "cubacadabra-project",
  "cubacadabra-reference-import",
  "cubacadabra-scene",
+ "glam",
  "serde_json",
  "sha2",
+ "tempfile",
 ]
 
 [[package]]

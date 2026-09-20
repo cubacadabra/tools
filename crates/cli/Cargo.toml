@@ -13,5 +13,9 @@ cubacadabra-builder = { path = "../builder" }
 cubacadabra-project = { path = "../project" }
 cubacadabra-reference-import = { path = "../reference-import" }
 cubacadabra-scene = { path = "../scene" }
+glam = "0.30"
 serde_json = "1"
 sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"

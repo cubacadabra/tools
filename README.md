@@ -66,8 +66,10 @@ decoded yet; that limitation is explicit in the generated scene.
 `import-roblox-scene` can promote selected physical Parts into native authoring
 primitives. Repeat `--editable-part-name` for the source display names to
 promote; `--editable-part-path-prefix` can limit the match to one source area.
-Only collidable `Part` geometry with a runtime-supported axis-aligned rotation
-is promoted by this first primitive slice. Other source records remain
+`Part` geometry with a runtime-supported axis-aligned rotation is promoted by
+this first primitive slice. Promotion preserves the source `CanCollide` state:
+collidable Parts receive a native box collision component, while non-collidable
+Parts remain editable primitives without collision. Other source records remain
 available in the imported source hierarchy.
 
 Bake a selected imported hierarchy into a compact static GLB for the normal
