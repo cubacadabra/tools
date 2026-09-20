@@ -435,7 +435,10 @@ impl AuthoringScene {
                     .and_then(vector_value)
                     .ok_or_else(|| component_error(node, "primitive requires a size"))?;
                 let mut block = json!({
-                    "id": node.id,
+                    "id": primitive
+                        .get("runtimeId")
+                        .and_then(Value::as_str)
+                        .unwrap_or(&node.id),
                     "position": world_transform.position,
                     "size": size,
                 });
@@ -485,6 +488,12 @@ impl AuthoringScene {
                             .expect("mesh decoration is an object")
                             .insert("scale3".to_owned(), json!(scale));
                     }
+                    if let Some(material) = render.get("material") {
+                        decoration
+                            .as_object_mut()
+                            .expect("mesh decoration is an object")
+                            .insert("material".to_owned(), material.clone());
+                    }
                     decorations.push(decoration);
                 }
             }
@@ -502,6 +511,7 @@ impl AuthoringScene {
                 sign.insert("position".to_owned(), json!(world_transform.position));
                 copy_component_value(text, &mut sign, "maxWidth");
                 copy_component_value(text, &mut sign, "color");
+                copy_component_value(text, &mut sign, "id");
                 signs.push(Value::Object(sign));
             }
             if let Some(interaction) = node.components.get("interaction") {
@@ -537,9 +547,7 @@ impl AuthoringScene {
                 interactions.push(Value::Object(output));
             }
         }
-        if !blocks.is_empty() {
-            world.insert("blocks".to_owned(), Value::Array(blocks));
-        }
+        world.insert("blocks".to_owned(), Value::Array(blocks));
         world.insert("decorations".to_owned(), Value::Array(decorations));
         world.insert("signs".to_owned(), Value::Array(signs));
         world.insert("interactions".to_owned(), Value::Array(interactions));
@@ -838,6 +846,54 @@ mod tests {
             json!([2.0, 1.0, -3.0])
         );
         assert_eq!(manifest["worlds"]["world"]["blocks"][0]["color"], "signal");
+    }
+
+    #[test]
+    fn primitive_runtime_id_overrides_the_authoring_node_id() {
+        let mut block = node("block-platform", None);
+        block.transform.position = [2.0, 1.0, -3.0];
+        block.components.insert(
+            "primitive".to_owned(),
+            json!({
+                "shape": "box",
+                "size": [4.0, 1.0, 4.0],
+                "runtimeId": "platform"
+            }),
+        );
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![block],
+        };
+        let mut manifest = json!({
+            "startWorld": "world",
+            "worlds": { "world": {} }
+        });
+
+        scene.compile_into_manifest(&mut manifest).unwrap();
+
+        assert_eq!(manifest["worlds"]["world"]["blocks"][0]["id"], "platform");
+    }
+
+    #[test]
+    fn compiling_a_scene_without_blocks_clears_stale_runtime_blocks() {
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![node("world", None)],
+        };
+        let mut manifest = json!({
+            "startWorld": "world",
+            "worlds": {
+                "world": {
+                    "blocks": [{ "id": "stale" }]
+                }
+            }
+        });
+
+        scene.compile_into_manifest(&mut manifest).unwrap();
+
+        assert_eq!(manifest["worlds"]["world"]["blocks"], json!([]));
     }
 
     #[test]
