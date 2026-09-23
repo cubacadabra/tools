@@ -44,6 +44,7 @@ impl AuthoringScene {
         let mut decorations = Vec::new();
         let mut signs = Vec::new();
         let mut interactions = Vec::new();
+        let mut actors = Vec::new();
         let mut ladders = Vec::new();
         let mut checkpoints = Vec::new();
         let mut hazards = Vec::new();
@@ -246,6 +247,42 @@ impl AuthoringScene {
                 }
                 interactions.push(Value::Object(output));
             }
+            if let Some(actor) = node.components.get("actor") {
+                let actor = actor
+                    .as_object()
+                    .ok_or_else(|| component_error(node, "actor must be an object"))?;
+                let mut output = Map::new();
+                output.insert(
+                    "id".to_owned(),
+                    actor
+                        .get("id")
+                        .cloned()
+                        .unwrap_or_else(|| Value::String(node.id.clone())),
+                );
+                output.insert(
+                    "name".to_owned(),
+                    actor
+                        .get("name")
+                        .cloned()
+                        .unwrap_or_else(|| Value::String(node.name.clone())),
+                );
+                output.insert("position".to_owned(), json!(world_transform.position));
+                output.insert(
+                    "yaw".to_owned(),
+                    json!(
+                        actor.get("yaw").and_then(Value::as_f64).unwrap_or(0.0)
+                            + f64::from(world_transform.rotation[1])
+                    ),
+                );
+                output.insert(
+                    "appearance".to_owned(),
+                    actor
+                        .get("appearance")
+                        .cloned()
+                        .unwrap_or_else(|| json!({})),
+                );
+                actors.push(Value::Object(output));
+            }
             if let Some(ladder) = node.components.get("ladder") {
                 let ladder = ladder
                     .as_object()
@@ -345,6 +382,7 @@ impl AuthoringScene {
         world.insert("decorations".to_owned(), Value::Array(decorations));
         world.insert("signs".to_owned(), Value::Array(signs));
         world.insert("interactions".to_owned(), Value::Array(interactions));
+        world.insert("actors".to_owned(), Value::Array(actors));
         world.insert("ladders".to_owned(), Value::Array(ladders));
         world.insert("checkpoints".to_owned(), Value::Array(checkpoints));
         world.insert("hazards".to_owned(), Value::Array(hazards));

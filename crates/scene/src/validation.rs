@@ -109,6 +109,7 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
             "render"
                 | "text"
                 | "interaction"
+                | "actor"
                 | "primitive"
                 | "collision"
                 | "ladder"
@@ -134,6 +135,35 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                 node,
                 "render component requires a non-empty mesh asset",
             ));
+        }
+        if name == "actor" {
+            if value
+                .get("id")
+                .is_some_and(|id| id.as_str().is_none_or(|id| id.trim().is_empty()))
+            {
+                return Err(component_error(node, "actor id must be a non-empty string"));
+            }
+            if value
+                .get("name")
+                .is_some_and(|name| name.as_str().is_none_or(|name| name.trim().is_empty()))
+            {
+                return Err(component_error(
+                    node,
+                    "actor name must be a non-empty string",
+                ));
+            }
+            if value
+                .get("yaw")
+                .is_some_and(|yaw| yaw.as_f64().is_none_or(|yaw| !yaw.is_finite()))
+            {
+                return Err(component_error(node, "actor yaw must be a finite number"));
+            }
+            if value
+                .get("appearance")
+                .is_some_and(|appearance| !appearance.is_object())
+            {
+                return Err(component_error(node, "actor appearance must be an object"));
+            }
         }
         if name == "primitive" {
             let shape = value.get("shape").and_then(Value::as_str).unwrap_or("box");

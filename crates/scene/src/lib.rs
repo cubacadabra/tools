@@ -479,6 +479,18 @@ mod tests {
             "interaction".to_owned(),
             json!({ "id": "table", "label": "PLAY", "radius": 7.5 }),
         );
+        let mut actor = node("maya", Some("root"));
+        actor.transform.position = [4.0, 0.0, -2.0];
+        actor.transform.rotation[1] = 0.25;
+        actor.components.insert(
+            "actor".to_owned(),
+            json!({
+                "id": "maya",
+                "name": "Maya",
+                "yaw": 0.5,
+                "appearance": { "skin": "#E8AE86" }
+            }),
+        );
         let mut ladder = node("ladder", Some("root"));
         ladder.components.insert(
             "ladder".to_owned(),
@@ -507,6 +519,7 @@ mod tests {
                 mesh,
                 sign,
                 interaction,
+                actor,
                 ladder,
                 checkpoint,
                 hazard,
@@ -523,6 +536,10 @@ mod tests {
         assert_eq!(world["decorations"][0]["scale3"], json!([1.0, 1.5, 0.75]));
         assert_eq!(world["signs"][0]["text"], "TABLES");
         assert_eq!(world["interactions"][0]["id"], "table");
+        assert_eq!(world["actors"][0]["id"], "maya");
+        assert_eq!(world["actors"][0]["name"], "Maya");
+        assert_eq!(world["actors"][0]["position"], json!([4.0, 0.0, -2.0]));
+        assert!((world["actors"][0]["yaw"].as_f64().unwrap() - 0.75).abs() < 0.0001);
         assert_eq!(world["ladders"][0]["id"], "up");
         assert_eq!(world["checkpoints"][0]["id"], "save");
         assert_eq!(world["hazards"][0]["damagePerSecond"], 10);
