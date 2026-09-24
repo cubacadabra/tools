@@ -239,8 +239,8 @@ const STARTER_GLYPHS: &[&[StarterStroke]] = &[
         rotated_stroke(0.06, -0.62, 0.08, 0.78, 0.34),
     ],
     &[
-        stroke(0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9),
-        stroke(0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9),
+        stroke(0.0, 0.4, STARTER_STROKE_THICKNESS, 0.65),
+        stroke(0.0, -0.75, STARTER_STROKE_THICKNESS, 0.5),
     ],
 ];
 
@@ -274,11 +274,75 @@ fn starter_scene_nodes() -> Vec<serde_json::Value> {
                 "primitive": {
                     "shape": "box",
                     "size": [STARTER_CUBE_SIZE, STARTER_CUBE_SIZE, STARTER_CUBE_SIZE],
-                    "color": STARTER_CUBE_COLOR
+                    "color": STARTER_CUBE_COLOR,
+                    "outline": false
                 }
             },
             "editor": { "visible": true, "locked": false }
         }));
+
+        // Keep the tile boundary as a crisp, dark front-face square. The
+        // runtime block outline is intentionally translucent and wraps every
+        // 3D edge, while the starter lettering reference uses a clear square
+        // around each tile.
+        let border = [
+            (
+                "Border Top",
+                0.0,
+                STARTER_CUBE_SIZE / 2.0 - STARTER_STROKE_THICKNESS / 2.0,
+                STARTER_CUBE_SIZE,
+                STARTER_STROKE_THICKNESS,
+            ),
+            (
+                "Border Bottom",
+                0.0,
+                -(STARTER_CUBE_SIZE / 2.0 - STARTER_STROKE_THICKNESS / 2.0),
+                STARTER_CUBE_SIZE,
+                STARTER_STROKE_THICKNESS,
+            ),
+            (
+                "Border Left",
+                -(STARTER_CUBE_SIZE / 2.0 - STARTER_STROKE_THICKNESS / 2.0),
+                0.0,
+                STARTER_STROKE_THICKNESS,
+                STARTER_CUBE_SIZE,
+            ),
+            (
+                "Border Right",
+                STARTER_CUBE_SIZE / 2.0 - STARTER_STROKE_THICKNESS / 2.0,
+                0.0,
+                STARTER_STROKE_THICKNESS,
+                STARTER_CUBE_SIZE,
+            ),
+        ];
+        for (border_index, (name, x, y, width, height)) in border.iter().copied().enumerate() {
+            // Adjacent tiles share a separator. Keep the first tile's left
+            // edge, then let each tile's right edge draw the shared line once.
+            if border_index == 2 && cube_index > 0 {
+                continue;
+            }
+            nodes.push(json!({
+                "id": format!("{cube_id}-border-{}", border_index + 1),
+                "parentId": cube_id,
+                "name": format!("Letter {cube_number} {name}"),
+                "transform": {
+                    "position": [x, y, STARTER_FACE_Z],
+                    "rotation": [0, 0, 0],
+                    "scale": [1, 1, 1]
+                },
+                "components": {
+                    "primitive": {
+                        "shape": "box",
+                        "size": [width, height, STARTER_STROKE_DEPTH],
+                        "color": STARTER_STROKE_COLOR,
+                        "collidable": false,
+                        "castShadow": false,
+                        "outline": false
+                    }
+                },
+                "editor": { "visible": true, "locked": false }
+            }));
+        }
 
         for (stroke_index, stroke) in glyph.iter().copied().enumerate() {
             nodes.push(json!({
