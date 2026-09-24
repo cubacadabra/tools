@@ -165,6 +165,7 @@ fn starter_scene() -> serde_json::Value {
 
 const STARTER_CUBE_SIZE: f32 = 2.0;
 const STARTER_CUBE_SPACING: f32 = 2.25;
+const STARTER_WALL_Z: f32 = -4.0;
 const STARTER_FACE_Z: f32 = 1.03;
 const STARTER_STROKE_DEPTH: f32 = 0.06;
 const STARTER_STROKE_THICKNESS: f32 = 0.08;
@@ -234,7 +235,7 @@ fn starter_scene_nodes() -> Vec<serde_json::Value> {
             "parentId": "world-starter-world",
             "name": format!("Letter Cube {cube_number}"),
             "transform": {
-                "position": [cube_x, STARTER_CUBE_SIZE / 2.0, 0],
+                "position": [cube_x, STARTER_CUBE_SIZE / 2.0, STARTER_WALL_Z],
                 "rotation": [0, 0, 0],
                 "scale": [1, 1, 1]
             },
