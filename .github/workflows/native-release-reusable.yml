@@ -55,6 +55,22 @@ on:
         required: false
         type: string
         default: main
+    secrets:
+      MACOS_DEVELOPER_ID_P12:
+        description: Base64-encoded Developer ID Application certificate and private key
+        required: true
+      MACOS_DEVELOPER_ID_P12_PASSWORD:
+        description: Password used when exporting the Developer ID Application certificate
+        required: true
+      APPLE_NOTARY_KEY_P8:
+        description: App Store Connect team API private key contents
+        required: true
+      APPLE_NOTARY_KEY_ID:
+        description: App Store Connect team API key ID
+        required: true
+      APPLE_NOTARY_ISSUER_ID:
+        description: App Store Connect team API issuer ID
+        required: true
 
 jobs:
   build:
@@ -148,6 +164,45 @@ jobs:
             cp "tools/target/${{ matrix.target }}/release/cubacadabra" staging/cubacadabra
           fi
 
+      - name: Install macOS signing certificate
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          MACOS_DEVELOPER_ID_P12: ${{ secrets.MACOS_DEVELOPER_ID_P12 }}
+          MACOS_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          certificate_path="${RUNNER_TEMP}/developer-id.p12"
+          keychain_path="${RUNNER_TEMP}/app-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          trap 'rm -f "${certificate_path}"' EXIT
+
+          printf '%s' "${MACOS_DEVELOPER_ID_P12}" | base64 --decode > "${certificate_path}"
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" \
+            -k "${keychain_path}" \
+            -P "${MACOS_DEVELOPER_ID_P12_PASSWORD}" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "${keychain_password}" \
+            "${keychain_path}"
+          security list-keychains -d user -s "${keychain_path}"
+
+          signing_identity="$(
+            security find-identity -v -p codesigning "${keychain_path}" |
+              awk -F'"' '/Developer ID Application:/ { print $2; exit }'
+          )"
+          if [[ -z "${signing_identity}" ]]; then
+            echo "The signing archive does not contain a valid Developer ID Application identity." >&2
+            exit 1
+          fi
+
+          echo "MACOS_SIGNING_IDENTITY=${signing_identity}" >> "${GITHUB_ENV}"
+
       - name: Package macOS application
         if: matrix.platform == 'macos'
         shell: bash
@@ -160,12 +215,21 @@ jobs:
           ARCHIVE_PREFIX: ${{ inputs.archive_prefix }}
           BINARY_NAME: ${{ inputs.binary_name }}
           BUNDLE_BUILDER: ${{ inputs.bundle_builder }}
+          APPLE_NOTARY_KEY_P8: ${{ secrets.APPLE_NOTARY_KEY_P8 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           app_bundle="${DISPLAY_NAME}.app"
           app_root="staging/${app_bundle}"
           archive="${ARCHIVE_PREFIX}-${GITHUB_REF_NAME}-macos-${ARCH}.zip"
+          notarization_archive="${RUNNER_TEMP}/${ARCHIVE_PREFIX}-notarization.zip"
+          notary_key="${RUNNER_TEMP}/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
+          trap 'rm -f "${notary_key}" "${notarization_archive}"' EXIT
+          printf '%s' "${APPLE_NOTARY_KEY_P8}" > "${notary_key}"
+          chmod 600 "${notary_key}"
+
           mkdir -p "${app_root}/Contents/MacOS" "${app_root}/Contents/Resources" dist
           cp "${APP_DIRECTORY}/target/${TARGET}/release/${BINARY_NAME}" "${app_root}/Contents/MacOS/${BINARY_NAME}"
           cp rust/assets/images/logo.png "${app_root}/Contents/Resources/logo.png"
@@ -183,9 +247,31 @@ jobs:
           sed "s/__VERSION__/${version}/g; s/Cubacadabra Desktop/${DISPLAY_NAME}/g; s/<string>desktop<\/string>/<string>${BINARY_NAME}<\/string>/g; s/com.cubacadabra.desktop/com.cubacadabra.${APP_NAME}/g" \
             "${APP_DIRECTORY}/packaging/macos/Info.plist" > "${app_root}/Contents/Info.plist"
           chmod +x "${app_root}/Contents/MacOS/${BINARY_NAME}"
-          codesign --force --sign - --timestamp=none "${app_root}/Contents/MacOS/${BINARY_NAME}"
-          codesign --force --sign - --timestamp=none "${app_root}"
+
+          if [[ "${BUNDLE_BUILDER}" == "true" ]]; then
+            codesign --force --options runtime --timestamp \
+              --sign "${MACOS_SIGNING_IDENTITY}" \
+              "${app_root}/Contents/Resources/cubacadabra"
+          fi
+          codesign --force --options runtime --timestamp \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            "${app_root}/Contents/MacOS/${BINARY_NAME}"
+          codesign --force --options runtime --timestamp \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            "${app_root}"
           codesign --verify --deep --strict --verbose=2 "${app_root}"
+
+          ditto -c -k --sequesterRsrc --keepParent "${app_root}" "${notarization_archive}"
+          xcrun notarytool submit "${notarization_archive}" \
+            --key "${notary_key}" \
+            --key-id "${APPLE_NOTARY_KEY_ID}" \
+            --issuer "${APPLE_NOTARY_ISSUER_ID}" \
+            --wait \
+            --timeout 30m
+          xcrun stapler staple "${app_root}"
+          xcrun stapler validate "${app_root}"
+          spctl --assess --type execute --verbose=2 "${app_root}"
+
           ditto -c -k --sequesterRsrc --keepParent "${app_root}" "dist/${archive}"
 
       - name: Package Windows application

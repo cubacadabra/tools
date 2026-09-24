@@ -20,6 +20,24 @@ Build the native CLI from this repository:
 cargo install --path crates/cli --locked
 ```
 
+## Native macOS releases
+
+The reusable native release workflow signs macOS app bundles with a Developer
+ID Application certificate, enables the hardened runtime, submits the signed
+bundle to Apple's notary service, staples the ticket, and verifies the result
+with Gatekeeper before publishing it. Calling repositories must pass these
+organization secrets with `secrets: inherit`:
+
+- `MACOS_DEVELOPER_ID_P12`: base64-encoded `.p12` export containing the
+  Developer ID Application certificate and private key
+- `MACOS_DEVELOPER_ID_P12_PASSWORD`: password for that `.p12` export
+- `APPLE_NOTARY_KEY_P8`: contents of an App Store Connect team API `.p8` key
+- `APPLE_NOTARY_KEY_ID`: App Store Connect API key ID
+- `APPLE_NOTARY_ISSUER_ID`: App Store Connect API issuer ID
+
+Limit the organization secrets to the repositories that publish native
+releases. APNs and Sign in with Apple keys cannot authenticate `notarytool`.
+
 The command is then available as `cubacadabra`. Maintainer-only commands that
 have not migrated yet remain in the legacy Python modules, but they are not
 required by Studio or by `build-game` / `create-game`. The Python package
