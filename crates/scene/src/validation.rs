@@ -203,6 +203,17 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                     "primitive castShadow must be a boolean",
                 ));
             }
+            for property in ["material", "runtimeMaterial"] {
+                if value
+                    .get(property)
+                    .is_some_and(|value| value.as_str().is_none_or(|value| value.trim().is_empty()))
+                {
+                    return Err(component_error(
+                        node,
+                        &format!("primitive {property} must be a non-empty string"),
+                    ));
+                }
+            }
         }
         if matches!(name.as_str(), "ladder" | "hazard") {
             let Some(size) = value.get("size").and_then(vector_value) else {

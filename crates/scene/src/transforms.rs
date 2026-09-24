@@ -191,6 +191,86 @@ impl AuthoringScene {
         node.transform.scale = scale;
         Ok(previous)
     }
+
+    /// Moves a node below a different parent without changing its world-space
+    /// placement. Reparenting is rejected when the new hierarchy would cycle
+    /// or when the resulting local transform would contain shear.
+    pub fn reparent_preserving_world_transform(
+        &mut self,
+        id: &str,
+        parent_id: &str,
+    ) -> Result<Option<String>, String> {
+        if id == parent_id {
+            return Err(format!("scene node {id} cannot be its own parent"));
+        }
+        let node = self
+            .node(id)
+            .ok_or_else(|| format!("scene node {id} was not found"))?;
+        if node.editor.locked {
+            return Err(format!("scene node {id} ({}) is locked", node.name));
+        }
+        if node.parent_id.is_none() {
+            return Err(format!("scene root node {id} cannot be reparented"));
+        }
+        if self.node(parent_id).is_none() {
+            return Err(format!("scene parent node {parent_id} was not found"));
+        }
+        let mut ancestor = Some(parent_id);
+        while let Some(candidate) = ancestor {
+            if candidate == id {
+                return Err(format!(
+                    "scene node {id} cannot be parented below one of its descendants"
+                ));
+            }
+            ancestor = self
+                .node(candidate)
+                .and_then(|node| node.parent_id.as_deref());
+        }
+
+        let nodes = self.index()?;
+        let mut cache = BTreeMap::new();
+        let world = self.world_affine(id, &nodes, &mut cache)?;
+        let parent_world = self.world_affine(parent_id, &nodes, &mut cache)?;
+        let local = parent_world.inverse() * world;
+        if !runtime_mesh_transform_is_lossless(local) {
+            return Err(format!(
+                "scene node {id} cannot be reparented without introducing shear"
+            ));
+        }
+        let local = affine_transform(local);
+        if local
+            .scale
+            .iter()
+            .any(|value| !value.is_finite() || *value < MIN_AUTHORING_SCALE)
+        {
+            return Err(format!(
+                "scene node {id} reparenting produced an unsupported local scale"
+            ));
+        }
+        let previous = self
+            .node(id)
+            .expect("scene node existed before reparenting")
+            .clone();
+        let replacement = Transform {
+            position: local.position,
+            rotation: local.rotation,
+            scale: local.scale,
+        };
+        {
+            let node = self
+                .node_mut(id)
+                .expect("scene node existed before reparenting");
+            node.parent_id = Some(parent_id.to_owned());
+            node.transform = replacement;
+        }
+        if let Err(error) = self.validate() {
+            *self
+                .node_mut(id)
+                .expect("scene node existed before failed reparenting") = previous.clone();
+            return Err(error);
+        }
+        Ok(previous.parent_id)
+    }
 }
 
 fn local_affine(transform: &Transform) -> Affine3A {

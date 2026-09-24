@@ -122,6 +122,48 @@ mod tests {
     }
 
     #[test]
+    fn reparenting_preserves_world_transform_and_rejects_cycles() {
+        let mut left = node("left", None);
+        left.transform.position = [10.0, 0.0, 0.0];
+        left.transform.rotation[1] = 0.5;
+        let mut right = node("right", None);
+        right.transform.position = [-4.0, 0.0, 3.0];
+        let mut child = node("child", Some("left"));
+        child.transform.position = [2.0, 1.0, 0.0];
+        let mut scene = AuthoringScene {
+            format_version: 1,
+            world_id: None,
+            nodes: vec![left, right, child],
+        };
+        let before = scene.world_transform("child").unwrap();
+
+        let previous = scene
+            .reparent_preserving_world_transform("child", "right")
+            .unwrap();
+
+        assert_eq!(previous.as_deref(), Some("left"));
+        assert_eq!(
+            scene.node("child").unwrap().parent_id.as_deref(),
+            Some("right")
+        );
+        let after = scene.world_transform("child").unwrap();
+        for (before, after) in before.position.into_iter().zip(after.position) {
+            assert!((before - after).abs() < 0.0001);
+        }
+        for (before, after) in before.rotation.into_iter().zip(after.rotation) {
+            assert!((before - after).abs() < 0.0001);
+        }
+        for (before, after) in before.scale.into_iter().zip(after.scale) {
+            assert!((before - after).abs() < 0.0001);
+        }
+        assert!(
+            scene
+                .reparent_preserving_world_transform("right", "child")
+                .is_err()
+        );
+    }
+
+    #[test]
     fn mesh_compile_rejects_non_uniform_parent_scale_with_child_rotation() {
         let mut parent = node("parent", None);
         parent.transform.scale = [2.0, 1.0, 1.0];
