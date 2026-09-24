@@ -169,6 +169,8 @@ const STARTER_WALL_Z: f32 = -4.0;
 const STARTER_FACE_Z: f32 = 1.03;
 const STARTER_STROKE_DEPTH: f32 = 0.06;
 const STARTER_STROKE_THICKNESS: f32 = 0.08;
+const STARTER_CUBE_COLOR: &str = "#F7F5E9";
+const STARTER_STROKE_COLOR: &str = "#0B102B";
 
 // Each tile is one character of "CUBACADABRA". The marks intentionally use
 // the edges of the square as part of the glyph, matching the supplied block
@@ -243,7 +245,7 @@ fn starter_scene_nodes() -> Vec<serde_json::Value> {
                 "primitive": {
                     "shape": "box",
                     "size": [STARTER_CUBE_SIZE, STARTER_CUBE_SIZE, STARTER_CUBE_SIZE],
-                    "color": "paper"
+                    "color": STARTER_CUBE_COLOR
                 }
             },
             "editor": { "visible": true, "locked": false }
@@ -263,7 +265,7 @@ fn starter_scene_nodes() -> Vec<serde_json::Value> {
                     "primitive": {
                         "shape": "box",
                         "size": [width, height, STARTER_STROKE_DEPTH],
-                        "color": "ink",
+                        "color": STARTER_STROKE_COLOR,
                         "collidable": false,
                         "castShadow": false,
                         "outline": false
