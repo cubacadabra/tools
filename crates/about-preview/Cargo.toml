@@ -1,0 +1,11 @@
+[package]
+name = "cubacadabra-about-preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cubacadabra-client = { path = "../../../rust/crates/client", default-features = false }
+cubacadabra-project = { path = "../project" }
+cubacadabra-scene = { path = "../scene" }
+serde_json = { version = "1", features = ["preserve_order"] }

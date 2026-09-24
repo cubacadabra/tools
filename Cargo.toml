@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/about-preview",
     "crates/builder",
     "crates/project",
     "crates/reference-import",
