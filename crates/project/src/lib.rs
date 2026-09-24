@@ -367,6 +367,9 @@ fn starter_scene_nodes() -> Vec<serde_json::Value> {
                 "interaction": {
                     "id": format!("loose-line-{line_number}"),
                     "kind": "pickup",
+                    // Keep the interaction geometry visible while suppressing
+                    // the runtime's fallback label derived from the scene name.
+                    "label": " ",
                     "radius": 0.9,
                     "color": STARTER_STROKE_COLOR,
                     "visual": format!("letter-line-{line_number}")
