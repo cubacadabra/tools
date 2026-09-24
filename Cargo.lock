@@ -197,6 +197,8 @@ dependencies = [
 name = "cubacadabra-reference-import"
 version = "0.4.0"
 dependencies = [
+ "cubacadabra-scene",
+ "glam",
  "rbx_dom_weak",
  "rbx_xml",
  "serde",

@@ -16,13 +16,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod authoring;
 mod collision;
 mod importer;
 mod mesh_export;
 mod mesh_overrides;
 mod model;
 
-pub use importer::{import_reference, read_reference_scene};
+pub use authoring::{
+    RobloxAuthoringImport, RobloxExportReport, import_roblox_authoring_scene, roblox_source_file,
+    write_roblox_place,
+};
+pub use importer::{import_reference, load_reference, read_reference_scene};
 #[cfg(test)]
 pub(crate) use mesh_export::{
     StaticMeshGroup, StaticMeshVertex, append_static_geometry, write_static_glb,

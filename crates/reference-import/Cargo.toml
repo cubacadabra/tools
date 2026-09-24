@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+cubacadabra-scene = { path = "../scene" }
+glam = "0.30"
 rbx_dom_weak = "4.2"
 rbx_xml = "3.0"
 serde = { version = "1", features = ["derive"] }

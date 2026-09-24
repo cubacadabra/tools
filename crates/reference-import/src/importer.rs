@@ -16,6 +16,25 @@ struct SceneCollector {
 }
 
 pub fn import_reference(options: &ImportOptions) -> Result<ImportResult, String> {
+    let scene = load_reference(options)?;
+    let result = ImportResult {
+        output: options.output_path.clone(),
+        geometry_count: scene.summary.geometry_count,
+        visible_geometry_count: scene.summary.visible_geometry_count,
+        camera_count: scene.summary.camera_count,
+        light_count: scene.summary.light_count,
+        texture_count: scene.summary.texture_count,
+        text_count: scene.summary.text_count,
+        has_terrain_payload: scene.terrain.is_some(),
+    };
+    write_scene(&options.output_path, &scene)?;
+    Ok(result)
+}
+
+/// Decode Roblox XML into the deterministic normalized source model without
+/// writing an intermediate file. Studio uses this entry point so Roblox
+/// semantics remain owned by the tools layer.
+pub fn load_reference(options: &ImportOptions) -> Result<ReferenceScene, String> {
     let place_path = existing_file(&options.place_path, "place")?;
     let terrain_path = options
         .terrain_path
@@ -61,16 +80,6 @@ pub fn import_reference(options: &ImportOptions) -> Result<ImportResult, String>
         text_count: collector.texts.len(),
         spawn_count: collector.spawns.len(),
     };
-    let result = ImportResult {
-        output: options.output_path.clone(),
-        geometry_count: summary.geometry_count,
-        visible_geometry_count: summary.visible_geometry_count,
-        camera_count: summary.camera_count,
-        light_count: summary.light_count,
-        texture_count: summary.texture_count,
-        text_count: summary.text_count,
-        has_terrain_payload: terrain.is_some(),
-    };
     let scene = ReferenceScene {
         format_version: 1,
         kind: "roblox-static-reference-scene".to_owned(),
@@ -94,8 +103,7 @@ pub fn import_reference(options: &ImportOptions) -> Result<ImportResult, String>
         project_lighting,
         terrain,
     };
-    write_scene(&options.output_path, &scene)?;
-    Ok(result)
+    Ok(scene)
 }
 
 fn existing_file(path: &Path, label: &str) -> Result<PathBuf, String> {
