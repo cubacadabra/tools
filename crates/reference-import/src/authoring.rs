@@ -498,9 +498,11 @@ fn write_roblox_place_inner(
         .filter(|node| node.components.contains_key("primitive"))
         .filter(|node| !source_linked.contains(node.id.as_str()))
         .collect::<Vec<_>>();
-    if !native_parts.is_empty() {
+    let mut exported_interactions = BTreeSet::new();
+    if !native_parts.is_empty() || manifest.is_some() {
         let workspace = find_or_create_workspace(&mut dom);
         let mut export_model = InstanceBuilder::new("Model").with_name("Cubacadabra Export");
+        let mut model_parts = 0;
         for node in native_parts {
             let Some(world) = world_transforms.get(&node.id) else {
                 continue;
@@ -509,13 +511,40 @@ fn write_roblox_place_inner(
                 Some(part) => {
                     export_model.add_child(part);
                     report.added_parts += 1;
+                    model_parts += 1;
                 }
                 None => report.omitted_nodes += 1,
             }
         }
-        if report.added_parts > 0 {
+        if let Some(manifest) = manifest {
+            for node in scene.nodes.iter().filter(|node| {
+                node.components.contains_key("interaction")
+                    && !source_linked.contains(node.id.as_str())
+            }) {
+                let Some(world) = world_transforms.get(&node.id) else {
+                    continue;
+                };
+                let parts = interaction_visual_parts(scene, node, world, manifest, &mut report);
+                if !parts.is_empty() {
+                    exported_interactions.insert(node.id.as_str());
+                }
+                for part in parts {
+                    export_model.add_child(part);
+                    report.added_parts += 1;
+                    model_parts += 1;
+                }
+            }
+        }
+        if model_parts > 0 {
             dom.insert(workspace, export_model);
         }
+    }
+
+    if !exported_interactions.is_empty() {
+        report.warnings.push(format!(
+            "{} interaction visual(s) were exported as static Parts; interaction behavior and state changes require Roblox scripting",
+            exported_interactions.len()
+        ));
     }
 
     report.preserved_instances = original_instance_count.saturating_sub(report.updated_parts);
@@ -525,6 +554,7 @@ fn write_roblox_place_inner(
         .filter(|node| {
             !node.components.is_empty()
                 && !node.components.contains_key("primitive")
+                && !exported_interactions.contains(node.id.as_str())
                 && node
                     .source
                     .as_ref()
@@ -605,17 +635,176 @@ fn write_roblox_place_inner(
     Ok(report)
 }
 
+fn interaction_visual_parts(
+    scene: &AuthoringScene,
+    node: &AuthoringNode,
+    world: &cubacadabra_scene::AuthoringWorldTransform,
+    manifest: &Value,
+    report: &mut RobloxExportReport,
+) -> Vec<InstanceBuilder> {
+    let Some(interaction) = node
+        .components
+        .get("interaction")
+        .and_then(Value::as_object)
+    else {
+        return Vec::new();
+    };
+    let Some(visual) = interaction.get("visual").and_then(Value::as_str) else {
+        return Vec::new();
+    };
+    if visual == "none" {
+        return Vec::new();
+    }
+    let Some(effect_nodes) = manifest
+        .get("effects")
+        .and_then(|effects| effects.get("templates"))
+        .and_then(|templates| templates.get(visual))
+        .and_then(|template| template.get("nodes"))
+        .and_then(Value::as_array)
+    else {
+        report.warnings.push(format!(
+            "{}: interaction visual {visual:?} was not found in the manifest",
+            node.name
+        ));
+        return Vec::new();
+    };
+    let state = if effect_nodes.iter().any(|effect| {
+        effect
+            .get("visibleStates")
+            .and_then(Value::as_array)
+            .is_some_and(|states| {
+                states
+                    .iter()
+                    .any(|state| state.as_str() == Some("available"))
+            })
+    }) {
+        "available"
+    } else {
+        "default"
+    };
+    let interaction_color = interaction.get("color").and_then(Value::as_str);
+    let selected_world = manifest_scene_world(scene, manifest).ok();
+    let palette_color = |name: &str| {
+        selected_world
+            .and_then(|world| world.get("palette"))
+            .and_then(|palette| palette.get(name))
+            .or_else(|| {
+                manifest
+                    .get("palette")
+                    .and_then(|palette| palette.get(name))
+            })
+            .and_then(Value::as_str)
+            .and_then(parse_color)
+    };
+    let mut parts = Vec::new();
+    for (index, effect) in effect_nodes.iter().enumerate() {
+        if effect
+            .get("variants")
+            .and_then(Value::as_array)
+            .is_some_and(|variants| !variants.is_empty())
+        {
+            report.warnings.push(format!(
+                "{}: interaction visual node {} uses variants and was omitted",
+                node.name,
+                index + 1
+            ));
+            continue;
+        }
+        let states = effect.get("visibleStates").and_then(Value::as_array);
+        if states.is_some_and(|states| {
+            !states.is_empty()
+                && !states
+                    .iter()
+                    .any(|candidate| candidate.as_str() == Some(state))
+        }) {
+            continue;
+        }
+        if effect.get("shape").and_then(Value::as_str) != Some("box") {
+            report.warnings.push(format!(
+                "{}: interaction visual node {} is not a box and was omitted",
+                node.name,
+                index + 1
+            ));
+            continue;
+        }
+        let count = effect.get("count").and_then(Value::as_u64).unwrap_or(1);
+        if count != 1 {
+            report.warnings.push(format!(
+                "{}: interaction visual node {} has {count} copies and was omitted",
+                node.name,
+                index + 1
+            ));
+            continue;
+        }
+        let position = json_vector3(effect.get("position")).unwrap_or([0.0; 3]);
+        let Some(size) = json_vector3(effect.get("size")) else {
+            report.warnings.push(format!(
+                "{}: interaction visual node {} has no valid size and was omitted",
+                node.name,
+                index + 1
+            ));
+            continue;
+        };
+        let rotation = json_vector3(effect.get("rotation")).unwrap_or([0.0; 3]);
+        if position
+            .iter()
+            .chain(size.iter())
+            .chain(rotation.iter())
+            .any(|value| !value.is_finite())
+            || size.iter().any(|value| *value < 0.05)
+        {
+            report.warnings.push(format!(
+                "{}: interaction visual node {} has invalid geometry and was omitted",
+                node.name,
+                index + 1
+            ));
+            continue;
+        }
+        let color_name = effect.get("color").and_then(Value::as_str).unwrap_or("");
+        let color = if color_name == "$interaction" {
+            interaction_color
+                .and_then(parse_color)
+                .or_else(|| interaction_color.and_then(palette_color))
+        } else {
+            parse_color(color_name).or_else(|| palette_color(color_name))
+        }
+        .unwrap_or([0.64; 3]);
+        let opacity = effect
+            .get("opacity")
+            .and_then(Value::as_f64)
+            .unwrap_or(1.0)
+            .clamp(0.0, 1.0) as f32;
+        let position = [
+            world.position[0] + position[0],
+            world.position[1] + position[1],
+            world.position[2] + position[2],
+        ];
+        let name = if effect_nodes.len() == 1 {
+            node.name.clone()
+        } else {
+            format!("{} Visual {}", node.name, index + 1)
+        };
+        parts.push(
+            InstanceBuilder::new("Part")
+                .with_name(name)
+                .with_property("CFrame", cframe_values(position, rotation))
+                .with_property("Size", Vector3::new(size[0], size[1], size[2]))
+                .with_property("Color", Color3::new(color[0], color[1], color[2]))
+                .with_property("Transparency", 1.0_f32 - opacity)
+                .with_property("Anchored", true)
+                .with_property("CanCollide", false)
+                .with_property("CastShadow", false)
+                .with_property("Material", Enum::from_u32(272)),
+        );
+    }
+    parts
+}
+
 fn native_ground(
     scene: &AuthoringScene,
     manifest: &Value,
 ) -> Result<(Option<InstanceBuilder>, bool), String> {
-    let world = match scene.world_id.as_deref().unwrap_or("lobby") {
-        "lobby" => manifest,
-        world_id => manifest
-            .get("worlds")
-            .and_then(|worlds| worlds.get(world_id))
-            .ok_or_else(|| format!("scene world `{world_id}` was not found in the manifest"))?,
-    };
+    let world = manifest_scene_world(scene, manifest)?;
     let terrain = world.get("terrain");
     let has_terrain = terrain
         .and_then(|terrain| terrain.get("operations"))
@@ -647,6 +836,11 @@ fn native_ground(
     let color = world
         .get("palette")
         .and_then(|palette| palette.get("ground"))
+        .or_else(|| {
+            manifest
+                .get("palette")
+                .and_then(|palette| palette.get("ground"))
+        })
         .and_then(Value::as_str)
         .and_then(parse_color)
         .unwrap_or([167.0 / 255.0, 189.0 / 255.0, 153.0 / 255.0]);
@@ -672,6 +866,19 @@ fn native_ground(
         ),
         has_terrain,
     ))
+}
+
+fn manifest_scene_world<'a>(
+    scene: &AuthoringScene,
+    manifest: &'a Value,
+) -> Result<&'a Value, String> {
+    Ok(match scene.world_id.as_deref().unwrap_or("lobby") {
+        "lobby" => manifest,
+        world_id => manifest
+            .get("worlds")
+            .and_then(|worlds| worlds.get(world_id))
+            .ok_or_else(|| format!("scene world `{world_id}` was not found in the manifest"))?,
+    })
 }
 
 fn update_part(
@@ -882,15 +1089,19 @@ fn part_builder(
 }
 
 fn cframe(world: &cubacadabra_scene::AuthoringWorldTransform) -> CFrame {
+    cframe_values(world.position, world.rotation)
+}
+
+fn cframe_values(position: [f32; 3], rotation: [f32; 3]) -> CFrame {
     let matrix = Mat3::from_quat(Quat::from_euler(
         EulerRot::XYZ,
-        world.rotation[0],
-        world.rotation[1],
-        world.rotation[2],
+        rotation[0],
+        rotation[1],
+        rotation[2],
     ));
     let rows = matrix.transpose().to_cols_array_2d();
     CFrame::new(
-        Vector3::new(world.position[0], world.position[1], world.position[2]),
+        Vector3::new(position[0], position[1], position[2]),
         Matrix3::new(
             Vector3::new(rows[0][0], rows[0][1], rows[0][2]),
             Vector3::new(rows[1][0], rows[1][1], rows[1][2]),
@@ -1173,6 +1384,66 @@ mod tests {
             ground.properties.get(&ustr("CanCollide")),
             Some(&Variant::Bool(false))
         );
+    }
+
+    #[test]
+    fn available_box_interaction_visual_exports_as_a_static_part() {
+        let temp = tempdir().unwrap();
+        let output = temp.path().join("interaction.rbxlx");
+        let mut scene = base_scene();
+        scene.nodes.push(AuthoringNode {
+            id: "pickup".to_owned(),
+            parent_id: Some("world".to_owned()),
+            name: "Pickup".to_owned(),
+            transform: Transform {
+                position: [2.0, 0.0, 3.0],
+                ..Transform::default()
+            },
+            components: BTreeMap::from([(
+                "interaction".to_owned(),
+                json!({"visual": "pickup-visual", "color": "accent"}),
+            )]),
+            editor: EditorMetadata::default(),
+            source: None,
+        });
+        let manifest = json!({
+            "effects": {"templates": {"pickup-visual": {"nodes": [
+                {"shape": "box", "position": [1, 0.25, 0], "size": [2, 0.1, 1], "rotation": [0, 0.5, 0], "color": "$interaction", "visibleStates": ["available"]},
+                {"shape": "box", "position": [9, 9, 9], "size": [1, 1, 1], "color": "#ffffff", "visibleStates": ["default"]}
+            ]}}},
+            "worlds": {"world": {"palette": {"accent": "#123456"}}}
+        });
+        let report = write_roblox_place_with_manifest(&scene, &manifest, None, &output).unwrap();
+        assert_eq!(report.added_parts, 2);
+        assert_eq!(report.omitted_nodes, 0);
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("static Parts"))
+        );
+        let dom = decode_xml(&output).unwrap();
+        let pickup = dom
+            .descendants()
+            .find(|instance| instance.name.starts_with("Pickup Visual"))
+            .unwrap();
+        assert_eq!(pickup.class.as_str(), "Part");
+        assert_eq!(
+            pickup.properties.get(&ustr("Size")),
+            Some(&Variant::Vector3(Vector3::new(2.0, 0.1, 1.0)))
+        );
+        assert_eq!(
+            pickup.properties.get(&ustr("CanCollide")),
+            Some(&Variant::Bool(false))
+        );
+        let Some(Variant::CFrame(cframe)) = pickup.properties.get(&ustr("CFrame")) else {
+            panic!("interaction visual has no CFrame");
+        };
+        assert_eq!(cframe.position, Vector3::new(3.0, 0.25, 3.0));
+        let Some(Variant::Color3uint8(color)) = pickup.properties.get(&ustr("Color")) else {
+            panic!("interaction visual has no Color3uint8");
+        };
+        assert_eq!((color.r, color.g, color.b), (18, 52, 86));
     }
 
     #[test]
