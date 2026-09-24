@@ -176,38 +176,41 @@ const STARTER_STROKE_COLOR: &str = "#0B102B";
 // the edges of the square as part of the glyph, matching the supplied block
 // lettering reference.
 const STARTER_GLYPHS: &[&[[f32; 4]]] = &[
-    &[[0.25, 0.0, 1.5, STARTER_STROKE_THICKNESS]],
+    &[[0.5, 0.0, 1.0, STARTER_STROKE_THICKNESS]],
     &[[0.15, 0.55, STARTER_STROKE_THICKNESS, 0.9]],
     &[
-        [-0.3, 0.4, 0.35, STARTER_STROKE_THICKNESS],
-        [-0.3, -0.4, 0.35, STARTER_STROKE_THICKNESS],
-        [0.75, 0.0, 0.5, STARTER_STROKE_THICKNESS],
+        [0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS],
+        [0.0, -0.4, 0.3, STARTER_STROKE_THICKNESS],
+        [0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS],
     ],
     &[
         [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
         [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
     ],
-    &[[0.25, 0.0, 1.5, STARTER_STROKE_THICKNESS]],
+    &[[0.5, 0.0, 1.0, STARTER_STROKE_THICKNESS]],
     &[
         [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
         [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
     ],
-    &[[0.0, 0.0, STARTER_STROKE_THICKNESS, 1.0]],
+    &[[0.0, 0.0, STARTER_STROKE_THICKNESS, 0.85]],
     &[
         [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
         [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
     ],
     &[
-        [-0.3, 0.4, 0.35, STARTER_STROKE_THICKNESS],
-        [-0.3, -0.4, 0.35, STARTER_STROKE_THICKNESS],
-        [0.75, 0.0, 0.5, STARTER_STROKE_THICKNESS],
+        [0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS],
+        [0.0, -0.4, 0.3, STARTER_STROKE_THICKNESS],
+        [0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS],
     ],
     &[
-        [-0.3, 0.4, 0.35, STARTER_STROKE_THICKNESS],
-        [0.75, 0.0, 0.5, STARTER_STROKE_THICKNESS],
-        [-0.05, -0.38, 0.08, 0.28],
-        [0.05, -0.63, 0.08, 0.24],
-        [0.15, -0.84, 0.08, 0.18],
+        [0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS],
+        [0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS],
+        [-0.08, -0.42, 0.12, 0.18],
+        [-0.03, -0.53, 0.12, 0.18],
+        [0.02, -0.64, 0.12, 0.18],
+        [0.07, -0.75, 0.12, 0.18],
+        [0.12, -0.86, 0.12, 0.18],
+        [0.17, -0.95, 0.12, 0.10],
     ],
     &[
         [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
