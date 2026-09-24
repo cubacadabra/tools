@@ -24,7 +24,7 @@ REQUIREMENTS = {
         r"register_world_mesh",
     ),
     "desktop registration": (
-        WORKSPACE_ROOT / "desktop/src/main.rs",
+        WORKSPACE_ROOT / "desktop/src/app.rs",
         r"register_world_mesh",
     ),
     "web package loading": (
