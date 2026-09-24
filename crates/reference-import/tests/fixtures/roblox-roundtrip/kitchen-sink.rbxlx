@@ -1,0 +1,97 @@
+<roblox version="4">
+  <Item class="Workspace" referent="RBX0">
+    <Properties>
+      <string name="Name">Workspace</string>
+    </Properties>
+    <Item class="Part" referent="RBX1">
+      <Properties>
+        <string name="Name">Kitchen Sink Part</string>
+        <CoordinateFrame name="CFrame">
+          <X>1</X><Y>2</Y><Z>3</Z>
+          <R00>1</R00><R01>0</R01><R02>0</R02>
+          <R10>0</R10><R11>1</R11><R12>0</R12>
+          <R20>0</R20><R21>0</R21><R22>1</R22>
+        </CoordinateFrame>
+        <Vector3 name="Size"><X>4</X><Y>2</Y><Z>6</Z></Vector3>
+        <Color3 name="Color"><R>0.25</R><G>0.5</G><B>0.75</B></Color3>
+        <bool name="Anchored">true</bool>
+        <bool name="CanCollide">true</bool>
+        <bool name="CastShadow">true</bool>
+        <token name="Material">512</token>
+        <token name="Shape">1</token>
+        <BinaryString name="AttributesSerialize"><![CDATA[DwAAAAMAAABOYU4GAAAAAAAA+P8IAAAASW5maW5pdHkGAAAAAAAA8H8NAAAAQ29sb3JTZXF1
+ZW5jZRkDAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAPwAAAAAAAIA/AAAAAAAAAAAA
+AIA/AAAAAAAAAAAAAIA/BwAAAFZlY3RvcjMRAACAPwAAAEAAAEBABwAAAFZlY3RvcjIQAAAg
+QQAASEIOAAAATnVtYmVyU2VxdWVuY2UXAwAAAAAAAAAAAAAAAACAPwAAAAAAAAA/AAAAAAAA
+AAAAAIA/AACAPwYAAABDb2xvcjMPo6IiPwAAAAAAAIA/CgAAAEJyaWNrQ29sb3IO7AMAAAQA
+AABSZWN0HAAAgD8AAABAAABAQAAAgEAFAAAAVURpbTIKAAAAPwoAAAAzMzM/HgAAAAQAAABV
+RGltCQAAAD9kAAAACwAAAE51bWJlclJhbmdlGwAAoEAAACBBBgAAAE51bWJlcgYAAAAAgBzI
+QAcAAABCb29sZWFuAwEGAAAAU3RyaW5nAg0AAABIZWxsbywgd29ybGQh]]></BinaryString>
+      </Properties>
+      <Item class="Attachment" referent="RBX2">
+        <Properties>
+          <string name="Name">Effect Socket</string>
+          <CoordinateFrame name="CFrame">
+            <X>0</X><Y>1</Y><Z>0</Z>
+            <R00>1</R00><R01>0</R01><R02>0</R02>
+            <R10>0</R10><R11>1</R11><R12>0</R12>
+            <R20>0</R20><R21>0</R21><R22>1</R22>
+          </CoordinateFrame>
+        </Properties>
+        <Item class="ParticleEmitter" referent="RBX3">
+          <Properties>
+            <string name="Name">Sparks</string>
+            <ColorSequence name="Color">0 1 0.5 0 0 1 0 0.5 1 0 </ColorSequence>
+            <NumberRange name="Lifetime">1 2 </NumberRange>
+            <float name="Rate">9</float>
+            <NumberSequence name="Size">0 1 0 1 2 0 </NumberSequence>
+            <Content name="Texture"><url>rbxassetid://123456</url></Content>
+          </Properties>
+        </Item>
+        <Item class="PointLight" referent="RBX4">
+          <Properties>
+            <string name="Name">Glow</string>
+            <float name="Brightness">2.5</float>
+            <Color3 name="Color"><R>1</R><G>0.75</G><B>0.25</B></Color3>
+            <bool name="Enabled">true</bool>
+            <float name="Range">18</float>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="Decal" referent="RBX5">
+        <Properties>
+          <string name="Name">Marker</string>
+          <Content name="Texture"><url>rbxassetid://234567</url></Content>
+          <float name="Transparency">0.25</float>
+        </Properties>
+      </Item>
+      <Item class="Sound" referent="RBX6">
+        <Properties>
+          <string name="Name">Hum</string>
+          <bool name="Looped">true</bool>
+          <Content name="SoundId"><url>rbxassetid://345678</url></Content>
+          <float name="Volume">0.4</float>
+        </Properties>
+      </Item>
+      <Item class="Script" referent="RBX7">
+        <Properties>
+          <string name="Name">Controller</string>
+          <bool name="Disabled">false</bool>
+          <ProtectedString name="Source">return "preserve me"</ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="StringValue" referent="RBX8">
+        <Properties>
+          <string name="Name">Mode</string>
+          <string name="Value">careful</string>
+        </Properties>
+      </Item>
+      <Item class="ObjectValue" referent="RBX9">
+        <Properties>
+          <string name="Name">EffectSocketReference</string>
+          <Ref name="Value">RBX2</Ref>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+</roblox>

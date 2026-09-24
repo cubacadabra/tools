@@ -730,6 +730,7 @@ fn escape_path_component(value: &str) -> String {
 mod tests {
     use super::*;
     use cubacadabra_scene::{AUTHORING_SCENE_FORMAT_VERSION, serialize_authoring_scene};
+    use rbx_dom_weak::types::Variant;
     use tempfile::tempdir;
 
     const PLACE: &str = r#"<roblox version="4">
@@ -753,6 +754,9 @@ mod tests {
     </Item>
   </Item>
 </roblox>"#;
+
+    const KITCHEN_SINK_PLACE: &str =
+        include_str!("../tests/fixtures/roblox-roundtrip/kitchen-sink.rbxlx");
 
     fn base_scene() -> AuthoringScene {
         AuthoringScene {
@@ -834,5 +838,153 @@ mod tests {
             .find(|geometry| geometry.name == "Edited Block")
             .unwrap();
         assert_eq!(block.transform.position, [8.0, 9.0, 10.0]);
+    }
+
+    #[test]
+    fn export_preserves_nested_unsupported_content_and_references_while_editing_a_part() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("kitchen-sink.rbxlx");
+        let output = temp.path().join("kitchen-sink-export.rbxlx");
+        fs::write(&source, KITCHEN_SINK_PLACE).unwrap();
+        let source_dom = decode_xml(&source).unwrap();
+        let mut imported = import_roblox_authoring_scene(
+            &source,
+            &base_scene(),
+            "imports/roblox/kitchen-sink/source.rbxlx",
+        )
+        .unwrap();
+        let block = imported
+            .scene
+            .nodes
+            .iter_mut()
+            .find(|node| node.components.contains_key("primitive"))
+            .unwrap();
+        block.transform.position = [8.0, 9.0, 10.0];
+        block.name = "Edited Kitchen Sink Part".to_owned();
+        block.components.get_mut("primitive").unwrap()["size"] = json!([8, 4, 12]);
+
+        let report = write_roblox_place(&imported.scene, Some(&source), &output).unwrap();
+        assert_eq!(report.updated_parts, 1);
+        assert_eq!(report.added_parts, 0);
+        assert_eq!(report.omitted_nodes, 0);
+
+        let exported_dom = decode_xml(&output).unwrap();
+        let exported_part = named_instance(&exported_dom, "Edited Kitchen Sink Part");
+        assert_eq!(exported_part.class.as_str(), "Part");
+        let Some(Variant::CFrame(cframe)) = exported_part.properties.get(&ustr("CFrame")) else {
+            panic!("edited Part has no CFrame");
+        };
+        assert_eq!(cframe.position, Vector3::new(8.0, 9.0, 10.0));
+        assert_eq!(
+            exported_part.properties.get(&ustr("Size")),
+            Some(&Variant::Vector3(Vector3::new(8.0, 4.0, 12.0)))
+        );
+        assert_eq!(
+            exported_part.properties.get(&ustr("Material")),
+            Some(&Variant::Enum(Enum::from_u32(512)))
+        );
+        assert_eq!(
+            encoded_attributes(exported_part),
+            encoded_attributes(named_instance(&source_dom, "Kitchen Sink Part"))
+        );
+
+        for name in [
+            "Effect Socket",
+            "Sparks",
+            "Glow",
+            "Marker",
+            "Hum",
+            "Controller",
+            "Mode",
+        ] {
+            assert_preserved_instance(&source_dom, &exported_dom, name);
+        }
+        assert_eq!(
+            parent_name(
+                &exported_dom,
+                named_instance(&exported_dom, "Effect Socket")
+            ),
+            "Edited Kitchen Sink Part"
+        );
+        for name in [
+            "Marker",
+            "Hum",
+            "Controller",
+            "Mode",
+            "EffectSocketReference",
+        ] {
+            assert_eq!(
+                parent_name(&exported_dom, named_instance(&exported_dom, name)),
+                "Edited Kitchen Sink Part"
+            );
+        }
+        for name in ["Sparks", "Glow"] {
+            assert_eq!(
+                parent_name(&exported_dom, named_instance(&exported_dom, name)),
+                "Effect Socket"
+            );
+        }
+        assert_eq!(
+            child_names(
+                named_instance(&source_dom, "Kitchen Sink Part"),
+                &source_dom
+            ),
+            child_names(exported_part, &exported_dom)
+        );
+        assert_eq!(
+            child_names(named_instance(&source_dom, "Effect Socket"), &source_dom),
+            child_names(
+                named_instance(&exported_dom, "Effect Socket"),
+                &exported_dom
+            )
+        );
+
+        let object_value = named_instance(&exported_dom, "EffectSocketReference");
+        assert_eq!(object_value.class.as_str(), "ObjectValue");
+        let Some(Variant::Ref(target)) = object_value.properties.get(&ustr("Value")) else {
+            panic!("ObjectValue.Value was not preserved as an instance reference");
+        };
+        assert_eq!(
+            exported_dom.get_by_ref(*target).unwrap().name,
+            "Effect Socket"
+        );
+    }
+
+    fn named_instance<'a>(dom: &'a WeakDom, name: &str) -> &'a Instance {
+        dom.descendants()
+            .find(|instance| instance.name == name)
+            .unwrap_or_else(|| panic!("missing Roblox instance named {name}"))
+    }
+
+    fn parent_name<'a>(dom: &'a WeakDom, instance: &Instance) -> &'a str {
+        &dom.get_by_ref(instance.parent()).unwrap().name
+    }
+
+    fn child_names(instance: &Instance, dom: &WeakDom) -> Vec<String> {
+        instance
+            .children()
+            .iter()
+            .map(|reference| dom.get_by_ref(*reference).unwrap().name.clone())
+            .collect()
+    }
+
+    fn assert_preserved_instance(source: &WeakDom, exported: &WeakDom, name: &str) {
+        let source = named_instance(source, name);
+        let exported = named_instance(exported, name);
+        assert_eq!(exported.class, source.class, "class changed for {name}");
+        assert_eq!(
+            exported.properties, source.properties,
+            "properties changed for {name}"
+        );
+    }
+
+    fn encoded_attributes(instance: &Instance) -> Vec<u8> {
+        let Some(Variant::Attributes(attributes)) = instance.properties.get(&ustr("Attributes"))
+        else {
+            panic!("{} has no decoded Roblox attributes", instance.name);
+        };
+        let mut encoded = Vec::new();
+        attributes.to_writer(&mut encoded).unwrap();
+        encoded
     }
 }
