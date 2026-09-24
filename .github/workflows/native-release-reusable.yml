@@ -320,7 +320,10 @@ jobs:
             --timeout 30m
           xcrun stapler staple "dist/${archive}"
           xcrun stapler validate "dist/${archive}"
-          spctl --assess --type open --verbose=2 "dist/${archive}"
+          # Assess the disk image's primary signature context. Without the
+          # context selector, macOS CI can report a valid stapled image as
+          # "rejected" with "source=Insufficient Context" (exit 3).
+          spctl --assess --type open --context context:primary-signature --verbose=2 "dist/${archive}"
 
       - name: Package Windows application
         if: matrix.platform == 'windows'
