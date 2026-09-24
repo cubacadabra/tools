@@ -205,12 +205,24 @@ const STARTER_GLYPHS: &[&[[f32; 4]]] = &[
     &[
         [0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS],
         [0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS],
-        [-0.08, -0.42, 0.12, 0.18],
-        [-0.03, -0.53, 0.12, 0.18],
-        [0.02, -0.64, 0.12, 0.18],
-        [0.07, -0.75, 0.12, 0.18],
-        [0.12, -0.86, 0.12, 0.18],
-        [0.17, -0.95, 0.12, 0.10],
+        // Primitive blocks are axis-aligned in the runtime package, so use
+        // overlapping, fine-grained segments for the one diagonal mark. The
+        // overlap removes visible steps at the camera distance used by the
+        // starter world while keeping the source package portable.
+        [-0.04, -0.30, 0.07, 0.10],
+        [-0.03, -0.35, 0.07, 0.10],
+        [-0.01, -0.40, 0.07, 0.10],
+        [0.00, -0.45, 0.07, 0.10],
+        [0.02, -0.50, 0.07, 0.10],
+        [0.04, -0.55, 0.07, 0.10],
+        [0.05, -0.60, 0.07, 0.10],
+        [0.07, -0.65, 0.07, 0.10],
+        [0.08, -0.70, 0.07, 0.10],
+        [0.10, -0.75, 0.07, 0.10],
+        [0.12, -0.80, 0.07, 0.10],
+        [0.13, -0.85, 0.07, 0.10],
+        [0.15, -0.90, 0.07, 0.10],
+        [0.16, -0.95, 0.07, 0.10],
     ],
     &[
         [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
