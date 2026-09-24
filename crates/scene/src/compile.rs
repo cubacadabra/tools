@@ -104,13 +104,23 @@ impl AuthoringScene {
                         .and_then(Value::as_bool)
                         .unwrap_or(true),
                 });
-                if let Some(material) = primitive.get("material") {
+                let canonical_appearance = primitive.contains_key("color");
+                if let Some(color) = primitive.get("color").or_else(|| {
+                    (!canonical_appearance)
+                        .then(|| primitive.get("material"))
+                        .flatten()
+                }) {
                     block
                         .as_object_mut()
                         .expect("primitive block is an object")
-                        .insert("color".to_owned(), material.clone());
+                        .insert("color".to_owned(), color.clone());
                 }
-                if let Some(material) = primitive.get("runtimeMaterial") {
+                let surface_material = if canonical_appearance {
+                    primitive.get("material")
+                } else {
+                    primitive.get("runtimeMaterial")
+                };
+                if let Some(material) = surface_material {
                     block
                         .as_object_mut()
                         .expect("primitive block is an object")
@@ -251,6 +261,24 @@ impl AuthoringScene {
                 let actor = actor
                     .as_object()
                     .ok_or_else(|| component_error(node, "actor must be an object"))?;
+                if world_transform.rotation[0].abs() > 0.0001
+                    || world_transform.rotation[2].abs() > 0.0001
+                {
+                    return Err(component_error(
+                        node,
+                        "actor rotation is limited to the runtime actor adapter's Y axis",
+                    ));
+                }
+                if world_transform
+                    .scale
+                    .iter()
+                    .any(|scale| (*scale - 1.0).abs() > 0.0001)
+                {
+                    return Err(component_error(
+                        node,
+                        "actor scale is not supported by the runtime actor adapter",
+                    ));
+                }
                 let mut output = Map::new();
                 output.insert(
                     "id".to_owned(),

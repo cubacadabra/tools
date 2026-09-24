@@ -826,13 +826,13 @@ fn generated_scene_nodes(
             let mut primitive = json!({
                 "shape": "box",
                 "size": promoted.size,
-                "material": promoted.material.clone(),
+                "color": promoted.material.clone(),
                 "collidable": promoted.can_collide,
                 "castShadow": promoted.cast_shadow,
             });
             if let Some(runtime_material) = promoted.runtime_material {
-                primitive["runtimeMaterial"] = json!(runtime_material);
-                properties.insert("runtimeMaterial".to_owned(), json!(runtime_material));
+                primitive["material"] = json!(runtime_material);
+                properties.insert("material".to_owned(), json!(runtime_material));
             }
             primitive
         })]);

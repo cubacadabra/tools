@@ -197,7 +197,7 @@ mod tests {
             json!({
                 "shape": "box",
                 "size": [4.0, 1.0, 4.0],
-                "material": "signal"
+                "color": "signal"
             }),
         );
         block
@@ -223,6 +223,47 @@ mod tests {
         );
         assert_eq!(manifest["worlds"]["world"]["blocks"][0]["color"], "signal");
         assert_eq!(manifest["worlds"]["world"]["blocks"][0]["collidable"], true);
+    }
+
+    #[test]
+    fn primitive_appearance_supports_canonical_and_legacy_fields() {
+        let mut canonical = node("canonical", None);
+        canonical.components.insert(
+            "primitive".to_owned(),
+            json!({
+                "shape": "box",
+                "size": [1, 1, 1],
+                "color": "#62A85A",
+                "material": "builtin:grass"
+            }),
+        );
+        let mut legacy = node("legacy", None);
+        legacy.components.insert(
+            "primitive".to_owned(),
+            json!({
+                "shape": "box",
+                "size": [1, 1, 1],
+                "material": "#767F91",
+                "runtimeMaterial": "builtin:rock"
+            }),
+        );
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![canonical, legacy],
+        };
+        let mut manifest = json!({
+            "startWorld": "world",
+            "worlds": { "world": {} }
+        });
+
+        scene.compile_into_manifest(&mut manifest).unwrap();
+
+        let blocks = manifest["worlds"]["world"]["blocks"].as_array().unwrap();
+        assert_eq!(blocks[0]["color"], "#62A85A");
+        assert_eq!(blocks[0]["material"], "builtin:grass");
+        assert_eq!(blocks[1]["color"], "#767F91");
+        assert_eq!(blocks[1]["material"], "builtin:rock");
     }
 
     #[test]
@@ -586,5 +627,27 @@ mod tests {
         assert_eq!(world["checkpoints"][0]["id"], "save");
         assert_eq!(world["hazards"][0]["damagePerSecond"], 10);
         assert_eq!(world["safeZones"][0]["healPerSecond"], 4);
+    }
+
+    #[test]
+    fn actor_compile_rejects_transform_values_the_runtime_cannot_represent() {
+        let mut actor = node("actor", None);
+        actor.transform.scale = [2.0, 2.0, 2.0];
+        actor
+            .components
+            .insert("actor".to_owned(), json!({ "name": "Guide" }));
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![actor],
+        };
+        let mut manifest = json!({
+            "startWorld": "world",
+            "worlds": { "world": {} }
+        });
+
+        let error = scene.compile_into_manifest(&mut manifest).unwrap_err();
+
+        assert!(error.contains("actor scale is not supported"));
     }
 }

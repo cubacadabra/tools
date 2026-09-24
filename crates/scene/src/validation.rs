@@ -203,7 +203,7 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                     "primitive castShadow must be a boolean",
                 ));
             }
-            for property in ["material", "runtimeMaterial"] {
+            for property in ["color", "material", "runtimeMaterial"] {
                 if value
                     .get(property)
                     .is_some_and(|value| value.as_str().is_none_or(|value| value.trim().is_empty()))

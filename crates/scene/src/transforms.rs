@@ -234,7 +234,7 @@ impl AuthoringScene {
         let local = parent_world.inverse() * world;
         if !runtime_mesh_transform_is_lossless(local) {
             return Err(format!(
-                "scene node {id} cannot be reparented without introducing shear"
+                "moving scene node {id} there would distort its shape; reset non-uniform scale or rotation on the object or destination group and try again"
             ));
         }
         let local = affine_transform(local);
