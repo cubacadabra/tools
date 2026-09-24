@@ -1033,7 +1033,9 @@ fn native_ground(
                 .with_property("Color", Color3::new(color[0], color[1], color[2]))
                 .with_property("Anchored", true)
                 .with_property("CanCollide", collidable)
-                .with_property("Material", Enum::from_u32(256)),
+                .with_property("Material", Enum::from_u32(256))
+                .with_property("TopSurface", Enum::from_u32(0))
+                .with_property("BottomSurface", Enum::from_u32(0)),
         ),
         has_terrain,
     ))
@@ -1538,6 +1540,12 @@ mod tests {
             ground.properties.get(&ustr("Material")),
             Some(&Variant::Enum(Enum::from_u32(256)))
         );
+        for surface in ["TopSurface", "BottomSurface"] {
+            assert_eq!(
+                ground.properties.get(&ustr(surface)),
+                Some(&Variant::Enum(Enum::from_u32(0)))
+            );
+        }
 
         let hidden = json!({"worlds": {"world": {"terrain": {
             "hideDefaultGround": true,
