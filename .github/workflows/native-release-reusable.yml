@@ -55,6 +55,14 @@ on:
         required: false
         type: string
         default: main
+      second_game_repository:
+        required: false
+        type: string
+        default: ""
+      second_game_ref:
+        required: false
+        type: string
+        default: main
     secrets:
       MACOS_DEVELOPER_ID_P12:
         description: Base64-encoded Developer ID Application certificate and private key
@@ -122,6 +130,14 @@ jobs:
           repository: ${{ inputs.game_repository }}
           ref: ${{ inputs.game_ref }}
           path: first-game
+
+      - name: Check out second bundled game
+        if: inputs.second_game_repository != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.second_game_repository }}
+          ref: ${{ inputs.second_game_ref }}
+          path: second-game
 
       - name: Validate release tag
         shell: bash
