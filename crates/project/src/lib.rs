@@ -43,6 +43,17 @@ pub struct CreateResult {
     pub project: PathBuf,
 }
 
+/// The complete source graph for the built-in new-game project.
+///
+/// Keeping these sources together lets creator hosts use the same starter
+/// content for both a newly-created project and an in-process preview.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StarterGameSources {
+    pub manifest: String,
+    pub scene: String,
+    pub main_luau: String,
+}
+
 pub fn create_game(title: &str, parent: &Path, vendor_sdk: bool) -> Result<CreateResult, String> {
     let title = title.trim();
     if title.is_empty() {
@@ -108,6 +119,20 @@ pub fn game_id(title: &str) -> Result<String, String> {
     Ok(result)
 }
 
+pub fn starter_game_sources(title: &str, game_id: &str) -> StarterGameSources {
+    StarterGameSources {
+        manifest: format!(
+            "{}\n",
+            serde_json::to_string_pretty(&manifest(title, game_id)).unwrap()
+        ),
+        scene: format!(
+            "{}\n",
+            serde_json::to_string_pretty(&starter_scene()).unwrap()
+        ),
+        main_luau: source(title, game_id),
+    }
+}
+
 fn write_project(
     project: &Path,
     title: &str,
@@ -134,23 +159,12 @@ fn write_project(
         )
         .map_err(|error| format!("could not write .luaurc: {error}"))?;
     }
-    fs::write(
-        project.join("manifest.json"),
-        format!(
-            "{}\n",
-            serde_json::to_string_pretty(&manifest(title, game_id)).unwrap()
-        ),
-    )
-    .map_err(|error| format!("could not write manifest.json: {error}"))?;
-    fs::write(
-        project.join("scene.json"),
-        format!(
-            "{}\n",
-            serde_json::to_string_pretty(&starter_scene()).unwrap()
-        ),
-    )
-    .map_err(|error| format!("could not write scene.json: {error}"))?;
-    fs::write(project.join("src/main.luau"), source(title, game_id))
+    let sources = starter_game_sources(title, game_id);
+    fs::write(project.join("manifest.json"), sources.manifest)
+        .map_err(|error| format!("could not write manifest.json: {error}"))?;
+    fs::write(project.join("scene.json"), sources.scene)
+        .map_err(|error| format!("could not write scene.json: {error}"))?;
+    fs::write(project.join("src/main.luau"), sources.main_luau)
         .map_err(|error| format!("could not write src/main.luau: {error}"))?;
     Ok(())
 }
