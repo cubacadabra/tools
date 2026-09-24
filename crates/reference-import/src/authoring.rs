@@ -1,7 +1,7 @@
 use crate::{GeometryInstance, ImportOptions, ReferenceScene, load_reference};
 use cubacadabra_scene::{AuthoringNode, AuthoringScene, EditorMetadata, SourceMetadata, Transform};
 use glam::{EulerRot, Mat3, Quat};
-use rbx_dom_weak::types::{CFrame, Color3, Enum, Matrix3, Vector3};
+use rbx_dom_weak::types::{CFrame, Color3, Enum, Matrix3, Variant, Vector3};
 use rbx_dom_weak::{Instance, InstanceBuilder, WeakDom, types::Ref, ustr};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -48,13 +48,14 @@ pub fn import_roblox_authoring_scene(
         project_path: None,
         output_path: PathBuf::new(),
     })?;
-    merge_reference(reference, base_scene, source_file)
+    merge_reference(reference, base_scene, source_file, place_path)
 }
 
 fn merge_reference(
     reference: ReferenceScene,
     base_scene: &AuthoringScene,
     source_file: &str,
+    place_path: &Path,
 ) -> Result<RobloxAuthoringImport, String> {
     let mut scene = base_scene.clone();
     let parent_id = scene
@@ -79,6 +80,8 @@ fn merge_reference(
         .and_then(|stem| stem.to_str())
         .filter(|stem| !stem.is_empty())
         .unwrap_or("Roblox Place");
+    let dom = decode_xml(place_path)?;
+    let dom_paths = instance_refs_by_path(&dom)?;
     let promoted = reference
         .geometry
         .iter()
@@ -172,13 +175,25 @@ fn merge_reference(
             .cloned()
             .unwrap_or_else(|| import_root_id.clone());
         group_ids.insert(path.clone(), id.clone());
+        let has_unrepresented_descendant = reference.instances.iter().any(|candidate| {
+            candidate.path.starts_with(&format!("{}/", instance.path))
+                && !promoted_paths.contains(candidate.path.as_str())
+                && !matches!(candidate.class.as_str(), "Model" | "Folder")
+        });
         scene.nodes.push(AuthoringNode {
             id,
             parent_id: Some(parent),
             name: instance.name.clone(),
             transform: Transform::default(),
             components: BTreeMap::new(),
-            editor: EditorMetadata::default(),
+            editor: EditorMetadata {
+                visible: true,
+                locked: has_unrepresented_descendant,
+                lock_reason: has_unrepresented_descendant.then_some(
+                    "This Roblox group contains preserved objects that Studio cannot transform safely yet"
+                        .to_owned(),
+                ),
+            },
             source: Some(source_metadata(
                 &instance.class,
                 Some(&instance.path),
@@ -214,6 +229,12 @@ fn merge_reference(
         if geometry.can_collide {
             components.insert("collision".to_owned(), json!({"kind": "box"}));
         }
+        let source_property = |name: &str| {
+            dom_paths
+                .get(geometry.path.as_str())
+                .and_then(|reference| dom.get_by_ref(*reference))
+                .is_some_and(|instance| instance.properties.contains_key(&ustr(name)))
+        };
         scene.nodes.push(AuthoringNode {
             id,
             parent_id: Some(parent),
@@ -237,6 +258,18 @@ fn merge_reference(
                     (
                         "sourceMaterialValue".to_owned(),
                         json!(geometry.material.value),
+                    ),
+                    (
+                        "sourceHasColor".to_owned(),
+                        json!(source_property("Color") || source_property("Color3uint8")),
+                    ),
+                    (
+                        "sourceHasCanCollide".to_owned(),
+                        json!(source_property("CanCollide")),
+                    ),
+                    (
+                        "sourceHasCastShadow".to_owned(),
+                        json!(source_property("CastShadow")),
                     ),
                 ]),
             )),
@@ -307,6 +340,34 @@ pub fn write_roblox_place(
 ) -> Result<RobloxExportReport, String> {
     scene.validate()?;
     let selected_import_id = preserved_source.map(source_import_id).transpose()?;
+    if let Some(selected_import_id) = selected_import_id.as_deref()
+        && scene.nodes.iter().any(|node| {
+            node.source
+                .as_ref()
+                .is_some_and(|source| source.format == "roblox")
+        })
+    {
+        let known_import = scene.nodes.iter().any(|node| {
+            node.source.as_ref().is_some_and(|source| {
+                source.format == "roblox"
+                    && source.properties.get("importId").and_then(Value::as_str)
+                        == Some(selected_import_id)
+            })
+        });
+        if !known_import {
+            let expected_sha = scene.nodes.iter().find_map(|node| {
+                node.source
+                    .as_ref()?
+                    .properties
+                    .get("sourceSha256")
+                    .and_then(Value::as_str)
+            });
+            return Err(format!(
+                "the preserved Roblox source has changed since import (expected SHA {}, found hash {selected_import_id}); re-import or restore the preserved source",
+                expected_sha.unwrap_or("recorded import identity")
+            ));
+        }
+    }
     let mut dom = match preserved_source {
         Some(path) => decode_xml(path)?,
         None => WeakDom::new(InstanceBuilder::new("DataModel")),
@@ -330,13 +391,19 @@ pub fn write_roblox_place(
             continue;
         };
         source_linked.insert(node.id.as_str());
-        if let (Some(selected), Some(node_import)) = (
-            selected_import_id.as_deref(),
-            source.properties.get("importId").and_then(Value::as_str),
-        ) && node_import != selected
-        {
-            skipped_imports.insert(node_import.to_owned());
-            continue;
+        if let Some(selected) = selected_import_id.as_deref() {
+            let Some(node_import) = source.properties.get("importId").and_then(Value::as_str)
+            else {
+                report.warnings.push(format!(
+                    "{}: preserved Roblox source link has no import identity; the native edit was not applied",
+                    node.name
+                ));
+                continue;
+            };
+            if node_import != selected {
+                skipped_imports.insert(node_import.to_owned());
+                continue;
+            }
         }
         let Some(referent) = paths.get(path).copied() else {
             report.warnings.push(format!(
@@ -536,7 +603,10 @@ fn update_part(
         .get("collidable")
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    if !bool_matches(instance.properties.get(&ustr("CanCollide")), can_collide) {
+    let source_had_can_collide = source_property_was_present(node, "sourceHasCanCollide");
+    if (source_had_can_collide || !can_collide)
+        && !bool_matches(instance.properties.get(&ustr("CanCollide")), can_collide)
+    {
         instance
             .properties
             .insert(ustr("CanCollide"), can_collide.into());
@@ -546,7 +616,10 @@ fn update_part(
         .get("castShadow")
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    if !bool_matches(instance.properties.get(&ustr("CastShadow")), cast_shadow) {
+    let source_had_cast_shadow = source_property_was_present(node, "sourceHasCastShadow");
+    if (source_had_cast_shadow || !cast_shadow)
+        && !bool_matches(instance.properties.get(&ustr("CastShadow")), cast_shadow)
+    {
         instance
             .properties
             .insert(ustr("CastShadow"), cast_shadow.into());
@@ -558,7 +631,11 @@ fn update_part(
         .and_then(parse_color)
     {
         let color = Color3::new(color[0], color[1], color[2]);
-        if !color_matches(instance.properties.get(&ustr("Color")), color) {
+        let source_had_color = source_property_was_present(node, "sourceHasColor");
+        let default_color = Color3::new(0.64, 0.64, 0.64);
+        if (source_had_color || !color_matches(Some(&Variant::Color3(color)), default_color))
+            && !color_matches(instance.properties.get(&ustr("Color")), color)
+        {
             instance.properties.insert(ustr("Color"), color.into());
             changed = true;
         }
@@ -568,18 +645,30 @@ fn update_part(
             node.name
         ));
     }
-    if let Some(material) = primitive
-        .get("material")
-        .and_then(Value::as_str)
-        .and_then(roblox_material_value)
-        && !enum_matches(instance.properties.get(&ustr("Material")), material)
-    {
-        instance
-            .properties
-            .insert(ustr("Material"), Enum::from_u32(material).into());
-        changed = true;
+    if let Some(material_name) = primitive.get("material").and_then(Value::as_str) {
+        if let Some(material) = roblox_material_value(material_name) {
+            if !enum_matches(instance.properties.get(&ustr("Material")), material) {
+                instance
+                    .properties
+                    .insert(ustr("Material"), Enum::from_u32(material).into());
+                changed = true;
+            }
+        } else {
+            report.warnings.push(format!(
+                "{}: material {material_name:?} has no Roblox equivalent; preserved the source material",
+                node.name
+            ));
+        }
     }
     Ok(changed)
+}
+
+fn source_property_was_present(node: &AuthoringNode, key: &str) -> bool {
+    node.source
+        .as_ref()
+        .and_then(|source| source.properties.get(key))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 fn cframe_matches(value: Option<&rbx_dom_weak::types::Variant>, expected: &CFrame) -> bool {
@@ -648,11 +737,19 @@ fn part_builder(
             ));
             [0.64; 3]
         });
-    let material = primitive
-        .get("material")
-        .and_then(Value::as_str)
-        .and_then(roblox_material_value)
-        .unwrap_or(256);
+    let material = match primitive.get("material").and_then(Value::as_str) {
+        Some(material_name) => match roblox_material_value(material_name) {
+            Some(material) => material,
+            None => {
+                report.warnings.push(format!(
+                    "{}: material {material_name:?} has no Roblox equivalent; exported as Plastic",
+                    node.name
+                ));
+                256
+            }
+        },
+        None => 256,
+    };
     Some(
         InstanceBuilder::new("Part")
             .with_name(&node.name)
@@ -905,6 +1002,13 @@ mod tests {
 
         assert_eq!(imported.editable_parts, 1);
         assert_eq!(imported.preserved_instances, 3);
+        let yard = imported
+            .scene
+            .nodes
+            .iter()
+            .find(|node| node.name == "Yard")
+            .expect("source model should be represented as a native group");
+        assert!(yard.editor.locked);
         assert_eq!(
             roblox_source_file(&imported.scene),
             Some("imports/roblox/yard/source.rbxlx")
@@ -985,6 +1089,150 @@ mod tests {
             .find(|geometry| geometry.name == "Edited Block")
             .unwrap();
         assert_eq!(block.transform.position, [8.0, 9.0, 10.0]);
+    }
+
+    #[test]
+    fn export_preserves_absent_default_part_properties() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("defaults.rbxlx");
+        let output = temp.path().join("defaults-export.rbxlx");
+        let source_text = PLACE
+            .replace(
+                "<Color3 name=\"Color\"><R>1</R><G>0</G><B>0</B></Color3>",
+                "",
+            )
+            .replace("<bool name=\"CanCollide\">true</bool>", "")
+            .replace("<bool name=\"CastShadow\">true</bool>", "");
+        fs::write(&source, source_text).unwrap();
+        let mut imported = import_roblox_authoring_scene(
+            &source,
+            &base_scene(),
+            "imports/roblox/defaults/source.rbxlx",
+        )
+        .unwrap();
+        let block = imported
+            .scene
+            .nodes
+            .iter_mut()
+            .find(|node| node.components.contains_key("primitive"))
+            .unwrap();
+        block.transform.position = [9.0, 0.0, 0.0];
+        write_roblox_place(&imported.scene, Some(&source), &output).unwrap();
+        let exported = fs::read_to_string(output).unwrap();
+        assert!(!exported.contains("name=\"Color\""));
+        assert!(!exported.contains("name=\"CanCollide\""));
+        assert!(!exported.contains("name=\"CastShadow\""));
+    }
+
+    #[test]
+    fn duplicated_source_part_exports_as_a_new_part() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("duplicate.rbxlx");
+        let output = temp.path().join("duplicate-export.rbxlx");
+        fs::write(&source, PLACE).unwrap();
+        let mut imported = import_roblox_authoring_scene(
+            &source,
+            &base_scene(),
+            "imports/roblox/duplicate/source.rbxlx",
+        )
+        .unwrap();
+        let original = imported
+            .scene
+            .nodes
+            .iter()
+            .find(|node| node.components.contains_key("primitive"))
+            .cloned()
+            .unwrap();
+        let mut copy = original.clone();
+        copy.id = "block-copy".to_owned();
+        copy.name = "Block Copy".to_owned();
+        copy.source = None;
+        copy.transform.position[0] = 8.0;
+        imported.scene.nodes.push(copy);
+        let report = write_roblox_place(&imported.scene, Some(&source), &output).unwrap();
+        assert_eq!(report.added_parts, 1);
+        let exported = load_reference(&ImportOptions {
+            place_path: output,
+            terrain_path: None,
+            project_path: None,
+            output_path: PathBuf::new(),
+        })
+        .unwrap();
+        assert!(exported.geometry.iter().any(|geometry| {
+            geometry.name == "Block Copy" && geometry.transform.position == [8.0, 2.0, 3.0]
+        }));
+    }
+
+    #[test]
+    fn unsupported_native_material_reports_warning_instead_of_silent_plastic() {
+        let temp = tempdir().unwrap();
+        let output = temp.path().join("material-export.rbxlx");
+        let mut scene = base_scene();
+        scene.nodes.push(AuthoringNode {
+            id: "ground".to_owned(),
+            parent_id: Some("world".to_owned()),
+            name: "Ground".to_owned(),
+            transform: Transform::default(),
+            components: BTreeMap::from([(
+                "primitive".to_owned(),
+                json!({"shape": "box", "size": [2, 1, 2], "material": "builtin:ground"}),
+            )]),
+            editor: EditorMetadata::default(),
+            source: None,
+        });
+        let report = write_roblox_place(&scene, None, &output).unwrap();
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("builtin:ground") && warning.contains("Plastic"))
+        );
+    }
+
+    #[test]
+    fn changed_preserved_source_is_rejected_before_merge() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("changed.rbxlx");
+        let output = temp.path().join("changed-export.rbxlx");
+        fs::write(&source, PLACE).unwrap();
+        let imported = import_roblox_authoring_scene(
+            &source,
+            &base_scene(),
+            "imports/roblox/changed/source.rbxlx",
+        )
+        .unwrap();
+        fs::write(&source, PLACE.replace("keep-me", "changed")).unwrap();
+        let error = write_roblox_place(&imported.scene, Some(&source), &output).unwrap_err();
+        assert!(error.contains("preserved Roblox source has changed"));
+    }
+
+    #[test]
+    fn missing_source_import_identity_is_not_applied() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("identity.rbxlx");
+        let output = temp.path().join("identity-export.rbxlx");
+        fs::write(&source, PLACE).unwrap();
+        let mut imported = import_roblox_authoring_scene(
+            &source,
+            &base_scene(),
+            "imports/roblox/identity/source.rbxlx",
+        )
+        .unwrap();
+        let block = imported
+            .scene
+            .nodes
+            .iter_mut()
+            .find(|node| node.components.contains_key("primitive"))
+            .unwrap();
+        block.source.as_mut().unwrap().properties.remove("importId");
+        let report = write_roblox_place(&imported.scene, Some(&source), &output).unwrap();
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("no import identity"))
+        );
+        assert_eq!(report.updated_parts, 0);
     }
 
     #[test]
