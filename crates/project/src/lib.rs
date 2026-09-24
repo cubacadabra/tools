@@ -164,7 +164,7 @@ fn starter_scene() -> serde_json::Value {
 }
 
 const STARTER_CUBE_SIZE: f32 = 2.0;
-const STARTER_CUBE_SPACING: f32 = 2.25;
+const STARTER_CUBE_SPACING: f32 = STARTER_CUBE_SIZE;
 const STARTER_WALL_Z: f32 = -4.0;
 const STARTER_FACE_Z: f32 = 1.03;
 const STARTER_STROKE_DEPTH: f32 = 0.06;
@@ -213,18 +213,18 @@ const STARTER_GLYPHS: &[&[StarterStroke]] = &[
         stroke(0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS),
     ],
     &[
-        stroke(0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9),
-        stroke(0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9),
+        stroke(0.0, 0.4, STARTER_STROKE_THICKNESS, 0.65),
+        stroke(0.0, -0.75, STARTER_STROKE_THICKNESS, 0.5),
     ],
     &[stroke(0.5, 0.0, 1.0, STARTER_STROKE_THICKNESS)],
     &[
-        stroke(0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9),
-        stroke(0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9),
+        stroke(0.0, 0.4, STARTER_STROKE_THICKNESS, 0.65),
+        stroke(0.0, -0.75, STARTER_STROKE_THICKNESS, 0.5),
     ],
     &[stroke(0.0, 0.0, STARTER_STROKE_THICKNESS, 0.85)],
     &[
-        stroke(0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9),
-        stroke(0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9),
+        stroke(0.0, 0.4, STARTER_STROKE_THICKNESS, 0.65),
+        stroke(0.0, -0.75, STARTER_STROKE_THICKNESS, 0.5),
     ],
     &[
         stroke(0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS),
@@ -236,7 +236,7 @@ const STARTER_GLYPHS: &[&[StarterStroke]] = &[
         stroke(0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS),
         // Roblox-style thin Parts can rotate freely in the plane. This is
         // one exact diagonal stroke instead of a stair-step approximation.
-        rotated_stroke(0.06, -0.62, 0.08, 0.78, -0.34),
+        rotated_stroke(0.06, -0.62, 0.08, 0.78, 0.34),
     ],
     &[
         stroke(0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9),
