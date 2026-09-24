@@ -1012,11 +1012,6 @@ fn native_ground(
     let color = world
         .get("palette")
         .and_then(|palette| palette.get("ground"))
-        .or_else(|| {
-            manifest
-                .get("palette")
-                .and_then(|palette| palette.get("ground"))
-        })
         .and_then(Value::as_str)
         .and_then(parse_color)
         .unwrap_or([167.0 / 255.0, 189.0 / 255.0, 153.0 / 255.0]);
@@ -1488,6 +1483,7 @@ mod tests {
         let scene = base_scene();
         let manifest = json!({
             "world": {"groundSize": 70},
+            "palette": {"ground": "#20295D"},
             "worlds": {
                 "world": {
                     "world": {"groundSize": 80, "physics": {"groundY": 4}},
@@ -1523,6 +1519,25 @@ mod tests {
             panic!("ground has no CFrame");
         };
         assert_eq!(cframe.position, Vector3::new(0.0, 3.92, 0.0));
+
+        let default_world_color = json!({
+            "palette": {"ground": "#20295D"},
+            "worlds": {"world": {"palette": {}}}
+        });
+        write_roblox_place_with_manifest(&scene, &default_world_color, None, &output).unwrap();
+        let dom = decode_xml(&output).unwrap();
+        let ground = dom
+            .descendants()
+            .find(|instance| instance.name == "Ground")
+            .unwrap();
+        let Some(Variant::Color3uint8(color)) = ground.properties.get(&ustr("Color")) else {
+            panic!("ground has no Color3uint8");
+        };
+        assert_eq!((color.r, color.g, color.b), (167, 189, 153));
+        assert_eq!(
+            ground.properties.get(&ustr("Material")),
+            Some(&Variant::Enum(Enum::from_u32(256)))
+        );
 
         let hidden = json!({"worlds": {"world": {"terrain": {
             "hideDefaultGround": true,
