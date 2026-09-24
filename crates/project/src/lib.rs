@@ -550,6 +550,10 @@ local function effect_id(index)
     return "letter-line-" .. index
 end
 
+local function interaction_id(index)
+    return "loose-line-" .. index
+end
+
 local function completed_count()
     local count = 0
     for index = 1, line_count do
@@ -575,7 +579,7 @@ function Game.on_start(api)
     api.lobby:set_enabled(false)
     api.session:start({game_id}, {{ mode = "preview" }})
     for index = 1, line_count do
-        api.effects:set_state(effect_id(index), "available")
+        api.effects:set_state(interaction_id(index), "available")
     end
     update_status(api)
 end
@@ -589,13 +593,13 @@ function Game.on_interaction(api, event)
         return
     end
     moving[index] = true
-    api.effects:set_state(effect_id(index), "carried")
+    api.effects:set_state(interaction_id(index), "carried")
     api.effects:play(effect_id(index), {{ position = event.position }})
     api.lobby:set_status("Line " .. index .. " is snapping into place…")
     api.task:delay(1.15, function()
         moving[index] = nil
         completed[index] = true
-        api.effects:set_state(effect_id(index), "complete")
+        api.effects:set_state(interaction_id(index), "complete")
         api.effects:play("line-settle", {{ position = target_positions[index] }})
         update_status(api)
     end)
