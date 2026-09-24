@@ -173,6 +173,26 @@ jobs:
         run: |
           set -euo pipefail
           sudo dpkg --add-architecture arm64
+
+          # Ubuntu's amd64 archive and security mirrors do not publish arm64
+          # indexes. Restrict the runner's existing sources to amd64 and use
+          # the Ubuntu ports mirror for foreign-architecture packages.
+          ubuntu_codename="$(. /etc/os-release && printf '%s' "${VERSION_CODENAME}")"
+          for source in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+            [[ -f "${source}" ]] || continue
+            sudo sed -i -E 's|^deb (https?://)|deb [arch=amd64] \1|' "${source}"
+          done
+          for source in /etc/apt/sources.list.d/*.sources; do
+            [[ -f "${source}" ]] || continue
+            sudo sed -i '/^Types: deb$/a Architectures: amd64' "${source}"
+          done
+          cat <<EOF | sudo tee /etc/apt/sources.list.d/ubuntu-arm64.sources >/dev/null
+          Types: deb
+          URIs: https://ports.ubuntu.com/ubuntu-ports/
+          Suites: ${ubuntu_codename} ${ubuntu_codename}-updates ${ubuntu_codename}-security
+          Components: main restricted universe multiverse
+          Architectures: arm64
+          EOF
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             gcc-aarch64-linux-gnu \
