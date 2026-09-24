@@ -338,6 +338,27 @@ pub fn write_roblox_place(
     preserved_source: Option<&Path>,
     output_path: impl AsRef<Path>,
 ) -> Result<RobloxExportReport, String> {
+    write_roblox_place_inner(scene, None, preserved_source, output_path)
+}
+
+/// Export a scene with its native world settings. For a new place, the
+/// implicit Cubacadabra ground becomes a physical Roblox Part. An imported
+/// place continues to use its preserved XML as the sole source of ground.
+pub fn write_roblox_place_with_manifest(
+    scene: &AuthoringScene,
+    manifest: &Value,
+    preserved_source: Option<&Path>,
+    output_path: impl AsRef<Path>,
+) -> Result<RobloxExportReport, String> {
+    write_roblox_place_inner(scene, Some(manifest), preserved_source, output_path)
+}
+
+fn write_roblox_place_inner(
+    scene: &AuthoringScene,
+    manifest: Option<&Value>,
+    preserved_source: Option<&Path>,
+    output_path: impl AsRef<Path>,
+) -> Result<RobloxExportReport, String> {
     scene.validate()?;
     let selected_import_id = preserved_source.map(source_import_id).transpose()?;
     if let Some(selected_import_id) = selected_import_id.as_deref()
@@ -378,6 +399,22 @@ pub fn write_roblox_place(
     let mut report = RobloxExportReport::default();
     let mut source_linked = BTreeSet::new();
     let mut skipped_imports = BTreeSet::new();
+
+    if preserved_source.is_none()
+        && let Some(manifest) = manifest
+    {
+        let (ground, terrain_omitted) = native_ground(scene, manifest)?;
+        if terrain_omitted {
+            report
+                .warnings
+                .push("Native terrain operations are not exported to Roblox yet".to_owned());
+        }
+        if let Some(ground) = ground {
+            let workspace = find_or_create_workspace(&mut dom);
+            dom.insert(workspace, ground);
+            report.added_parts += 1;
+        }
+    }
 
     for node in &scene.nodes {
         let Some(source) = node
@@ -566,6 +603,75 @@ pub fn write_roblox_place(
     }
     write_result?;
     Ok(report)
+}
+
+fn native_ground(
+    scene: &AuthoringScene,
+    manifest: &Value,
+) -> Result<(Option<InstanceBuilder>, bool), String> {
+    let world = match scene.world_id.as_deref().unwrap_or("lobby") {
+        "lobby" => manifest,
+        world_id => manifest
+            .get("worlds")
+            .and_then(|worlds| worlds.get(world_id))
+            .ok_or_else(|| format!("scene world `{world_id}` was not found in the manifest"))?,
+    };
+    let terrain = world.get("terrain");
+    let has_terrain = terrain
+        .and_then(|terrain| terrain.get("operations"))
+        .and_then(Value::as_array)
+        .is_some_and(|operations| !operations.is_empty());
+    if has_terrain
+        && terrain
+            .and_then(|terrain| terrain.get("hideDefaultGround"))
+            .and_then(Value::as_bool)
+            == Some(true)
+    {
+        return Ok((None, true));
+    }
+    let size = world
+        .get("world")
+        .and_then(|settings| settings.get("groundSize"))
+        .and_then(Value::as_f64)
+        .unwrap_or(120.0)
+        .max(10.0) as f32;
+    let y = world
+        .get("world")
+        .and_then(|settings| settings.get("physics"))
+        .and_then(|physics| physics.get("groundY"))
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0) as f32;
+    if !size.is_finite() || !y.is_finite() {
+        return Err("ground size and height must be finite to export to Roblox".to_owned());
+    }
+    let color = world
+        .get("palette")
+        .and_then(|palette| palette.get("ground"))
+        .and_then(Value::as_str)
+        .and_then(parse_color)
+        .unwrap_or([167.0 / 255.0, 189.0 / 255.0, 153.0 / 255.0]);
+    let collidable = world
+        .get("world")
+        .and_then(|settings| settings.get("physics"))
+        .and_then(|physics| physics.get("groundCollision"))
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    Ok((
+        Some(
+            InstanceBuilder::new("Part")
+                .with_name("Ground")
+                .with_property(
+                    "CFrame",
+                    CFrame::new(Vector3::new(0.0, y - 0.08, 0.0), Matrix3::identity()),
+                )
+                .with_property("Size", Vector3::new(size, 0.16, size))
+                .with_property("Color", Color3::new(color[0], color[1], color[2]))
+                .with_property("Anchored", true)
+                .with_property("CanCollide", collidable)
+                .with_property("Material", Enum::from_u32(256)),
+        ),
+        has_terrain,
+    ))
 }
 
 fn update_part(
@@ -986,6 +1092,111 @@ mod tests {
                 source: None,
             }],
         }
+    }
+
+    #[test]
+    fn native_ground_uses_selected_world_and_respects_hidden_ground() {
+        let temp = tempdir().unwrap();
+        let output = temp.path().join("ground.rbxlx");
+        let scene = base_scene();
+        let manifest = json!({
+            "world": {"groundSize": 70},
+            "worlds": {
+                "world": {
+                    "world": {"groundSize": 80, "physics": {"groundY": 4}},
+                    "palette": {"ground": "#204060"}
+                }
+            }
+        });
+        let report = write_roblox_place_with_manifest(&scene, &manifest, None, &output).unwrap();
+        assert_eq!(report.added_parts, 1);
+        let dom = decode_xml(&output).unwrap();
+        let ground = dom
+            .descendants()
+            .find(|instance| instance.name == "Ground")
+            .unwrap();
+        assert_eq!(ground.class.as_str(), "Part");
+        assert_eq!(
+            ground.properties.get(&ustr("Anchored")),
+            Some(&Variant::Bool(true))
+        );
+        assert_eq!(
+            ground.properties.get(&ustr("CanCollide")),
+            Some(&Variant::Bool(true))
+        );
+        assert_eq!(
+            ground.properties.get(&ustr("Size")),
+            Some(&Variant::Vector3(Vector3::new(80.0, 0.16, 80.0)))
+        );
+        let Some(Variant::Color3uint8(color)) = ground.properties.get(&ustr("Color")) else {
+            panic!("ground has no Color3uint8");
+        };
+        assert_eq!((color.r, color.g, color.b), (32, 64, 96));
+        let Some(Variant::CFrame(cframe)) = ground.properties.get(&ustr("CFrame")) else {
+            panic!("ground has no CFrame");
+        };
+        assert_eq!(cframe.position, Vector3::new(0.0, 3.92, 0.0));
+
+        let hidden = json!({"worlds": {"world": {"terrain": {
+            "hideDefaultGround": true,
+            "operations": [{"shape": "block", "operation": "fill", "position": [0, 0, 0], "size": [1, 1, 1], "material": "rock"}]
+        }}}});
+        let report = write_roblox_place_with_manifest(&scene, &hidden, None, &output).unwrap();
+        assert_eq!(report.added_parts, 0);
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("terrain"))
+        );
+        assert!(
+            decode_xml(&output)
+                .unwrap()
+                .descendants()
+                .all(|instance| instance.name != "Ground")
+        );
+
+        let no_terrain = json!({"worlds": {"world": {"terrain": {"hideDefaultGround": true}}}});
+        let report = write_roblox_place_with_manifest(&scene, &no_terrain, None, &output).unwrap();
+        assert_eq!(report.added_parts, 1);
+
+        let no_collision = json!({"worlds": {"world": {"world": {
+            "physics": {"groundCollision": false}
+        }}}});
+        write_roblox_place_with_manifest(&scene, &no_collision, None, &output).unwrap();
+        let dom = decode_xml(&output).unwrap();
+        let ground = dom
+            .descendants()
+            .find(|instance| instance.name == "Ground")
+            .unwrap();
+        assert_eq!(
+            ground.properties.get(&ustr("CanCollide")),
+            Some(&Variant::Bool(false))
+        );
+    }
+
+    #[test]
+    fn preserved_place_does_not_gain_native_ground() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source.rbxlx");
+        let output = temp.path().join("export.rbxlx");
+        fs::write(&source, PLACE).unwrap();
+        let imported =
+            import_roblox_authoring_scene(&source, &base_scene(), "imports/roblox/source.rbxlx")
+                .unwrap();
+        write_roblox_place_with_manifest(
+            &imported.scene,
+            &json!({"worlds": {"world": {"world": {"groundSize": 80}}}}),
+            Some(&source),
+            &output,
+        )
+        .unwrap();
+        assert!(
+            decode_xml(&output)
+                .unwrap()
+                .descendants()
+                .all(|instance| instance.name != "Ground")
+        );
     }
 
     #[test]

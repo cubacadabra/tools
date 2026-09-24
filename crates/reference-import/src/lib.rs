@@ -26,7 +26,7 @@ mod model;
 
 pub use authoring::{
     RobloxAuthoringImport, RobloxExportReport, import_roblox_authoring_scene, roblox_source_file,
-    roblox_source_files, write_roblox_place,
+    roblox_source_files, write_roblox_place, write_roblox_place_with_manifest,
 };
 pub use importer::{import_reference, load_reference, read_reference_scene};
 #[cfg(test)]
