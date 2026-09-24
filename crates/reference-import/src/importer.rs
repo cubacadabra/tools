@@ -139,8 +139,12 @@ fn decode_xml(path: &Path) -> Result<WeakDom, String> {
     let reader = BufReader::new(
         File::open(path).map_err(|error| format!("could not open {}: {error}", path.display()))?,
     );
-    rbx_xml::from_reader_default(reader)
-        .map_err(|error| format!("could not decode Roblox XML {}: {error}", path.display()))
+    rbx_xml::from_reader(
+        reader,
+        rbx_xml::DecodeOptions::new()
+            .property_behavior(rbx_xml::DecodePropertyBehavior::ReadUnknown),
+    )
+    .map_err(|error| format!("could not decode Roblox XML {}: {error}", path.display()))
 }
 
 fn walk_children(

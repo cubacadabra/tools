@@ -1,6 +1,6 @@
 use crate::{GeometryInstance, ImportOptions, ReferenceScene, load_reference};
 use cubacadabra_scene::{AuthoringNode, AuthoringScene, EditorMetadata, SourceMetadata, Transform};
-use glam::{EulerRot, Mat3, Quat, Vec3};
+use glam::{EulerRot, Mat3, Quat};
 use rbx_dom_weak::types::{CFrame, Color3, Enum, Matrix3, Vector3};
 use rbx_dom_weak::{Instance, InstanceBuilder, WeakDom, types::Ref, ustr};
 use serde_json::{Value, json};
@@ -13,8 +13,6 @@ use std::{
 };
 
 const GENERATED_BY: &str = "cubacadabra-roblox-interchange";
-const WORKSPACE_ROOT: &str = "Workspace:Workspace[1]";
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct RobloxAuthoringImport {
     pub scene: AuthoringScene,
@@ -84,7 +82,9 @@ fn merge_reference(
     let promoted = reference
         .geometry
         .iter()
-        .filter(|geometry| promotable_part(geometry))
+        .filter(|geometry| {
+            promotable_part(geometry) && crate::is_roblox_workspace_path(&reference, &geometry.path)
+        })
         .collect::<Vec<_>>();
     let promoted_paths = promoted
         .iter()
@@ -153,7 +153,7 @@ fn merge_reference(
             if matches!(instance.class.as_str(), "Model" | "Folder") {
                 group_paths.insert(instance.path.clone());
             }
-            if instance.path == WORKSPACE_ROOT || instance.parent_path.is_empty() {
+            if instance.class == "Workspace" || instance.parent_path.is_empty() {
                 break;
             }
             ancestor = &instance.parent_path;
@@ -220,7 +220,7 @@ fn merge_reference(
             name: geometry.name.clone(),
             transform: Transform {
                 position: geometry.transform.position,
-                rotation: source_rotation_to_euler(geometry.transform.rotation),
+                rotation: crate::roblox_source_rotation_to_euler(geometry.transform.rotation),
                 scale: [1.0; 3],
             },
             components,
@@ -272,28 +272,28 @@ fn source_metadata(
 }
 
 fn promotable_part(geometry: &GeometryInstance) -> bool {
-    geometry.class == "Part"
-        && geometry.shape.is_none_or(|shape| shape == 1)
-        && geometry.mesh.is_none()
-        && geometry.transparency.abs() <= 0.0001
-        && geometry.reflectance.abs() <= 0.0001
-        && geometry
-            .size
-            .iter()
-            .all(|value| value.is_finite() && *value >= 0.05)
-        && (geometry.path == WORKSPACE_ROOT
-            || geometry.path.starts_with(&format!("{WORKSPACE_ROOT}/")))
+    crate::validate_roblox_native_part(geometry).is_ok()
 }
 
 pub fn roblox_source_file(scene: &AuthoringScene) -> Option<&str> {
-    scene.nodes.iter().find_map(|node| {
-        node.source
-            .as_ref()
-            .filter(|source| source.format == "roblox")?
-            .properties
-            .get("sourceFile")?
-            .as_str()
-    })
+    roblox_source_files(scene).into_iter().next()
+}
+
+pub fn roblox_source_files(scene: &AuthoringScene) -> Vec<&str> {
+    let mut seen = BTreeSet::new();
+    scene
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            node.source
+                .as_ref()
+                .filter(|source| source.format == "roblox")?
+                .properties
+                .get("sourceFile")?
+                .as_str()
+        })
+        .filter(|source_file| seen.insert(*source_file))
+        .collect()
 }
 
 /// Export a Roblox XML place. When `preserved_source` is present, the original
@@ -306,6 +306,7 @@ pub fn write_roblox_place(
     output_path: impl AsRef<Path>,
 ) -> Result<RobloxExportReport, String> {
     scene.validate()?;
+    let selected_import_id = preserved_source.map(source_import_id).transpose()?;
     let mut dom = match preserved_source {
         Some(path) => decode_xml(path)?,
         None => WeakDom::new(InstanceBuilder::new("DataModel")),
@@ -315,6 +316,7 @@ pub fn write_roblox_place(
     let world_transforms = scene.world_transforms()?;
     let mut report = RobloxExportReport::default();
     let mut source_linked = BTreeSet::new();
+    let mut skipped_imports = BTreeSet::new();
 
     for node in &scene.nodes {
         let Some(source) = node
@@ -327,6 +329,15 @@ pub fn write_roblox_place(
         let Some(path) = source.path.as_deref() else {
             continue;
         };
+        source_linked.insert(node.id.as_str());
+        if let (Some(selected), Some(node_import)) = (
+            selected_import_id.as_deref(),
+            source.properties.get("importId").and_then(Value::as_str),
+        ) && node_import != selected
+        {
+            skipped_imports.insert(node_import.to_owned());
+            continue;
+        }
         let Some(referent) = paths.get(path).copied() else {
             report.warnings.push(format!(
                 "{}: preserved Roblox source path is missing; the native edit was not applied",
@@ -334,18 +345,47 @@ pub fn write_roblox_place(
             ));
             continue;
         };
-        source_linked.insert(node.id.as_str());
         let Some(instance) = dom.get_by_ref_mut(referent) else {
             continue;
         };
-        instance.name = node.name.clone();
+        if let Some(expected_class) = source.class.as_deref()
+            && instance.class.as_str() != expected_class
+        {
+            report.warnings.push(format!(
+                "{}: preserved Roblox source class is {}, not {}; the native edit was not applied",
+                node.name, instance.class, expected_class
+            ));
+            continue;
+        }
+        let name_changed = instance.name != node.name;
         if node.components.contains_key("primitive") {
+            if instance.class.as_str() != "Part" {
+                report.warnings.push(format!(
+                    "{}: only Roblox Part instances can receive primitive edits; the source was preserved",
+                    node.name
+                ));
+                continue;
+            }
             let Some(world) = world_transforms.get(&node.id) else {
                 continue;
             };
-            update_part(instance, node, world, &mut report)?;
-            report.updated_parts += 1;
+            let properties_changed = update_part(instance, node, world, &mut report)?;
+            if name_changed {
+                instance.name = node.name.clone();
+            }
+            if name_changed || properties_changed {
+                report.updated_parts += 1;
+            }
+        } else if name_changed {
+            instance.name = node.name.clone();
         }
+    }
+
+    if !skipped_imports.is_empty() {
+        report.warnings.push(format!(
+            "{} other Roblox import(s) were not merged into the selected preserved source",
+            skipped_imports.len()
+        ));
     }
 
     let native_parts = scene
@@ -419,7 +459,14 @@ pub fn write_roblox_place(
                 temp_path.display()
             )
         })?);
-        rbx_xml::to_writer_default(&mut writer, &dom, dom.root().children()).map_err(|error| {
+        rbx_xml::to_writer(
+            &mut writer,
+            &dom,
+            dom.root().children(),
+            rbx_xml::EncodeOptions::new()
+                .property_behavior(rbx_xml::EncodePropertyBehavior::WriteUnknown),
+        )
+        .map_err(|error| {
             format!(
                 "could not encode Roblox XML {}: {error}",
                 output_path.display()
@@ -459,44 +506,62 @@ fn update_part(
     node: &AuthoringNode,
     world: &cubacadabra_scene::AuthoringWorldTransform,
     report: &mut RobloxExportReport,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let primitive = node.components["primitive"]
         .as_object()
         .ok_or_else(|| format!("scene node {} primitive must be an object", node.id))?;
     let size = json_vector3(primitive.get("size"))
         .ok_or_else(|| format!("scene node {} primitive has no valid size", node.id))?;
     let size = multiply(size, world.scale);
-    instance
-        .properties
-        .insert(ustr("CFrame"), cframe(world).into());
-    instance
-        .properties
-        .insert(ustr("Size"), Vector3::new(size[0], size[1], size[2]).into());
-    instance.properties.insert(
-        ustr("CanCollide"),
-        primitive
-            .get("collidable")
-            .and_then(Value::as_bool)
-            .unwrap_or(true)
-            .into(),
-    );
-    instance.properties.insert(
-        ustr("CastShadow"),
-        primitive
-            .get("castShadow")
-            .and_then(Value::as_bool)
-            .unwrap_or(true)
-            .into(),
-    );
+    let mut changed = false;
+    let desired_cframe = cframe(world);
+    if !cframe_matches(instance.properties.get(&ustr("CFrame")), &desired_cframe) {
+        instance
+            .properties
+            .insert(ustr("CFrame"), desired_cframe.into());
+        changed = true;
+    }
+    let desired_size = Vector3::new(size[0], size[1], size[2]);
+    if !vector3_matches(
+        instance.properties.get(&ustr("Size")),
+        desired_size,
+        0.00001,
+    ) {
+        instance
+            .properties
+            .insert(ustr("Size"), desired_size.into());
+        changed = true;
+    }
+    let can_collide = primitive
+        .get("collidable")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    if !bool_matches(instance.properties.get(&ustr("CanCollide")), can_collide) {
+        instance
+            .properties
+            .insert(ustr("CanCollide"), can_collide.into());
+        changed = true;
+    }
+    let cast_shadow = primitive
+        .get("castShadow")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    if !bool_matches(instance.properties.get(&ustr("CastShadow")), cast_shadow) {
+        instance
+            .properties
+            .insert(ustr("CastShadow"), cast_shadow.into());
+        changed = true;
+    }
     if let Some(color) = primitive
         .get("color")
         .and_then(Value::as_str)
         .and_then(parse_color)
     {
-        instance.properties.insert(
-            ustr("Color"),
-            Color3::new(color[0], color[1], color[2]).into(),
-        );
+        let color = Color3::new(color[0], color[1], color[2]);
+        if !color_matches(instance.properties.get(&ustr("Color")), color) {
+            instance.properties.insert(ustr("Color"), color.into());
+            changed = true;
+        }
     } else if primitive.get("color").is_some() {
         report.warnings.push(format!(
             "{}: named color could not be resolved for Roblox; preserved the source color",
@@ -507,12 +572,61 @@ fn update_part(
         .get("material")
         .and_then(Value::as_str)
         .and_then(roblox_material_value)
+        && !enum_matches(instance.properties.get(&ustr("Material")), material)
     {
         instance
             .properties
             .insert(ustr("Material"), Enum::from_u32(material).into());
+        changed = true;
     }
-    Ok(())
+    Ok(changed)
+}
+
+fn cframe_matches(value: Option<&rbx_dom_weak::types::Variant>, expected: &CFrame) -> bool {
+    let actual = match value {
+        Some(rbx_dom_weak::types::Variant::CFrame(value)) => value,
+        Some(rbx_dom_weak::types::Variant::OptionalCFrame(Some(value))) => value,
+        _ => return false,
+    };
+    vector3_close(actual.position, expected.position, 0.00001)
+        && vector3_close(actual.orientation.x, expected.orientation.x, 0.00001)
+        && vector3_close(actual.orientation.y, expected.orientation.y, 0.00001)
+        && vector3_close(actual.orientation.z, expected.orientation.z, 0.00001)
+}
+
+fn vector3_matches(
+    value: Option<&rbx_dom_weak::types::Variant>,
+    expected: Vector3,
+    tolerance: f32,
+) -> bool {
+    matches!(value, Some(rbx_dom_weak::types::Variant::Vector3(actual)) if vector3_close(*actual, expected, tolerance))
+}
+
+fn vector3_close(left: Vector3, right: Vector3, tolerance: f32) -> bool {
+    (left.x - right.x).abs() <= tolerance
+        && (left.y - right.y).abs() <= tolerance
+        && (left.z - right.z).abs() <= tolerance
+}
+
+fn bool_matches(value: Option<&rbx_dom_weak::types::Variant>, expected: bool) -> bool {
+    matches!(value, Some(rbx_dom_weak::types::Variant::Bool(actual)) if *actual == expected)
+}
+
+fn enum_matches(value: Option<&rbx_dom_weak::types::Variant>, expected: u32) -> bool {
+    matches!(value, Some(rbx_dom_weak::types::Variant::Enum(actual)) if actual.to_u32() == expected)
+        || matches!(value, Some(rbx_dom_weak::types::Variant::EnumItem(actual)) if actual.value == expected)
+}
+
+fn color_matches(value: Option<&rbx_dom_weak::types::Variant>, expected: Color3) -> bool {
+    let actual = match value {
+        Some(rbx_dom_weak::types::Variant::Color3(value)) => *value,
+        Some(rbx_dom_weak::types::Variant::Color3uint8(value)) => (*value).into(),
+        _ => return false,
+    };
+    let tolerance = 0.5 / 255.0 + f32::EPSILON;
+    (actual.r - expected.r).abs() <= tolerance
+        && (actual.g - expected.g).abs() <= tolerance
+        && (actual.b - expected.b).abs() <= tolerance
 }
 
 fn part_builder(
@@ -642,8 +756,19 @@ fn decode_xml(path: &Path) -> Result<WeakDom, String> {
     let reader = BufReader::new(
         File::open(path).map_err(|error| format!("could not open {}: {error}", path.display()))?,
     );
-    rbx_xml::from_reader_default(reader)
-        .map_err(|error| format!("could not decode Roblox XML {}: {error}", path.display()))
+    rbx_xml::from_reader(
+        reader,
+        rbx_xml::DecodeOptions::new()
+            .property_behavior(rbx_xml::DecodePropertyBehavior::ReadUnknown),
+    )
+    .map_err(|error| format!("could not decode Roblox XML {}: {error}", path.display()))
+}
+
+fn source_import_id(path: &Path) -> Result<String, String> {
+    let bytes = fs::read(path)
+        .map_err(|error| format!("could not read Roblox XML {}: {error}", path.display()))?;
+    let source_sha256 = format!("{:x}", Sha256::digest(bytes));
+    Ok(short_hash(&source_sha256))
 }
 
 fn unique_id(scene: &AuthoringScene, base: &str) -> String {
@@ -654,16 +779,6 @@ fn unique_id(scene: &AuthoringScene, base: &str) -> String {
         .map(|suffix| format!("{base}-{suffix}"))
         .find(|candidate| scene.nodes.iter().all(|node| node.id != *candidate))
         .expect("scene IDs have a finite practical range")
-}
-
-fn source_rotation_to_euler(rotation: [[f32; 3]; 3]) -> [f32; 3] {
-    let matrix = Mat3::from_cols(
-        Vec3::new(rotation[0][0], rotation[1][0], rotation[2][0]),
-        Vec3::new(rotation[0][1], rotation[1][1], rotation[2][1]),
-        Vec3::new(rotation[0][2], rotation[1][2], rotation[2][2]),
-    );
-    let (x, y, z) = Quat::from_mat3(&matrix).to_euler(EulerRot::XYZ);
-    [x, y, z]
 }
 
 fn source_color(color: [f32; 3]) -> String {
@@ -757,6 +872,8 @@ mod tests {
 
     const KITCHEN_SINK_PLACE: &str =
         include_str!("../tests/fixtures/roblox-roundtrip/kitchen-sink.rbxlx");
+    const GENERICITY_AUDIT_PLACE: &str =
+        include_str!("../tests/fixtures/roblox-roundtrip/services-references-and-types.rbxlx");
 
     fn base_scene() -> AuthoringScene {
         AuthoringScene {
@@ -795,6 +912,36 @@ mod tests {
         let encoded = serialize_authoring_scene(&imported.scene).unwrap();
         assert!(encoded.contains("Preserved Roblox Source"));
         assert!(encoded.contains("roblox-part-"));
+    }
+
+    #[test]
+    fn workspace_class_not_service_name_controls_native_promotion() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("renamed-workspace.rbxlx");
+        fs::write(
+            &source,
+            PLACE.replace(
+                "<string name=\"Name\">Workspace</string>",
+                "<string name=\"Name\">World Root</string>",
+            ),
+        )
+        .unwrap();
+
+        let imported = import_roblox_authoring_scene(
+            &source,
+            &base_scene(),
+            "imports/roblox/renamed-workspace/source.rbxlx",
+        )
+        .unwrap();
+
+        assert_eq!(imported.editable_parts, 1);
+        assert!(
+            imported
+                .scene
+                .nodes
+                .iter()
+                .any(|node| node.name == "Block" && node.components.contains_key("primitive"))
+        );
     }
 
     #[test]
@@ -950,6 +1097,148 @@ mod tests {
         );
     }
 
+    #[test]
+    fn export_preserves_services_references_unknown_classes_and_property_types() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("genericity-audit.rbxlx");
+        let output = temp.path().join("genericity-audit-export.rbxlx");
+        fs::write(&source, GENERICITY_AUDIT_PLACE).unwrap();
+        let source_dom = decode_xml(&source).unwrap();
+        let mut imported = import_roblox_authoring_scene(
+            &source,
+            &base_scene(),
+            "imports/roblox/genericity-audit/source.rbxlx",
+        )
+        .unwrap();
+        assert_eq!(imported.editable_parts, 2);
+        let block = imported
+            .scene
+            .nodes
+            .iter_mut()
+            .find(|node| node.name == "Audit Part")
+            .unwrap();
+        block.transform.position = [20.0, 30.0, 40.0];
+        block.name = "Edited Audit Part".to_owned();
+        block.components.get_mut("primitive").unwrap()["size"] = json!([8, 10, 12]);
+
+        let report = write_roblox_place(&imported.scene, Some(&source), &output).unwrap();
+        assert_eq!(report.updated_parts, 1);
+        assert_eq!(report.added_parts, 0);
+        assert_eq!(report.omitted_nodes, 0);
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+
+        let exported_dom = decode_xml(&output).unwrap();
+        assert_dom_semantics(
+            &source_dom,
+            &exported_dom,
+            &BTreeMap::from([("Audit Part", "Edited Audit Part")]),
+            Some("Audit Part"),
+        );
+        let edited = named_instance(&exported_dom, "Edited Audit Part");
+        let Some(Variant::CFrame(cframe)) = edited.properties.get(&ustr("CFrame")) else {
+            panic!("edited Part has no CFrame");
+        };
+        assert_eq!(cframe.position, Vector3::new(20.0, 30.0, 40.0));
+        assert_eq!(
+            edited.properties.get(&ustr("Size")),
+            Some(&Variant::Vector3(Vector3::new(8.0, 10.0, 12.0)))
+        );
+    }
+
+    #[test]
+    fn export_scopes_overlapping_paths_to_the_selected_preserved_source() {
+        let temp = tempdir().unwrap();
+        let source_a = temp.path().join("source-a.rbxlx");
+        let source_b = temp.path().join("source-b.rbxlx");
+        let output = temp.path().join("source-a-export.rbxlx");
+        fs::write(&source_a, PLACE.replace("keep-me", "source-a")).unwrap();
+        fs::write(&source_b, PLACE.replace("keep-me", "source-b")).unwrap();
+        let imported_a = import_roblox_authoring_scene(
+            &source_a,
+            &base_scene(),
+            "imports/roblox/source-a/source.rbxlx",
+        )
+        .unwrap();
+        let mut imported_b = import_roblox_authoring_scene(
+            &source_b,
+            &imported_a.scene,
+            "imports/roblox/source-b/source.rbxlx",
+        )
+        .unwrap();
+        assert_eq!(roblox_source_files(&imported_b.scene).len(), 2);
+        for node in &mut imported_b.scene.nodes {
+            let source_file = node
+                .source
+                .as_ref()
+                .and_then(|source| source.properties.get("sourceFile"))
+                .and_then(Value::as_str);
+            if node.components.contains_key("primitive") {
+                match source_file {
+                    Some("imports/roblox/source-a/source.rbxlx") => {
+                        node.name = "Edited Source A".to_owned()
+                    }
+                    Some("imports/roblox/source-b/source.rbxlx") => {
+                        node.name = "Edited Source B".to_owned()
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let report = write_roblox_place(&imported_b.scene, Some(&source_a), &output).unwrap();
+        assert_eq!(report.updated_parts, 1);
+        assert_eq!(report.added_parts, 0);
+        assert_eq!(report.warnings.len(), 1);
+        let exported = decode_xml(&output).unwrap();
+        assert_eq!(named_instance(&exported, "Edited Source A").class, "Part");
+        assert!(
+            exported
+                .descendants()
+                .all(|instance| instance.name != "Edited Source B")
+        );
+        assert_eq!(
+            named_instance(&exported, "Yard")
+                .properties
+                .get(&ustr("CustomState")),
+            Some(&Variant::String("source-a".to_owned()))
+        );
+    }
+
+    #[test]
+    fn missing_source_paths_warn_without_exporting_duplicate_native_parts() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("yard.rbxlx");
+        let output = temp.path().join("yard-export.rbxlx");
+        fs::write(&source, PLACE).unwrap();
+        let mut imported = import_roblox_authoring_scene(
+            &source,
+            &base_scene(),
+            "imports/roblox/yard/source.rbxlx",
+        )
+        .unwrap();
+        let block = imported
+            .scene
+            .nodes
+            .iter_mut()
+            .find(|node| node.components.contains_key("primitive"))
+            .unwrap();
+        block.name = "Must Not Become Native".to_owned();
+        block.source.as_mut().unwrap().path =
+            Some("Workspace:Workspace[1]/Part:Missing[1]".to_owned());
+
+        let report = write_roblox_place(&imported.scene, Some(&source), &output).unwrap();
+        assert_eq!(report.updated_parts, 0);
+        assert_eq!(report.added_parts, 0);
+        assert_eq!(report.warnings.len(), 1);
+        let exported = decode_xml(&output).unwrap();
+        assert_eq!(named_instance(&exported, "Block").class, "Part");
+        assert!(
+            exported
+                .descendants()
+                .all(|instance| instance.name != "Must Not Become Native")
+        );
+    }
+
     fn named_instance<'a>(dom: &'a WeakDom, name: &str) -> &'a Instance {
         dom.descendants()
             .find(|instance| instance.name == name)
@@ -986,5 +1275,145 @@ mod tests {
         let mut encoded = Vec::new();
         attributes.to_writer(&mut encoded).unwrap();
         encoded
+    }
+
+    fn assert_dom_semantics(
+        source: &WeakDom,
+        exported: &WeakDom,
+        renamed: &BTreeMap<&str, &str>,
+        edited_part: Option<&str>,
+    ) {
+        let source_paths = ordinal_paths(source);
+        let exported_paths = ordinal_paths(exported);
+        assert_instance_semantics(
+            source,
+            source.root_ref(),
+            exported,
+            exported.root_ref(),
+            renamed,
+            edited_part,
+            &source_paths,
+            &exported_paths,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn assert_instance_semantics(
+        source_dom: &WeakDom,
+        source_ref: Ref,
+        exported_dom: &WeakDom,
+        exported_ref: Ref,
+        renamed: &BTreeMap<&str, &str>,
+        edited_part: Option<&str>,
+        source_paths: &HashMap<Ref, Vec<usize>>,
+        exported_paths: &HashMap<Ref, Vec<usize>>,
+    ) {
+        let source = source_dom.get_by_ref(source_ref).unwrap();
+        let exported = exported_dom.get_by_ref(exported_ref).unwrap();
+        assert_eq!(
+            exported.class, source.class,
+            "class changed for {}",
+            source.name
+        );
+        assert_eq!(
+            exported.name,
+            renamed
+                .get(source.name.as_str())
+                .copied()
+                .unwrap_or(&source.name),
+            "name changed unexpectedly for {}",
+            source.name
+        );
+        let excluded = if edited_part == Some(source.name.as_str()) {
+            &["CFrame", "Size"][..]
+        } else {
+            &[][..]
+        };
+        assert_property_semantics(source, exported, excluded, source_paths, exported_paths);
+        assert_eq!(
+            exported.children().len(),
+            source.children().len(),
+            "child count changed for {}",
+            source.name
+        );
+        for (source_child, exported_child) in
+            source.children().iter().zip(exported.children().iter())
+        {
+            assert_instance_semantics(
+                source_dom,
+                *source_child,
+                exported_dom,
+                *exported_child,
+                renamed,
+                edited_part,
+                source_paths,
+                exported_paths,
+            );
+        }
+    }
+
+    fn assert_property_semantics(
+        source: &Instance,
+        exported: &Instance,
+        excluded: &[&str],
+        source_paths: &HashMap<Ref, Vec<usize>>,
+        exported_paths: &HashMap<Ref, Vec<usize>>,
+    ) {
+        let source_names = source
+            .properties
+            .keys()
+            .filter(|name| !excluded.contains(&name.as_str()))
+            .map(ToString::to_string)
+            .collect::<BTreeSet<_>>();
+        let exported_names = exported
+            .properties
+            .keys()
+            .filter(|name| !excluded.contains(&name.as_str()))
+            .map(ToString::to_string)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            exported_names, source_names,
+            "property names changed for {}",
+            source.name
+        );
+        for name in source_names {
+            let source_value = source.properties.get(&ustr(&name)).unwrap();
+            let exported_value = exported.properties.get(&ustr(&name)).unwrap();
+            match (source_value, exported_value) {
+                (Variant::Ref(source_ref), Variant::Ref(exported_ref)) => assert_eq!(
+                    exported_paths.get(exported_ref),
+                    source_paths.get(source_ref),
+                    "reference target changed for {}.{name}",
+                    source.name
+                ),
+                _ => assert_eq!(
+                    format!("{exported_value:?}"),
+                    format!("{source_value:?}"),
+                    "property changed for {}.{name}",
+                    source.name
+                ),
+            }
+        }
+    }
+
+    fn ordinal_paths(dom: &WeakDom) -> HashMap<Ref, Vec<usize>> {
+        fn collect(
+            dom: &WeakDom,
+            reference: Ref,
+            path: &mut Vec<usize>,
+            output: &mut HashMap<Ref, Vec<usize>>,
+        ) {
+            output.insert(reference, path.clone());
+            let instance = dom.get_by_ref(reference).unwrap();
+            for (index, child) in instance.children().iter().enumerate() {
+                path.push(index);
+                collect(dom, *child, path, output);
+                path.pop();
+            }
+        }
+
+        let mut output = HashMap::new();
+        collect(dom, dom.root_ref(), &mut Vec::new(), &mut output);
+        output
     }
 }

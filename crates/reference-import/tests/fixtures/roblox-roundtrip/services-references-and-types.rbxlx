@@ -1,0 +1,188 @@
+<roblox version="4">
+  <Item class="Workspace" referent="RBX0">
+    <Properties><string name="Name">Workspace</string></Properties>
+    <Item class="Part" referent="RBX1">
+      <Properties>
+        <string name="Name">Audit Part</string>
+        <CoordinateFrame name="CFrame"><X>1</X><Y>2</Y><Z>3</Z><R00>1</R00><R01>0</R01><R02>0</R02><R10>0</R10><R11>1</R11><R12>0</R12><R20>0</R20><R21>0</R21><R22>1</R22></CoordinateFrame>
+        <Vector3 name="Size"><X>4</X><Y>2</Y><Z>6</Z></Vector3>
+        <Color3uint8 name="Color3uint8">2072766009</Color3uint8>
+        <bool name="Anchored">true</bool>
+        <bool name="CanCollide">true</bool>
+        <bool name="CastShadow">false</bool>
+        <token name="Material">528</token>
+        <token name="Shape">1</token>
+        <SharedString name="Tags">Xp9+1IrNPJ11i2LY/+DKKQ==</SharedString>
+      </Properties>
+      <Item class="Attachment" referent="RBX2">
+        <Properties>
+          <string name="Name">Source Attachment</string>
+          <CoordinateFrame name="CFrame"><X>0</X><Y>1</Y><Z>0</Z><R00>1</R00><R01>0</R01><R02>0</R02><R10>0</R10><R11>1</R11><R12>0</R12><R20>0</R20><R21>0</R21><R22>1</R22></CoordinateFrame>
+        </Properties>
+      </Item>
+      <Item class="Beam" referent="RBX3">
+        <Properties>
+          <string name="Name">Reference Beam</string>
+          <Ref name="Attachment0">RBX2</Ref>
+          <Ref name="Attachment1">RBX5</Ref>
+          <ColorSequence name="Color">0 1 0 0 0 1 0 0 1 0 </ColorSequence>
+          <NumberSequence name="Transparency">0 0 0 1 0.5 0 </NumberSequence>
+          <float name="Width0">0.25</float>
+          <float name="Width1">0.5</float>
+        </Properties>
+      </Item>
+      <Item class="WeldConstraint" referent="RBX4">
+        <Properties>
+          <string name="Name">Part Weld</string>
+          <Ref name="Part0">RBX1</Ref>
+          <Ref name="Part1">RBX6</Ref>
+          <bool name="Enabled">true</bool>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="WedgePart" referent="RBX6">
+      <Properties>
+        <string name="Name">Unsupported Wedge</string>
+        <CoordinateFrame name="CFrame"><X>8</X><Y>2</Y><Z>3</Z><R00>1</R00><R01>0</R01><R02>0</R02><R10>0</R10><R11>1</R11><R12>0</R12><R20>0</R20><R21>0</R21><R22>1</R22></CoordinateFrame>
+        <Vector3 name="Size"><X>2</X><Y>2</Y><Z>2</Z></Vector3>
+        <Color3uint8 name="Color3uint8">13395507</Color3uint8>
+        <bool name="Anchored">true</bool>
+        <token name="Material">1088</token>
+      </Properties>
+      <Item class="Attachment" referent="RBX5">
+        <Properties>
+          <string name="Name">Target Attachment</string>
+          <CoordinateFrame name="CFrame"><X>0</X><Y>1</Y><Z>0</Z><R00>1</R00><R01>0</R01><R02>0</R02><R10>0</R10><R11>1</R11><R12>0</R12><R20>0</R20><R21>0</R21><R22>1</R22></CoordinateFrame>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Part" referent="RBX9">
+      <Properties>
+        <string name="Name">Untouched Part</string>
+        <CoordinateFrame name="CFrame"><X>12.34567</X><Y>6.78901</Y><Z>-2.34567</Z><R00>1</R00><R01>0</R01><R02>0</R02><R10>0</R10><R11>1</R11><R12>0</R12><R20>0</R20><R21>0</R21><R22>1</R22></CoordinateFrame>
+        <Vector3 name="Size"><X>1.23456</X><Y>2.34567</Y><Z>3.45678</Z></Vector3>
+        <Color3uint8 name="Color3uint8">475519999</Color3uint8>
+        <bool name="Anchored">true</bool>
+        <bool name="CanCollide">false</bool>
+        <bool name="CastShadow">true</bool>
+        <token name="Material">784</token>
+        <token name="Shape">1</token>
+      </Properties>
+    </Item>
+    <Item class="MeshPart" referent="RBX7">
+      <Properties>
+        <string name="Name">Preserved Mesh</string>
+        <CoordinateFrame name="CFrame"><X>-6</X><Y>2</Y><Z>0</Z><R00>1</R00><R01>0</R01><R02>0</R02><R10>0</R10><R11>1</R11><R12>0</R12><R20>0</R20><R21>0</R21><R22>1</R22></CoordinateFrame>
+        <Vector3 name="Size"><X>3</X><Y>4</Y><Z>5</Z></Vector3>
+        <Content name="MeshId"><url>rbxassetid://456789</url></Content>
+        <Content name="TextureID"><url>rbxassetid://567890</url></Content>
+        <token name="Material">1088</token>
+      </Properties>
+    </Item>
+    <Item class="Terrain" referent="RBX8">
+      <Properties>
+        <string name="Name">Terrain</string>
+        <BinaryString name="SmoothGrid">AQIDBAUGBwg=</BinaryString>
+        <Color3 name="WaterColor"><R>0.1</R><G>0.4</G><B>0.8</B></Color3>
+        <float name="WaterTransparency">0.35</float>
+      </Properties>
+    </Item>
+  </Item>
+  <Item class="Lighting" referent="RBX20">
+    <Properties>
+      <string name="Name">Lighting</string>
+      <float name="Brightness">2.25</float>
+      <Color3 name="Ambient"><R>0.2</R><G>0.25</G><B>0.3</B></Color3>
+      <double name="ClockTime">14.5</double>
+    </Properties>
+    <Item class="Atmosphere" referent="RBX21">
+      <Properties>
+        <string name="Name">Haze</string>
+        <float name="Density">0.4</float>
+        <float name="Haze">1.5</float>
+      </Properties>
+    </Item>
+  </Item>
+  <Item class="ReplicatedStorage" referent="RBX30">
+    <Properties><string name="Name">ReplicatedStorage</string></Properties>
+    <Item class="ModuleScript" referent="RBX31">
+      <Properties>
+        <string name="Name">Shared Module</string>
+        <ProtectedString name="Source">return {answer = 42}</ProtectedString>
+      </Properties>
+    </Item>
+    <Item class="FutureWidget" referent="RBX32">
+      <Properties>
+        <string name="Name">Unknown Typed Object</string>
+        <Axes name="TestAxes"><axes>5</axes></Axes>
+        <BinaryString name="TestBinaryString">SGVsbG8sIHdvcmxkIQ==</BinaryString>
+        <bool name="TestBool">true</bool>
+        <ColorSequence name="TestColorSequence">0 0 0.5 1 0 1 1 0.5 0 0 </ColorSequence>
+        <double name="TestDouble">INF</double>
+        <Faces name="TestFaces"><faces>42</faces></Faces>
+        <float name="TestFloat">NAN</float>
+        <Font name="TestFont"><Family><url>rbxasset://fonts/families/SourceSansPro.json</url></Family><Weight>600</Weight><Style>Italic</Style><CachedFaceId><null></null></CachedFaceId></Font>
+        <int name="TestInt">1337</int>
+        <int64 name="TestInt64">8675309</int64>
+        <NumberRange name="TestNumberRange">-13 37</NumberRange>
+        <NumberSequence name="TestNumberSequence">0 10 20 1 30 40</NumberSequence>
+        <OptionalCoordinateFrame name="TestOptionalCFrame"><CFrame><X>10</X><Y>20</Y><Z>30</Z><R00>1</R00><R01>0</R01><R02>0</R02><R10>0</R10><R11>1</R11><R12>0</R12><R20>0</R20><R21>0</R21><R22>1</R22></CFrame></OptionalCoordinateFrame>
+        <PhysicalProperties name="TestPhysicalProperties"><CustomPhysics>true</CustomPhysics><Density>1</Density><Friction>0.5</Friction><Elasticity>0.25</Elasticity><FrictionWeight>50</FrictionWeight><ElasticityWeight>75</ElasticityWeight><AcousticAbsorption>0.1</AcousticAbsorption></PhysicalProperties>
+        <ProtectedString name="TestProtectedString">preserve &lt;this&gt; &amp; that</ProtectedString>
+        <Ray name="TestRay"><origin><X>10</X><Y>20</Y><Z>30</Z></origin><direction><X>30</X><Y>20</Y><Z>10</Z></direction></Ray>
+        <Rect2D name="TestRect"><min><X>1</X><Y>2</Y></min><max><X>3</X><Y>4</Y></max></Rect2D>
+        <Ref name="TestRef">RBX1</Ref>
+        <SecurityCapabilities name="TestSecurityCapabilities">123456789</SecurityCapabilities>
+        <SharedString name="TestSharedString">TestHash</SharedString>
+        <string name="TestString">Hello, world!</string>
+        <token name="TestEnum">1337</token>
+        <UDim name="TestUDim"><S>0.5</S><O>-12</O></UDim>
+        <UDim2 name="TestUDim2"><XS>0.5</XS><XO>10</XO><YS>0.75</YS><YO>20</YO></UDim2>
+        <UniqueId name="TestUniqueId">1234567890abcdef00c0ffeebadf00d0</UniqueId>
+        <Vector2 name="TestVector2"><X>12</X><Y>34</Y></Vector2>
+        <Vector3 name="TestVector3"><X>56</X><Y>78</Y><Z>90</Z></Vector3>
+        <Vector3int16 name="TestVector3int16"><X>-10</X><Y>0</Y><Z>10</Z></Vector3int16>
+      </Properties>
+    </Item>
+  </Item>
+  <Item class="ServerStorage" referent="RBX40">
+    <Properties><string name="Name">ServerStorage</string></Properties>
+    <Item class="StringValue" referent="RBX41"><Properties><string name="Name">Server Secret</string><string name="Value">preserve-server-storage</string></Properties></Item>
+  </Item>
+  <Item class="ServerScriptService" referent="RBX50">
+    <Properties><string name="Name">ServerScriptService</string></Properties>
+    <Item class="Script" referent="RBX51"><Properties><string name="Name">Server Bootstrap</string><ProtectedString name="Source">print("server")</ProtectedString></Properties></Item>
+  </Item>
+  <Item class="StarterGui" referent="RBX60">
+    <Properties><string name="Name">StarterGui</string></Properties>
+    <Item class="ScreenGui" referent="RBX61">
+      <Properties><string name="Name">HUD</string><bool name="Enabled">true</bool></Properties>
+      <Item class="Frame" referent="RBX62">
+        <Properties><string name="Name">Panel</string><UDim2 name="Position"><XS>0.5</XS><XO>-100</XO><YS>0.5</YS><YO>-50</YO></UDim2><UDim2 name="Size"><XS>0</XS><XO>200</XO><YS>0</YS><YO>100</YO></UDim2></Properties>
+        <Item class="TextLabel" referent="RBX63"><Properties><string name="Name">Status</string><string name="Text">Ready</string><bool name="TextScaled">true</bool><Color3 name="TextColor3"><R>1</R><G>1</G><B>1</B></Color3></Properties></Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="StarterPlayer" referent="RBX70">
+    <Properties><string name="Name">StarterPlayer</string><float name="CameraMaxZoomDistance">128</float></Properties>
+    <Item class="StarterPlayerScripts" referent="RBX71">
+      <Properties><string name="Name">StarterPlayerScripts</string></Properties>
+      <Item class="LocalScript" referent="RBX72"><Properties><string name="Name">Client Bootstrap</string><ProtectedString name="Source">print("client")</ProtectedString></Properties></Item>
+    </Item>
+  </Item>
+  <Item class="SoundService" referent="RBX80">
+    <Properties><string name="Name">SoundService</string><float name="DistanceFactor">3.33</float></Properties>
+    <Item class="Sound" referent="RBX81"><Properties><string name="Name">Music</string><Content name="SoundId"><url>rbxassetid://678901</url></Content><bool name="Looped">true</bool><float name="Volume">0.6</float></Properties></Item>
+  </Item>
+  <Item class="Teams" referent="RBX90">
+    <Properties><string name="Name">Teams</string></Properties>
+    <Item class="Team" referent="RBX91"><Properties><string name="Name">Builders</string><bool name="AutoAssignable">false</bool><int name="TeamColor">23</int></Properties></Item>
+  </Item>
+  <Item class="MaterialService" referent="RBX100">
+    <Properties><string name="Name">MaterialService</string><bool name="Use2022MaterialsXml">true</bool></Properties>
+  </Item>
+  <SharedStrings>
+    <SharedString md5="Xp9+1IrNPJ11i2LY/+DKKQ==">VGVzdFRhZw==</SharedString>
+    <SharedString md5="TestHash">SGVsbG8sIHdvcmxkIQ==</SharedString>
+  </SharedStrings>
+</roblox>

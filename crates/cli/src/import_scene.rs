@@ -1,7 +1,4 @@
 use super::*;
-use glam::{EulerRot, Mat3, Quat, Vec3};
-
-const WORKSPACE_ROOT: &str = "Workspace:Workspace[1]";
 
 pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String> {
     let mut reference = None;
@@ -164,13 +161,6 @@ pub(crate) fn import_roblox_scene_command(args: &[String]) -> Result<(), String>
             nodes: Vec::new(),
         }
     };
-    let parent_id = parent_id.or_else(|| {
-        scene
-            .nodes
-            .iter()
-            .find(|node| node.id == "imported-environment")
-            .map(|node| node.id.clone())
-    });
     let editable_parent_id = editable_parent_id.or_else(|| parent_id.clone());
     let mut promoted_instances = if let Some(path) = editable_instance_map {
         read_editable_instance_map(&path)?
@@ -394,7 +384,7 @@ fn select_promoted_primitives(
             continue;
         }
         selection.stats.source_parts += 1;
-        if !is_workspace_path(&geometry.path) {
+        if !cubacadabra_reference_import::is_roblox_workspace_path(reference, &geometry.path) {
             continue;
         }
         selection.stats.workspace_parts += 1;
@@ -450,53 +440,11 @@ fn record_fallback(
 }
 
 fn can_promote_part(geometry: &GeometryInstance) -> Result<(), &'static str> {
-    if geometry.class != "Part" {
-        return Err("unsupported-class");
-    }
-    // Roblox Enum.PartType uses Block = 1; missing Shape is treated as the
-    // ordinary Part default for older normalized fixtures.
-    if geometry.shape.is_some_and(|shape| shape != 1) {
-        return Err("unsupported-shape");
-    }
-    if geometry.mesh.is_some() {
-        return Err("unsupported-mesh");
-    }
-    if !geometry.anchored {
-        return Err("unsupported-dynamic");
-    }
-    if !source_rotation_is_axis_aligned(geometry.transform.rotation) {
-        return Err("unsupported-transform");
-    }
-    if geometry.transparency > 0.0001 {
-        return Err("unsupported-transparency");
-    }
-    if geometry.reflectance > 0.0001 {
-        return Err("unsupported-reflectance");
-    }
-    if geometry.material.name.as_deref().is_some_and(|name| {
-        !matches!(
-            name.to_ascii_lowercase().as_str(),
-            "plastic" | "smoothplastic"
-        ) && cubacadabra_reference_import::roblox_material_runtime_name(name).is_none()
-    }) {
-        return Err("unsupported-material");
-    }
-    if geometry
-        .size
-        .iter()
-        .any(|value| !value.is_finite() || *value < 0.05)
-    {
-        return Err("unsupported-size");
-    }
-    Ok(())
+    cubacadabra_reference_import::validate_roblox_native_part(geometry)
 }
 
 fn primitive_node_id(source_path: &str) -> String {
     format!("imported-part-{}", short_hash(source_path))
-}
-
-fn is_workspace_path(path: &str) -> bool {
-    path == WORKSPACE_ROOT || path.starts_with(&format!("{WORKSPACE_ROOT}/"))
 }
 
 fn write_promotion_report(path: &Path, stats: &PromotionStats) -> Result<(), String> {
@@ -925,30 +873,7 @@ fn native_group_hierarchy(
 }
 
 fn source_rotation_to_euler(rotation: [[f32; 3]; 3]) -> [f32; 3] {
-    let rotation = canonical_axis_rotation(rotation).unwrap_or(rotation);
-    let matrix = Mat3::from_cols(
-        Vec3::new(rotation[0][0], rotation[1][0], rotation[2][0]),
-        Vec3::new(rotation[0][1], rotation[1][1], rotation[2][1]),
-        Vec3::new(rotation[0][2], rotation[1][2], rotation[2][2]),
-    );
-    let (x, y, z) = Quat::from_mat3(&matrix).to_euler(EulerRot::XYZ);
-    [x, y, z]
-}
-
-fn canonical_axis_rotation(rotation: [[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
-    if !source_rotation_is_axis_aligned(rotation) {
-        return None;
-    }
-    let mut canonical = [[0.0; 3]; 3];
-    for (row_index, row) in rotation.iter().enumerate() {
-        let column_index = row
-            .iter()
-            .enumerate()
-            .max_by(|left, right| left.1.abs().total_cmp(&right.1.abs()))
-            .map(|(index, _)| index)?;
-        canonical[row_index][column_index] = row[column_index].signum();
-    }
-    Some(canonical)
+    cubacadabra_reference_import::roblox_source_rotation_to_euler(rotation)
 }
 
 fn source_yaw(rotation: [[f32; 3]; 3]) -> f32 {
@@ -965,31 +890,15 @@ fn source_color(color: [f32; 3]) -> String {
     )
 }
 
+#[cfg(test)]
 fn source_rotation_is_axis_aligned(rotation: [[f32; 3]; 3]) -> bool {
-    let tolerance = 0.0001;
-    let rows_are_axes = rotation.iter().all(|row| {
-        row.iter().filter(|value| value.abs() > tolerance).count() == 1
-            && row
-                .iter()
-                .all(|value| value.abs() <= tolerance || (value.abs() - 1.0).abs() <= tolerance)
-    });
-    let columns_are_axes = (0..3).all(|column| {
-        rotation
-            .iter()
-            .filter(|row| row[column].abs() > tolerance)
-            .count()
-            == 1
-    });
-    let determinant = rotation[0][0]
-        * (rotation[1][1] * rotation[2][2] - rotation[1][2] * rotation[2][1])
-        - rotation[0][1] * (rotation[1][0] * rotation[2][2] - rotation[1][2] * rotation[2][0])
-        + rotation[0][2] * (rotation[1][0] * rotation[2][1] - rotation[1][1] * rotation[2][0]);
-    rows_are_axes && columns_are_axes && (determinant - 1.0).abs() <= tolerance
+    cubacadabra_reference_import::roblox_source_rotation_is_axis_aligned(rotation)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glam::Mat3;
     use std::f32::consts::{FRAC_PI_2, PI};
 
     fn source_rows(matrix: Mat3) -> [[f32; 3]; 3] {
@@ -1176,6 +1085,8 @@ mod tests {
             output.to_str().unwrap(),
             "--source-index",
             source_index.to_str().unwrap(),
+            "--parent-id",
+            "imported-environment",
             "--promotion-report-output",
             report.to_str().unwrap(),
         ]

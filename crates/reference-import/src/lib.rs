@@ -4,6 +4,7 @@
 //! Cubacadabra package manifest. It preserves source facts first; package and
 //! renderer adaptation can then be measured against that stable artifact.
 
+use glam::{EulerRot, Mat3, Quat, Vec3};
 use rbx_dom_weak::types::{CFrame, Color3, ContentType, Matrix3, Variant, Vector3};
 use rbx_dom_weak::{Instance, WeakDom, types::Ref, ustr};
 use serde::{Deserialize, Serialize};
@@ -25,7 +26,7 @@ mod model;
 
 pub use authoring::{
     RobloxAuthoringImport, RobloxExportReport, import_roblox_authoring_scene, roblox_source_file,
-    write_roblox_place,
+    roblox_source_files, write_roblox_place,
 };
 pub use importer::{import_reference, load_reference, read_reference_scene};
 #[cfg(test)]
@@ -34,6 +35,107 @@ pub(crate) use mesh_export::{
 };
 pub use mesh_export::{export_reference_mesh, roblox_material_runtime_name};
 pub use model::*;
+
+/// Validate the deliberately narrow Roblox Part subset that can become a
+/// native Cubacadabra primitive without inventing runtime semantics.
+pub fn validate_roblox_native_part(geometry: &GeometryInstance) -> Result<(), &'static str> {
+    if geometry.class != "Part" {
+        return Err("unsupported-class");
+    }
+    if geometry.shape.is_some_and(|shape| shape != 1) {
+        return Err("unsupported-shape");
+    }
+    if geometry.mesh.is_some() {
+        return Err("unsupported-mesh");
+    }
+    if !geometry.anchored {
+        return Err("unsupported-dynamic");
+    }
+    if !roblox_source_rotation_is_axis_aligned(geometry.transform.rotation) {
+        return Err("unsupported-transform");
+    }
+    if geometry.transparency > 0.0001 {
+        return Err("unsupported-transparency");
+    }
+    if geometry.reflectance > 0.0001 {
+        return Err("unsupported-reflectance");
+    }
+    if geometry.material.name.as_deref().is_some_and(|name| {
+        !matches!(
+            name.to_ascii_lowercase().as_str(),
+            "plastic" | "smoothplastic"
+        ) && roblox_material_runtime_name(name).is_none()
+    }) {
+        return Err("unsupported-material");
+    }
+    if geometry
+        .size
+        .iter()
+        .any(|value| !value.is_finite() || *value < 0.05)
+    {
+        return Err("unsupported-size");
+    }
+    Ok(())
+}
+
+pub fn is_roblox_workspace_path(scene: &ReferenceScene, path: &str) -> bool {
+    scene
+        .instances
+        .iter()
+        .filter(|instance| instance.class == "Workspace")
+        .any(|workspace| {
+            path == workspace.path || path.starts_with(&format!("{}/", workspace.path))
+        })
+}
+
+pub fn roblox_source_rotation_is_axis_aligned(rotation: [[f32; 3]; 3]) -> bool {
+    let tolerance = 0.0001;
+    let rows_are_axes = rotation.iter().all(|row| {
+        row.iter().filter(|value| value.abs() > tolerance).count() == 1
+            && row
+                .iter()
+                .all(|value| value.abs() <= tolerance || (value.abs() - 1.0).abs() <= tolerance)
+    });
+    let columns_are_axes = (0..3).all(|column| {
+        rotation
+            .iter()
+            .filter(|row| row[column].abs() > tolerance)
+            .count()
+            == 1
+    });
+    let determinant = rotation[0][0]
+        * (rotation[1][1] * rotation[2][2] - rotation[1][2] * rotation[2][1])
+        - rotation[0][1] * (rotation[1][0] * rotation[2][2] - rotation[1][2] * rotation[2][0])
+        + rotation[0][2] * (rotation[1][0] * rotation[2][1] - rotation[1][1] * rotation[2][0]);
+    rows_are_axes && columns_are_axes && (determinant - 1.0).abs() <= tolerance
+}
+
+pub fn roblox_source_rotation_to_euler(rotation: [[f32; 3]; 3]) -> [f32; 3] {
+    let rotation = canonical_axis_rotation(rotation).unwrap_or(rotation);
+    let matrix = Mat3::from_cols(
+        Vec3::new(rotation[0][0], rotation[1][0], rotation[2][0]),
+        Vec3::new(rotation[0][1], rotation[1][1], rotation[2][1]),
+        Vec3::new(rotation[0][2], rotation[1][2], rotation[2][2]),
+    );
+    let (x, y, z) = Quat::from_mat3(&matrix).to_euler(EulerRot::XYZ);
+    [x, y, z]
+}
+
+fn canonical_axis_rotation(rotation: [[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
+    if !roblox_source_rotation_is_axis_aligned(rotation) {
+        return None;
+    }
+    let mut canonical = [[0.0; 3]; 3];
+    for (row_index, row) in rotation.iter().enumerate() {
+        let column_index = row
+            .iter()
+            .enumerate()
+            .max_by(|left, right| left.1.abs().total_cmp(&right.1.abs()))
+            .map(|(index, _)| index)?;
+        canonical[row_index][column_index] = row[column_index].signum();
+    }
+    Some(canonical)
+}
 
 /// Infer the stable local frame for a source model from its first descendant
 /// geometry. Roblox models in the normalized reference often have no CFrame of
