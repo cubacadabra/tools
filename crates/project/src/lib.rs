@@ -159,18 +159,121 @@ fn starter_scene() -> serde_json::Value {
     json!({
         "formatVersion": 1,
         "worldId": "starter-world",
-        "nodes": [{
-            "id": "world-starter-world",
-            "name": "Starter World",
+        "nodes": starter_scene_nodes()
+    })
+}
+
+const STARTER_CUBE_SIZE: f32 = 2.0;
+const STARTER_CUBE_SPACING: f32 = 2.25;
+const STARTER_FACE_Z: f32 = 1.03;
+const STARTER_STROKE_DEPTH: f32 = 0.06;
+const STARTER_STROKE_THICKNESS: f32 = 0.08;
+
+// Each tile is one character of "CUBACADABRA". The marks intentionally use
+// the edges of the square as part of the glyph, matching the supplied block
+// lettering reference.
+const STARTER_GLYPHS: &[&[[f32; 4]]] = &[
+    &[[0.25, 0.0, 1.5, STARTER_STROKE_THICKNESS]],
+    &[[0.15, 0.55, STARTER_STROKE_THICKNESS, 0.9]],
+    &[
+        [-0.3, 0.4, 0.35, STARTER_STROKE_THICKNESS],
+        [-0.3, -0.4, 0.35, STARTER_STROKE_THICKNESS],
+        [0.75, 0.0, 0.5, STARTER_STROKE_THICKNESS],
+    ],
+    &[
+        [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
+        [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
+    ],
+    &[[0.25, 0.0, 1.5, STARTER_STROKE_THICKNESS]],
+    &[
+        [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
+        [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
+    ],
+    &[[0.0, 0.0, STARTER_STROKE_THICKNESS, 1.0]],
+    &[
+        [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
+        [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
+    ],
+    &[
+        [-0.3, 0.4, 0.35, STARTER_STROKE_THICKNESS],
+        [-0.3, -0.4, 0.35, STARTER_STROKE_THICKNESS],
+        [0.75, 0.0, 0.5, STARTER_STROKE_THICKNESS],
+    ],
+    &[
+        [-0.3, 0.4, 0.35, STARTER_STROKE_THICKNESS],
+        [0.75, 0.0, 0.5, STARTER_STROKE_THICKNESS],
+        [-0.05, -0.38, 0.08, 0.28],
+        [0.05, -0.63, 0.08, 0.24],
+        [0.15, -0.84, 0.08, 0.18],
+    ],
+    &[
+        [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
+        [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
+    ],
+];
+
+fn starter_scene_nodes() -> Vec<serde_json::Value> {
+    let mut nodes = vec![json!({
+        "id": "world-starter-world",
+        "name": "Starter World",
+        "transform": {
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0],
+            "scale": [1, 1, 1]
+        },
+        "components": {},
+        "editor": { "visible": true, "locked": false }
+    })];
+
+    for (cube_index, glyph) in STARTER_GLYPHS.iter().enumerate() {
+        let cube_number = cube_index + 1;
+        let cube_id = format!("starter-cube-{cube_number}");
+        let cube_x = (cube_index as f32 - 5.0) * STARTER_CUBE_SPACING;
+        nodes.push(json!({
+            "id": cube_id,
+            "parentId": "world-starter-world",
+            "name": format!("Letter Cube {cube_number}"),
             "transform": {
-                "position": [0, 0, 0],
+                "position": [cube_x, STARTER_CUBE_SIZE / 2.0, 0],
                 "rotation": [0, 0, 0],
                 "scale": [1, 1, 1]
             },
-            "components": {},
+            "components": {
+                "primitive": {
+                    "shape": "box",
+                    "size": [STARTER_CUBE_SIZE, STARTER_CUBE_SIZE, STARTER_CUBE_SIZE],
+                    "color": "paper"
+                }
+            },
             "editor": { "visible": true, "locked": false }
-        }]
-    })
+        }));
+
+        for (stroke_index, [x, y, width, height]) in glyph.iter().copied().enumerate() {
+            nodes.push(json!({
+                "id": format!("{cube_id}-stroke-{}", stroke_index + 1),
+                "parentId": cube_id,
+                "name": format!("Letter {cube_number} Stroke {}", stroke_index + 1),
+                "transform": {
+                    "position": [x, y, STARTER_FACE_Z],
+                    "rotation": [0, 0, 0],
+                    "scale": [1, 1, 1]
+                },
+                "components": {
+                    "primitive": {
+                        "shape": "box",
+                        "size": [width, height, STARTER_STROKE_DEPTH],
+                        "color": "ink",
+                        "collidable": false,
+                        "castShadow": false,
+                        "outline": false
+                    }
+                },
+                "editor": { "visible": true, "locked": false }
+            }));
+        }
+    }
+
+    nodes
 }
 
 fn manifest(title: &str, game_id: &str) -> serde_json::Value {
