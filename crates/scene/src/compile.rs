@@ -1,5 +1,5 @@
 use crate::transforms::{
-    affine_transform, axis_aligned_runtime_size, runtime_ladder_axis,
+    affine_transform, axis_aligned_runtime_size, primitive_runtime_geometry, runtime_ladder_axis,
     runtime_mesh_transform_is_lossless, uniform_runtime_scale,
 };
 use crate::validation::{component_error, copy_component_value, vector_value};
@@ -85,9 +85,10 @@ impl AuthoringScene {
                     .get("size")
                     .and_then(vector_value)
                     .ok_or_else(|| component_error(node, "primitive requires a size"))?;
-                let size = axis_aligned_runtime_size(world, size).map_err(|message| {
-                    component_error(node, &format!("primitive transform {message}"))
-                })?;
+                let (size, rotation) =
+                    primitive_runtime_geometry(world, size).map_err(|message| {
+                        component_error(node, &format!("primitive transform {message}"))
+                    })?;
                 let mut block = json!({
                     "id": primitive
                         .get("runtimeId")
@@ -104,6 +105,12 @@ impl AuthoringScene {
                         .and_then(Value::as_bool)
                         .unwrap_or(true),
                 });
+                if rotation.iter().any(|value| value.abs() > 0.0001) {
+                    block
+                        .as_object_mut()
+                        .expect("primitive block is an object")
+                        .insert("rotation".to_owned(), json!(rotation));
+                }
                 let canonical_appearance = primitive.contains_key("color");
                 if let Some(color) = primitive.get("color").or_else(|| {
                     (!canonical_appearance)

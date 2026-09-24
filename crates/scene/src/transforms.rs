@@ -380,6 +380,33 @@ pub(crate) fn axis_aligned_runtime_size(
     Ok(world_size)
 }
 
+/// Resolve a primitive box while preserving its authored rotation. Renderable
+/// primitives can be thin strokes, so unlike collision-only volumes they do
+/// not need to be flattened to an axis-aligned runtime box.
+pub(crate) fn primitive_runtime_geometry(
+    transform: Affine3A,
+    local_size: [f32; 3],
+) -> Result<([f32; 3], [f32; 3]), &'static str> {
+    // Keep the compact legacy representation for axis-aligned rotations. In
+    // particular, this avoids Euler decomposition ambiguity at 90-degree
+    // imported-Part orientations while preserving their exact dimensions.
+    if let Ok(size) = axis_aligned_runtime_size(transform, local_size) {
+        return Ok((size, [0.0; 3]));
+    }
+    if !runtime_mesh_transform_is_lossless(transform) {
+        return Err("contains shear and cannot compile losslessly");
+    }
+    let world = affine_transform(transform);
+    Ok((
+        [
+            local_size[0] * world.scale[0],
+            local_size[1] * world.scale[1],
+            local_size[2] * world.scale[2],
+        ],
+        world.rotation,
+    ))
+}
+
 pub(crate) fn uniform_runtime_scale(transform: Affine3A) -> Result<f32, &'static str> {
     if !runtime_mesh_transform_is_lossless(transform) {
         return Err("contains shear and cannot compile losslessly");

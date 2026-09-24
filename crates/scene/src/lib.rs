@@ -402,22 +402,29 @@ mod tests {
     }
 
     #[test]
-    fn primitive_box_rejects_non_axis_aligned_rotation_and_shear() {
+    fn primitive_box_preserves_rotation_and_rejects_shear() {
         let mut rotated = node("rotated", None);
-        rotated.transform.rotation[1] = 0.25;
+        rotated.transform.rotation[2] = 0.25;
         rotated.components.insert(
             "primitive".to_owned(),
             json!({ "shape": "box", "size": [4.0, 1.0, 4.0] }),
         );
         let mut manifest = json!({ "startWorld": "world", "worlds": { "world": {} } });
-        let error = AuthoringScene {
+        AuthoringScene {
             format_version: 1,
             world_id: Some("world".to_owned()),
             nodes: vec![rotated],
         }
         .compile_into_manifest(&mut manifest)
-        .unwrap_err();
-        assert!(error.contains("non-axis-aligned rotation"));
+        .unwrap();
+        assert_eq!(
+            manifest["worlds"]["world"]["blocks"][0]["size"],
+            json!([4.0, 1.0, 4.0])
+        );
+        let rotation = manifest["worlds"]["world"]["blocks"][0]["rotation"][2]
+            .as_f64()
+            .unwrap();
+        assert!((rotation - 0.25).abs() < 0.00001);
 
         let mut parent = node("parent", None);
         parent.transform.scale = [2.0, 1.0, 1.0];

@@ -172,61 +172,75 @@ const STARTER_STROKE_THICKNESS: f32 = 0.08;
 const STARTER_CUBE_COLOR: &str = "#F7F5E9";
 const STARTER_STROKE_COLOR: &str = "#0B102B";
 
+#[derive(Clone, Copy)]
+struct StarterStroke {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    rotation: f32,
+}
+
+const fn stroke(x: f32, y: f32, width: f32, height: f32) -> StarterStroke {
+    StarterStroke {
+        x,
+        y,
+        width,
+        height,
+        rotation: 0.0,
+    }
+}
+
+const fn rotated_stroke(x: f32, y: f32, width: f32, height: f32, rotation: f32) -> StarterStroke {
+    StarterStroke {
+        x,
+        y,
+        width,
+        height,
+        rotation,
+    }
+}
+
 // Each tile is one character of "CUBACADABRA". The marks intentionally use
 // the edges of the square as part of the glyph, matching the supplied block
 // lettering reference.
-const STARTER_GLYPHS: &[&[[f32; 4]]] = &[
-    &[[0.5, 0.0, 1.0, STARTER_STROKE_THICKNESS]],
-    &[[0.15, 0.55, STARTER_STROKE_THICKNESS, 0.9]],
+const STARTER_GLYPHS: &[&[StarterStroke]] = &[
+    &[stroke(0.5, 0.0, 1.0, STARTER_STROKE_THICKNESS)],
+    &[stroke(0.15, 0.55, STARTER_STROKE_THICKNESS, 0.9)],
     &[
-        [0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS],
-        [0.0, -0.4, 0.3, STARTER_STROKE_THICKNESS],
-        [0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS],
+        stroke(0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS),
+        stroke(0.0, -0.4, 0.3, STARTER_STROKE_THICKNESS),
+        stroke(0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS),
     ],
     &[
-        [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
-        [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
+        stroke(0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9),
+        stroke(0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9),
     ],
-    &[[0.5, 0.0, 1.0, STARTER_STROKE_THICKNESS]],
+    &[stroke(0.5, 0.0, 1.0, STARTER_STROKE_THICKNESS)],
     &[
-        [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
-        [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
+        stroke(0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9),
+        stroke(0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9),
     ],
-    &[[0.0, 0.0, STARTER_STROKE_THICKNESS, 0.85]],
+    &[stroke(0.0, 0.0, STARTER_STROKE_THICKNESS, 0.85)],
     &[
-        [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
-        [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
-    ],
-    &[
-        [0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS],
-        [0.0, -0.4, 0.3, STARTER_STROKE_THICKNESS],
-        [0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS],
+        stroke(0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9),
+        stroke(0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9),
     ],
     &[
-        [0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS],
-        [0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS],
-        // Primitive blocks are axis-aligned in the runtime package, so use
-        // overlapping, fine-grained segments for the one diagonal mark. The
-        // overlap removes visible steps at the camera distance used by the
-        // starter world while keeping the source package portable.
-        [-0.04, -0.30, 0.07, 0.10],
-        [-0.03, -0.35, 0.07, 0.10],
-        [-0.01, -0.40, 0.07, 0.10],
-        [0.00, -0.45, 0.07, 0.10],
-        [0.02, -0.50, 0.07, 0.10],
-        [0.04, -0.55, 0.07, 0.10],
-        [0.05, -0.60, 0.07, 0.10],
-        [0.07, -0.65, 0.07, 0.10],
-        [0.08, -0.70, 0.07, 0.10],
-        [0.10, -0.75, 0.07, 0.10],
-        [0.12, -0.80, 0.07, 0.10],
-        [0.13, -0.85, 0.07, 0.10],
-        [0.15, -0.90, 0.07, 0.10],
-        [0.16, -0.95, 0.07, 0.10],
+        stroke(0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS),
+        stroke(0.0, -0.4, 0.3, STARTER_STROKE_THICKNESS),
+        stroke(0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS),
     ],
     &[
-        [0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9],
-        [0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9],
+        stroke(0.0, 0.4, 0.3, STARTER_STROKE_THICKNESS),
+        stroke(0.85, 0.0, 0.3, STARTER_STROKE_THICKNESS),
+        // Roblox-style thin Parts can rotate freely in the plane. This is
+        // one exact diagonal stroke instead of a stair-step approximation.
+        rotated_stroke(0.06, -0.62, 0.08, 0.78, -0.34),
+    ],
+    &[
+        stroke(0.0, 0.55, STARTER_STROKE_THICKNESS, 0.9),
+        stroke(0.0, -0.55, STARTER_STROKE_THICKNESS, 0.9),
     ],
 ];
 
@@ -266,20 +280,20 @@ fn starter_scene_nodes() -> Vec<serde_json::Value> {
             "editor": { "visible": true, "locked": false }
         }));
 
-        for (stroke_index, [x, y, width, height]) in glyph.iter().copied().enumerate() {
+        for (stroke_index, stroke) in glyph.iter().copied().enumerate() {
             nodes.push(json!({
                 "id": format!("{cube_id}-stroke-{}", stroke_index + 1),
                 "parentId": cube_id,
                 "name": format!("Letter {cube_number} Stroke {}", stroke_index + 1),
                 "transform": {
-                    "position": [x, y, STARTER_FACE_Z],
-                    "rotation": [0, 0, 0],
+                    "position": [stroke.x, stroke.y, STARTER_FACE_Z],
+                    "rotation": [0, 0, stroke.rotation],
                     "scale": [1, 1, 1]
                 },
                 "components": {
                     "primitive": {
                         "shape": "box",
-                        "size": [width, height, STARTER_STROKE_DEPTH],
+                        "size": [stroke.width, stroke.height, STARTER_STROKE_DEPTH],
                         "color": STARTER_STROKE_COLOR,
                         "collidable": false,
                         "castShadow": false,
