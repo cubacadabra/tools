@@ -23,10 +23,11 @@ cargo install --path crates/cli --locked
 ## Native macOS releases
 
 The reusable native release workflow signs macOS app bundles with a Developer
-ID Application certificate, enables the hardened runtime, submits the signed
-bundle to Apple's notary service, staples the ticket, and verifies the result
-with Gatekeeper before publishing it. Calling repositories must pass these
-organization secrets with `secrets: inherit`:
+ID Application certificate, enables the hardened runtime, and publishes a
+signed, notarized `.dmg` with an Applications shortcut for drag-to-install.
+It also staples and verifies the app and disk-image tickets with Gatekeeper
+before publishing. Calling repositories must pass these organization secrets
+with `secrets: inherit`:
 
 - `MACOS_DEVELOPER_ID_P12`: base64-encoded `.p12` export containing the
   Developer ID Application certificate and private key

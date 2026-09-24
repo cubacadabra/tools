@@ -223,13 +223,15 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           app_bundle="${DISPLAY_NAME}.app"
           app_root="staging/${app_bundle}"
-          archive="${ARCHIVE_PREFIX}-${GITHUB_REF_NAME}-macos-${ARCH}.zip"
-          notarization_archive="${RUNNER_TEMP}/${ARCHIVE_PREFIX}-notarization.zip"
+          archive="${ARCHIVE_PREFIX}-${GITHUB_REF_NAME}-macos-${ARCH}.dmg"
+          app_notarization_archive="${RUNNER_TEMP}/${ARCHIVE_PREFIX}-app-notarization.zip"
           notary_key="${RUNNER_TEMP}/AuthKey_${APPLE_NOTARY_KEY_ID}.p8"
-          trap 'rm -f "${notary_key}" "${notarization_archive}"' EXIT
+          dmg_root="staging/${ARCHIVE_PREFIX}-${GITHUB_REF_NAME}-macos-${ARCH}"
+          trap 'rm -f "${notary_key}" "${app_notarization_archive}"' EXIT
           printf '%s' "${APPLE_NOTARY_KEY_P8}" > "${notary_key}"
           chmod 600 "${notary_key}"
 
+          rm -rf "${app_root}" "${dmg_root}"
           mkdir -p "${app_root}/Contents/MacOS" "${app_root}/Contents/Resources" dist
           cp "${APP_DIRECTORY}/target/${TARGET}/release/${BINARY_NAME}" "${app_root}/Contents/MacOS/${BINARY_NAME}"
           cp rust/assets/images/logo.png "${app_root}/Contents/Resources/logo.png"
@@ -261,8 +263,8 @@ jobs:
             "${app_root}"
           codesign --verify --deep --strict --verbose=2 "${app_root}"
 
-          ditto -c -k --sequesterRsrc --keepParent "${app_root}" "${notarization_archive}"
-          xcrun notarytool submit "${notarization_archive}" \
+          ditto -c -k --sequesterRsrc --keepParent "${app_root}" "${app_notarization_archive}"
+          xcrun notarytool submit "${app_notarization_archive}" \
             --key "${notary_key}" \
             --key-id "${APPLE_NOTARY_KEY_ID}" \
             --issuer "${APPLE_NOTARY_ISSUER_ID}" \
@@ -272,7 +274,37 @@ jobs:
           xcrun stapler validate "${app_root}"
           spctl --assess --type execute --verbose=2 "${app_root}"
 
-          ditto -c -k --sequesterRsrc --keepParent "${app_root}" "dist/${archive}"
+          # A DMG with an Applications shortcut gives users the expected
+          # drag-to-install flow. The app and the disk image are both signed;
+          # the image is notarized as the artifact that gets distributed.
+          mkdir -p "${dmg_root}"
+          ditto "${app_root}" "${dmg_root}/${app_bundle}"
+          ln -s /Applications "${dmg_root}/Applications"
+          if command -v SetFile >/dev/null 2>&1; then
+            cp "${app_root}/Contents/Resources/logo.icns" "${dmg_root}/.VolumeIcon.icns"
+            SetFile -a C "${dmg_root}"
+          fi
+
+          hdiutil create \
+            -volname "${DISPLAY_NAME}" \
+            -srcfolder "${dmg_root}" \
+            -ov \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            "dist/${archive}"
+          codesign --force --timestamp \
+            --sign "${MACOS_SIGNING_IDENTITY}" \
+            "dist/${archive}"
+          codesign --verify --verbose=2 "dist/${archive}"
+          xcrun notarytool submit "dist/${archive}" \
+            --key "${notary_key}" \
+            --key-id "${APPLE_NOTARY_KEY_ID}" \
+            --issuer "${APPLE_NOTARY_ISSUER_ID}" \
+            --wait \
+            --timeout 30m
+          xcrun stapler staple "dist/${archive}"
+          xcrun stapler validate "dist/${archive}"
+          spctl --assess --type open --verbose=2 "dist/${archive}"
 
       - name: Package Windows application
         if: matrix.platform == 'windows'
