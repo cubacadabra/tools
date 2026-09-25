@@ -278,17 +278,22 @@ fn merge_reference(
             .get(&geometry.parent_path)
             .cloned()
             .unwrap_or_else(|| import_root_id.clone());
+        let shape = if geometry.shape == Some(0) {
+            "sphere"
+        } else {
+            "box"
+        };
         let mut components = BTreeMap::from([(
             "primitive".to_owned(),
             json!({
-                "shape": "box",
+                "shape": shape,
                 "size": geometry.size,
                 "color": source_color(geometry.color),
                 "collidable": geometry.can_collide,
                 "castShadow": geometry.cast_shadow,
             }),
         )]);
-        if geometry.can_collide {
+        if geometry.can_collide && shape == "box" {
             components.insert("collision".to_owned(), json!({"kind": "box"}));
         }
         let source_property = |name: &str| {
@@ -1236,29 +1241,31 @@ fn part_builder(
         },
         None => 256,
     };
-    Some(
-        InstanceBuilder::new("Part")
-            .with_name(&node.name)
-            .with_property("CFrame", cframe(world))
-            .with_property("Size", Vector3::new(size[0], size[1], size[2]))
-            .with_property("Color", Color3::new(color[0], color[1], color[2]))
-            .with_property("Anchored", true)
-            .with_property(
-                "CanCollide",
-                primitive
-                    .get("collidable")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(true),
-            )
-            .with_property(
-                "CastShadow",
-                primitive
-                    .get("castShadow")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(true),
-            )
-            .with_property("Material", Enum::from_u32(material)),
-    )
+    let mut part = InstanceBuilder::new("Part")
+        .with_name(&node.name)
+        .with_property("CFrame", cframe(world))
+        .with_property("Size", Vector3::new(size[0], size[1], size[2]))
+        .with_property("Color", Color3::new(color[0], color[1], color[2]))
+        .with_property("Anchored", true)
+        .with_property(
+            "CanCollide",
+            primitive
+                .get("collidable")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        )
+        .with_property(
+            "CastShadow",
+            primitive
+                .get("castShadow")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        )
+        .with_property("Material", Enum::from_u32(material));
+    if primitive.get("shape").and_then(Value::as_str) == Some("sphere") {
+        part = part.with_property("Shape", Enum::from_u32(0));
+    }
+    Some(part)
 }
 
 fn cframe(world: &cubacadabra_scene::AuthoringWorldTransform) -> CFrame {
@@ -1774,6 +1781,76 @@ mod tests {
         let encoded = serialize_authoring_scene(&imported.scene).unwrap();
         assert!(encoded.contains("Preserved Roblox Source"));
         assert!(encoded.contains("roblox-part-"));
+    }
+
+    #[test]
+    fn imports_unanchored_block_and_sphere_as_static_preview_geometry() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("dynamic-shapes.rbxlx");
+        let dynamic = PLACE.replace(
+            "<bool name=\"Anchored\">true</bool>",
+            "<bool name=\"Anchored\">false</bool>",
+        );
+        let sphere = r#"<Item class="Part" referent="RBX4">
+        <Properties>
+          <string name="Name">Sphere</string>
+          <CoordinateFrame name="CFrame"><X>8</X><Y>2</Y><Z>3</Z><R00>1</R00><R01>0</R01><R02>0</R02><R10>0</R10><R11>1</R11><R12>0</R12><R20>0</R20><R21>0</R21><R22>1</R22></CoordinateFrame>
+          <Vector3 name="Size"><X>4</X><Y>4</Y><Z>4</Z></Vector3>
+          <Color3 name="Color"><R>0</R><G>1</G><B>0</B></Color3>
+          <bool name="Anchored">false</bool><bool name="CanCollide">true</bool>
+          <token name="Material">256</token><token name="Shape">0</token>
+        </Properties>
+      </Item>
+      <Item class="ParticleEmitter""#;
+        fs::write(
+            &source,
+            dynamic.replace("<Item class=\"ParticleEmitter\"", sphere),
+        )
+        .unwrap();
+        let imported =
+            import_roblox_authoring_scene(&source, &base_scene(), "imports/roblox/source.rbxlx")
+                .unwrap();
+        assert_eq!(imported.editable_parts, 2);
+        let sphere = imported
+            .scene
+            .nodes
+            .iter()
+            .find(|node| node.name == "Sphere")
+            .unwrap();
+        assert_eq!(sphere.components["primitive"]["shape"], "sphere");
+        assert_eq!(
+            sphere.source.as_ref().unwrap().properties["sourceAnchored"],
+            false
+        );
+        let mut manifest = json!({
+            "id": "test", "version": "0.1.0", "sdkVersion": "0.3.0",
+            "launch": {"destinationWorld": "world"}, "worlds": {"world": {}}
+        });
+        imported.scene.compile_into_manifest(&mut manifest).unwrap();
+        assert_eq!(
+            manifest["worlds"]["world"]["blocks"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            manifest["worlds"]["world"]["decorations"][0]["kind"],
+            "sphere"
+        );
+        let output = temp.path().join("export.rbxlx");
+        write_roblox_place_with_manifest(&imported.scene, &manifest, Some(&source), &output)
+            .unwrap();
+        let exported = decode_xml(&output).unwrap();
+        let sphere = named_instance(&exported, "Sphere");
+        assert!(matches!(
+            sphere.properties.get(&ustr("Shape")).or_else(|| sphere.properties.get(&ustr("shape"))),
+            Some(Variant::Enum(shape)) if shape.to_u32() == 0
+        ));
+        assert!(matches!(
+            sphere.properties.get(&ustr("Anchored")),
+            Some(Variant::Bool(false))
+        ));
     }
 
     #[test]

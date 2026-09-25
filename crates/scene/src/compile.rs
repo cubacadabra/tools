@@ -85,60 +85,80 @@ impl AuthoringScene {
                     .get("size")
                     .and_then(vector_value)
                     .ok_or_else(|| component_error(node, "primitive requires a size"))?;
-                let (size, rotation) =
-                    primitive_runtime_geometry(world, size).map_err(|message| {
-                        component_error(node, &format!("primitive transform {message}"))
-                    })?;
-                let mut block = json!({
-                    "id": primitive
-                        .get("runtimeId")
-                        .and_then(Value::as_str)
-                        .unwrap_or(&node.id),
-                    "position": world_transform.position,
-                    "size": size,
-                    "collidable": primitive
-                        .get("collidable")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(true),
-                    "castShadow": primitive
-                        .get("castShadow")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(true),
-                });
-                if rotation.iter().any(|value| value.abs() > 0.0001) {
-                    block
-                        .as_object_mut()
-                        .expect("primitive block is an object")
-                        .insert("rotation".to_owned(), json!(rotation));
-                }
-                let canonical_appearance = primitive.contains_key("color");
-                if let Some(color) = primitive.get("color").or_else(|| {
-                    (!canonical_appearance)
-                        .then(|| primitive.get("material"))
-                        .flatten()
-                }) {
-                    block
-                        .as_object_mut()
-                        .expect("primitive block is an object")
-                        .insert("color".to_owned(), color.clone());
-                }
-                let surface_material = if canonical_appearance {
-                    primitive.get("material")
+                if primitive.get("shape").and_then(Value::as_str) == Some("sphere") {
+                    let diameter = size[0] * world_transform.scale[0];
+                    if size
+                        .iter()
+                        .zip(world_transform.scale)
+                        .any(|(size, scale)| (size * scale - diameter).abs() > 0.0001)
+                    {
+                        return Err(component_error(
+                            node,
+                            "sphere primitive world size must be uniform",
+                        ));
+                    }
+                    decorations.push(json!({
+                        "kind": "sphere",
+                        "position": world_transform.position,
+                        "scale": diameter,
+                        "color": primitive.get("color").cloned().unwrap_or_else(|| json!("#FFFFFF")),
+                    }));
                 } else {
-                    primitive.get("runtimeMaterial")
-                };
-                if let Some(material) = surface_material {
-                    block
-                        .as_object_mut()
-                        .expect("primitive block is an object")
-                        .insert("material".to_owned(), material.clone());
+                    let (size, rotation) =
+                        primitive_runtime_geometry(world, size).map_err(|message| {
+                            component_error(node, &format!("primitive transform {message}"))
+                        })?;
+                    let mut block = json!({
+                        "id": primitive
+                            .get("runtimeId")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&node.id),
+                        "position": world_transform.position,
+                        "size": size,
+                        "collidable": primitive
+                            .get("collidable")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true),
+                        "castShadow": primitive
+                            .get("castShadow")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true),
+                    });
+                    if rotation.iter().any(|value| value.abs() > 0.0001) {
+                        block
+                            .as_object_mut()
+                            .expect("primitive block is an object")
+                            .insert("rotation".to_owned(), json!(rotation));
+                    }
+                    let canonical_appearance = primitive.contains_key("color");
+                    if let Some(color) = primitive.get("color").or_else(|| {
+                        (!canonical_appearance)
+                            .then(|| primitive.get("material"))
+                            .flatten()
+                    }) {
+                        block
+                            .as_object_mut()
+                            .expect("primitive block is an object")
+                            .insert("color".to_owned(), color.clone());
+                    }
+                    let surface_material = if canonical_appearance {
+                        primitive.get("material")
+                    } else {
+                        primitive.get("runtimeMaterial")
+                    };
+                    if let Some(material) = surface_material {
+                        block
+                            .as_object_mut()
+                            .expect("primitive block is an object")
+                            .insert("material".to_owned(), material.clone());
+                    }
+                    copy_component_value(
+                        primitive,
+                        block.as_object_mut().expect("primitive block is an object"),
+                        "outline",
+                    );
+                    blocks.push(block);
                 }
-                copy_component_value(
-                    primitive,
-                    block.as_object_mut().expect("primitive block is an object"),
-                    "outline",
-                );
-                blocks.push(block);
             }
             if let Some(render) = node.components.get("render") {
                 let render = render

@@ -36,20 +36,25 @@ pub(crate) use mesh_export::{
 pub use mesh_export::{export_reference_mesh, roblox_material_runtime_name};
 pub use model::*;
 
-/// Validate the deliberately narrow Roblox Part subset that can become a
-/// native Cubacadabra primitive without inventing runtime semantics.
+/// Validate the Roblox Part subset that can receive a native static visual
+/// representation. Source physics remains in the preserved Roblox place.
 pub fn validate_roblox_native_part(geometry: &GeometryInstance) -> Result<(), &'static str> {
     if geometry.class != "Part" {
         return Err("unsupported-class");
     }
-    if geometry.shape.is_some_and(|shape| shape != 1) {
+    if geometry.shape.is_some_and(|shape| !matches!(shape, 0 | 1)) {
         return Err("unsupported-shape");
+    }
+    if geometry.shape == Some(0)
+        && geometry
+            .size
+            .iter()
+            .any(|size| (*size - geometry.size[0]).abs() > 0.0001)
+    {
+        return Err("unsupported-nonuniform-sphere");
     }
     if geometry.mesh.is_some() {
         return Err("unsupported-mesh");
-    }
-    if !geometry.anchored {
-        return Err("unsupported-dynamic");
     }
     if !roblox_source_rotation_is_axis_aligned(geometry.transform.rotation) {
         return Err("unsupported-transform");

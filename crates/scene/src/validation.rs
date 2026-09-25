@@ -167,10 +167,10 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
         }
         if name == "primitive" {
             let shape = value.get("shape").and_then(Value::as_str).unwrap_or("box");
-            if shape != "box" {
+            if !matches!(shape, "box" | "sphere") {
                 return Err(component_error(
                     node,
-                    "primitive shape must currently be `box`",
+                    "primitive shape must be `box` or `sphere`",
                 ));
             }
             let Some(size) = value.get("size").and_then(vector_value) else {
@@ -183,6 +183,12 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                 return Err(component_error(
                     node,
                     "primitive size must contain finite values above the minimum size",
+                ));
+            }
+            if shape == "sphere" && size.iter().any(|side| (*side - size[0]).abs() > 0.0001) {
+                return Err(component_error(
+                    node,
+                    "sphere primitive size must be uniform",
                 ));
             }
             if value
