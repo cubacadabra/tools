@@ -55,6 +55,24 @@ pub struct StarterGameSources {
 }
 
 pub fn create_game(title: &str, parent: &Path, vendor_sdk: bool) -> Result<CreateResult, String> {
+    create_game_with_sources(title, parent, vendor_sdk, starter_game_sources)
+}
+
+/// Create an empty native project for importing an external place.
+pub fn create_import_game(
+    title: &str,
+    parent: &Path,
+    vendor_sdk: bool,
+) -> Result<CreateResult, String> {
+    create_game_with_sources(title, parent, vendor_sdk, import_game_sources)
+}
+
+fn create_game_with_sources(
+    title: &str,
+    parent: &Path,
+    vendor_sdk: bool,
+    sources: fn(&str, &str) -> StarterGameSources,
+) -> Result<CreateResult, String> {
     let title = title.trim();
     if title.is_empty() {
         return Err("title is required".to_owned());
@@ -84,7 +102,7 @@ pub fn create_game(title: &str, parent: &Path, vendor_sdk: bool) -> Result<Creat
             project.display()
         )
     })?;
-    let result = write_project(&project, title, &game_id, vendor_sdk);
+    let result = write_project(&project, title, &game_id, vendor_sdk, sources);
     if let Err(error) = result {
         let _ = fs::remove_dir_all(&project);
         return Err(error);
@@ -133,11 +151,33 @@ pub fn starter_game_sources(title: &str, game_id: &str) -> StarterGameSources {
     }
 }
 
+fn import_game_sources(title: &str, game_id: &str) -> StarterGameSources {
+    let mut manifest = manifest(title, game_id);
+    manifest.as_object_mut().unwrap().remove("effects");
+    StarterGameSources {
+        manifest: format!("{}\n", serde_json::to_string_pretty(&manifest).unwrap()),
+        scene: format!(
+            "{}\n",
+            serde_json::to_string_pretty(&json!({
+                "formatVersion": 1,
+                "worldId": "starter-world",
+                "nodes": [{ "id": "world-starter-world", "name": "World" }]
+            }))
+            .unwrap()
+        ),
+        main_luau: format!(
+            "local Game = {{}}\n\nfunction Game.on_start(api)\n    api.lobby:set_enabled(false)\n    api.session:start({}, {{ mode = \"preview\" }})\nend\n\nreturn Game\n",
+            serde_json::to_string(game_id).unwrap()
+        ),
+    }
+}
+
 fn write_project(
     project: &Path,
     title: &str,
     game_id: &str,
     vendor_sdk: bool,
+    source_factory: fn(&str, &str) -> StarterGameSources,
 ) -> Result<(), String> {
     fs::create_dir(project.join("src"))
         .map_err(|error| format!("could not create source directory: {error}"))?;
@@ -159,7 +199,7 @@ fn write_project(
         )
         .map_err(|error| format!("could not write .luaurc: {error}"))?;
     }
-    let sources = starter_game_sources(title, game_id);
+    let sources = source_factory(title, game_id);
     fs::write(project.join("manifest.json"), sources.manifest)
         .map_err(|error| format!("could not write manifest.json: {error}"))?;
     fs::write(project.join("scene.json"), sources.scene)
