@@ -580,6 +580,18 @@ fn starter_target_positions_lua() -> String {
     format!("{{ {positions} }}")
 }
 
+fn starter_loose_positions_lua() -> String {
+    let positions = starter_lines()
+        .iter()
+        .map(|line| {
+            let [x, y, z] = line.loose_position;
+            format!("{{ {x:.3}, {y:.3}, {z:.3} }}")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{{ {positions} }}")
+}
+
 fn manifest(title: &str, game_id: &str) -> serde_json::Value {
     json!({
         "id": game_id, "version": VERSION, "sdkVersion": VERSION,
@@ -599,15 +611,18 @@ fn source(title: &str, game_id: &str) -> String {
     let title = serde_json::to_string(title).unwrap();
     let game_id = serde_json::to_string(game_id).unwrap();
     let target_positions = starter_target_positions_lua();
+    let loose_positions = starter_loose_positions_lua();
     let line_count = starter_lines().len();
     format!(
         r##"-- Welcome to Cubacadabra. Restore every loose letter line to the wall.
 local Game = {{}}
+local CubaSharedState = require("@cubacadabra/shared-state")
 
 local line_count = {line_count}
 local completed = {{}}
 local moving = {{}}
 local target_positions = {target_positions}
+local loose_positions = {loose_positions}
 
 local function effect_id(index)
     return "letter-line-" .. index
@@ -668,14 +683,77 @@ local function update_status(api)
     end
 end
 
+local lines = CubaSharedState.create({{
+    channel = "starter-lines-v1",
+    initial = function()
+        return {{ version = 1, completed = {{}} }}
+    end,
+    validate = function(value)
+        if type(value) ~= "table" or value.version ~= 1 or type(value.completed) ~= "table" then
+            return nil
+        end
+        local accepted = {{}}
+        for key, done in pairs(value.completed) do
+            local index = tonumber(key)
+            if type(key) ~= "string" or not index or tostring(index) ~= key
+                or index < 1 or index > line_count or done ~= true then
+                return nil
+            end
+            accepted[key] = true
+        end
+        return {{ version = 1, completed = accepted }}
+    end,
+    reduce = function(state, intent)
+        if intent.type ~= "restore" or type(intent.index) ~= "number"
+            or intent.index < 1 or intent.index > line_count
+            or intent.index % 1 ~= 0 or state.completed[tostring(intent.index)] then
+            return nil
+        end
+        local accepted = {{}}
+        for key, done in pairs(state.completed) do
+            accepted[key] = done
+        end
+        accepted[tostring(intent.index)] = true
+        return {{ version = 1, completed = accepted }}
+    end,
+    onChange = function(api, state, previous)
+        for index = 1, line_count do
+            if state.completed[tostring(index)] and not completed[index] then
+                completed[index] = true
+                moving[index] = nil
+                if previous then
+                    api.effects:set_state(interaction_id(index), "carried")
+                    api.effects:play(effect_id(index), {{ position = loose_positions[index] }})
+                    api.task:delay(1.15, function()
+                        api.effects:set_state(interaction_id(index), "complete")
+                        api.effects:play("line-settle-" .. index, {{ position = target_positions[index] }})
+                    end)
+                else
+                    api.effects:set_state(interaction_id(index), "complete")
+                end
+            elseif not completed[index] and not moving[index] then
+                api.effects:set_state(interaction_id(index), "available")
+            end
+        end
+        update_status(api)
+    end,
+}})
+
 function Game.on_start(api)
     api.lobby:set_enabled(false)
     api.session:start({game_id}, {{ mode = "preview" }})
     api.ui:set_document(player_controls())
-    for index = 1, line_count do
-        api.effects:set_state(interaction_id(index), "available")
+    lines:start(api)
+end
+
+function Game.on_network_message(api, event)
+    lines:receive(api, event)
+end
+
+function Game.on_tick(api, delta)
+    if api.network:is_connected() then
+        lines:update(api, delta)
     end
-    update_status(api)
 end
 
 function Game.on_interaction(api, event)
@@ -683,20 +761,22 @@ function Game.on_interaction(api, event)
         return
     end
     local index = tonumber(string.match(event.id, "^loose%-line%-(%d+)$"))
-    if not index or completed[index] or moving[index] then
+    if not index or index < 1 or index > line_count or completed[index] or moving[index] then
         return
     end
-    moving[index] = true
-    api.effects:set_state(interaction_id(index), "carried")
-    api.effects:play(effect_id(index), {{ position = event.position }})
-    api.lobby:set_status("Line " .. index .. " is snapping into place…")
-    api.task:delay(1.15, function()
-        moving[index] = nil
+    if lines:dispatch(api, {{ type = "restore", index = index }}) then
+        moving[index] = true
         completed[index] = true
-        api.effects:set_state(interaction_id(index), "complete")
-        api.effects:play("line-settle-" .. index, {{ position = target_positions[index] }})
-        update_status(api)
-    end)
+        api.effects:set_state(interaction_id(index), "carried")
+        api.effects:play(effect_id(index), {{ position = loose_positions[index] }})
+        api.lobby:set_status("Line " .. index .. " is snapping into place…")
+        api.task:delay(1.15, function()
+            moving[index] = nil
+            api.effects:set_state(interaction_id(index), "complete")
+            api.effects:play("line-settle-" .. index, {{ position = target_positions[index] }})
+            update_status(api)
+        end)
+    end
 end
 
 return Game
