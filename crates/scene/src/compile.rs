@@ -124,6 +124,21 @@ impl AuthoringScene {
                             .and_then(Value::as_bool)
                             .unwrap_or(true),
                     });
+                    if primitive.get("pushable").and_then(Value::as_bool) == Some(true) {
+                        block["pushable"] = json!(true);
+                    }
+                    if let Some(parent_id) = node.parent_id.as_deref()
+                        && nodes.get(parent_id).is_some_and(|parent| {
+                            parent
+                                .components
+                                .get("primitive")
+                                .and_then(|value| value.get("pushable"))
+                                .and_then(Value::as_bool)
+                                == Some(true)
+                        })
+                    {
+                        block["attachedTo"] = json!(parent_id);
+                    }
                     if rotation.iter().any(|value| value.abs() > 0.0001) {
                         block
                             .as_object_mut()

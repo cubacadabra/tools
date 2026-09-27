@@ -201,6 +201,24 @@ fn validate_components(node: &AuthoringNode) -> Result<(), String> {
                 ));
             }
             if value
+                .get("pushable")
+                .is_some_and(|pushable| !pushable.is_boolean())
+            {
+                return Err(component_error(
+                    node,
+                    "primitive pushable must be a boolean",
+                ));
+            }
+            if value.get("pushable") == Some(&serde_json::Value::Bool(true))
+                && (shape != "box"
+                    || value.get("collidable") == Some(&serde_json::Value::Bool(false)))
+            {
+                return Err(component_error(
+                    node,
+                    "pushable primitives must be collidable boxes",
+                ));
+            }
+            if value
                 .get("castShadow")
                 .is_some_and(|cast_shadow| !cast_shadow.is_boolean())
             {

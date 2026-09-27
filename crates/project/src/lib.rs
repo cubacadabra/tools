@@ -336,6 +336,7 @@ fn starter_scene_nodes() -> Vec<serde_json::Value> {
                     "shape": "box",
                     "size": [STARTER_CUBE_SIZE, STARTER_CUBE_SIZE, STARTER_CUBE_SIZE],
                     "color": STARTER_CUBE_COLOR,
+                    "pushable": true,
                     "outline": false
                 }
             },
