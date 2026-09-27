@@ -4,6 +4,7 @@
 //! keeps the authored starter package, route, and simulation behavior in one
 //! place so Studio and Player About modals cannot drift apart.
 
+use cubacadabra_builder::bundle_inline_script;
 use cubacadabra_client::{ClientSession, Engine};
 use cubacadabra_project::starter_game_sources;
 use cubacadabra_scene::parse_authoring_scene;
@@ -36,7 +37,8 @@ impl AboutPreview {
             .map_err(|error| format!("About starter scene could not be compiled: {error}"))?;
         let manifest_source = serde_json::to_string(&manifest)
             .map_err(|error| format!("About starter manifest could not be encoded: {error}"))?;
-        let script_source = sources.main_luau;
+        let script_source = bundle_inline_script(&sources.main_luau)
+            .map_err(|error| format!("About starter script could not be bundled: {error}"))?;
         let client = ClientSession::load(&manifest_source, &script_source)
             .map_err(|error| format!("About starter game could not be loaded: {error}"))?;
         let route = snake_route(client.engine());

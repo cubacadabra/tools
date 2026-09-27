@@ -24,6 +24,25 @@ pub(crate) fn bundle_modules(
         .map_err(|_| BuildError("entry point must be inside source directory".to_owned()))?
         .to_string_lossy()
         .replace('\\', "/");
+    Ok(assemble_bundle(&modules, &entry_id))
+}
+
+pub(crate) fn bundle_inline_source(source: &str) -> Result<String> {
+    let mut modules = BTreeMap::new();
+    let entry_id = "main.luau";
+    visit(
+        entry_id.to_owned(),
+        source.to_owned(),
+        None,
+        Path::new(""),
+        &mut modules,
+        &mut Vec::new(),
+        &mut Map::new(),
+    )?;
+    Ok(assemble_bundle(&modules, entry_id))
+}
+
+fn assemble_bundle(modules: &BTreeMap<String, Module>, entry_id: &str) -> String {
     let mut output = vec![
         "local __modules = {}".to_owned(),
         "local __routes = {}".to_owned(),
@@ -31,7 +50,7 @@ pub(crate) fn bundle_modules(
         "local __loading = {}".to_owned(),
         String::new(),
     ];
-    for (module_id, module) in &modules {
+    for (module_id, module) in modules {
         output.push(format!("-- begin module: {module_id}"));
         output.push(format!("__routes[{}] = {{", json_string(module_id)));
         for (specifier, dependency) in &module.routes {
@@ -84,7 +103,7 @@ pub(crate) fn bundle_modules(
         "".to_owned(),
         format!("return __require({})", json_string(&entry_id)),
     ]);
-    Ok(output.join("\n"))
+    output.join("\n")
 }
 
 pub(crate) fn visit_local(

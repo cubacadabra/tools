@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+cubacadabra-builder = { path = "../builder" }
 cubacadabra-client = { path = "../../../rust/crates/client", default-features = false }
 cubacadabra-project = { path = "../project" }
 cubacadabra-scene = { path = "../scene" }

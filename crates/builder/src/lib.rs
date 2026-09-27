@@ -24,6 +24,12 @@ use cubacadabra_scene::parse_authoring_scene;
 use package::*;
 use validation::*;
 
+/// Bundle an in-memory Luau entry point and its Cubacadabra SDK dependencies.
+/// Inline sources cannot refer to local game files.
+pub fn bundle_inline_script(source: &str) -> Result<String> {
+    bundle_inline_source(source)
+}
+
 const PREVIEW_SDK_VERSION: &str = "0.3.0";
 const TERRAIN_SDK_VERSION: &str = "0.4.0";
 const LEGACY_CURRENT_SDK_VERSION: &str = "0.5.0";
