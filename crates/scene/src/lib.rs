@@ -339,6 +339,40 @@ mod tests {
     }
 
     #[test]
+    fn child_of_pushable_uses_parent_runtime_id_for_attachment() {
+        let mut parent = node("cube-source", None);
+        parent.components.insert(
+            "primitive".to_owned(),
+            json!({
+                "shape": "box",
+                "size": [2.0, 2.0, 2.0],
+                "runtimeId": "cube-runtime",
+                "pushable": true
+            }),
+        );
+        let mut child = node("line", Some("cube-source"));
+        child.components.insert(
+            "primitive".to_owned(),
+            json!({
+                "shape": "box",
+                "size": [1.0, 0.1, 0.1],
+                "collidable": false
+            }),
+        );
+        let scene = AuthoringScene {
+            format_version: 1,
+            world_id: Some("world".to_owned()),
+            nodes: vec![parent, child],
+        };
+        let mut manifest = json!({"startWorld": "world", "worlds": {"world": {}}});
+        scene.compile_into_manifest(&mut manifest).unwrap();
+        let blocks = &manifest["worlds"]["world"]["blocks"];
+        assert_eq!(blocks[0]["id"], "cube-runtime");
+        assert_eq!(blocks[0]["pushable"], true);
+        assert_eq!(blocks[1]["attachedTo"], "cube-runtime");
+    }
+
+    #[test]
     fn mesh_collision_compiles_as_a_world_transform_handoff() {
         let mut chair = node("chair", None);
         chair.transform.position = [10.0, 2.0, 4.0];

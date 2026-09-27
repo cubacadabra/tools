@@ -486,6 +486,7 @@ fn starter_effects() -> serde_json::Value {
     let mut templates = serde_json::Map::new();
     for line in starter_lines() {
         let number = starter_line_number(&line);
+        let cube_id = format!("starter-cube-{}", line.cube_index + 1);
         let target = starter_target_position(&line);
         let delta = [
             target[0] - line.loose_position[0],
@@ -510,6 +511,7 @@ fn starter_effects() -> serde_json::Value {
                     },
                     {
                         "shape": "box",
+                        "attachedTo": cube_id,
                         "position": delta,
                         "size": target_size,
                         "color": STARTER_STROKE_COLOR,
@@ -518,6 +520,7 @@ fn starter_effects() -> serde_json::Value {
                     },
                     {
                         "shape": "box",
+                        "attachedTo": cube_id,
                         "position": [0, 0.04, 0],
                         "size": loose_size,
                         "color": STARTER_STROKE_COLOR,
@@ -533,30 +536,32 @@ fn starter_effects() -> serde_json::Value {
                 ]
             }),
         );
+        templates.insert(
+            format!("line-settle-{number}"),
+            json!({
+                "duration": 0.55,
+                "nodes": [
+                    {
+                        "shape": "ring",
+                        "attachedTo": cube_id,
+                        "position": [0, 0.08, 0],
+                        "size": [0.55, 0.08, 1],
+                        "color": "signal",
+                        "animation": {"expandAmount": 2.2, "fade": true}
+                    },
+                    {
+                        "shape": "sphere",
+                        "attachedTo": cube_id,
+                        "position": [0, 0.3, 0],
+                        "size": [0.08, 1, 1],
+                        "color": "butter",
+                        "count": 4,
+                        "animation": {"orbitRadius": 0.4, "orbitSpeed": 4.0, "radialAmount": 0.8, "fade": true}
+                    }
+                ]
+            }),
+        );
     }
-    templates.insert(
-        "line-settle".to_owned(),
-        json!({
-            "duration": 0.55,
-            "nodes": [
-                {
-                    "shape": "ring",
-                    "position": [0, 0.08, 0],
-                    "size": [0.55, 0.08, 1],
-                    "color": "signal",
-                    "animation": {"expandAmount": 2.2, "fade": true}
-                },
-                {
-                    "shape": "sphere",
-                    "position": [0, 0.3, 0],
-                    "size": [0.08, 1, 1],
-                    "color": "butter",
-                    "count": 4,
-                    "animation": {"orbitRadius": 0.4, "orbitSpeed": 4.0, "radialAmount": 0.8, "fade": true}
-                }
-            ]
-        }),
-    );
     json!({ "version": 1, "templates": templates })
 }
 
@@ -689,7 +694,7 @@ function Game.on_interaction(api, event)
         moving[index] = nil
         completed[index] = true
         api.effects:set_state(interaction_id(index), "complete")
-        api.effects:play("line-settle", {{ position = target_positions[index] }})
+        api.effects:play("line-settle-" .. index, {{ position = target_positions[index] }})
         update_status(api)
     end)
 end
@@ -697,4 +702,39 @@ end
 return Game
 "##
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn starter_line_effects_follow_their_pushable_cube() {
+        let scene = starter_scene();
+        let nodes = scene["nodes"].as_array().unwrap();
+        let effects = starter_effects();
+        let templates = effects["templates"].as_object().unwrap();
+        assert!(templates.len() <= 64);
+        for line in starter_lines() {
+            let number = starter_line_number(&line);
+            let cube_id = format!("starter-cube-{}", line.cube_index + 1);
+            assert!(nodes.iter().any(|node| {
+                node["id"] == cube_id && node["components"]["primitive"]["pushable"] == true
+            }));
+            let line_nodes = templates[&format!("letter-line-{number}")]["nodes"]
+                .as_array()
+                .unwrap();
+            assert!(line_nodes[0].get("attachedTo").is_none());
+            assert_eq!(line_nodes[1]["attachedTo"], cube_id);
+            assert_eq!(line_nodes[2]["attachedTo"], cube_id);
+            let settle_nodes = templates[&format!("line-settle-{number}")]["nodes"]
+                .as_array()
+                .unwrap();
+            assert!(
+                settle_nodes
+                    .iter()
+                    .all(|node| node["attachedTo"] == cube_id)
+            );
+        }
+    }
 }
