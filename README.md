@@ -54,11 +54,36 @@ cubacadabra [--version] COMMAND
 Commands:
   create-game Create a new starter game.
   build-game  Build a portable game package from a game project.
+  capture-video Select sharp room-video frames for local reconstruction.
   import-roblox-reference Extract a static visual-reference scene from Roblox XML.
   upload-examples Bump, build, and upload both example games. (legacy Python)
   setup-local  Build and install the Morph catalog in local R2/D1. (legacy Python)
   morph ...     Morph release commands. (legacy Python)
 ```
+
+## Room-video intake
+
+Install FFmpeg and ffprobe on `PATH`, then create a new local capture folder:
+
+```sh
+cargo run --bin cubacadabra -- capture-video \
+  --video /path/to/room.mov --output /path/to/room-capture
+```
+
+The shared Rust `cubacadabra-room-capture` crate selects at most 180 JPEGs
+across the video at a maximum dimension of 1600 pixels. Override with
+`--max-frames` (10–300) and `--max-dimension` (320–2560). It writes relative
+image paths, actual decoded frame times, source SHA-256, decoder settings,
+evaluation markers, and diagnostics to `capture.json`. Existing output is
+refused; the source video is preserved. Review the frames, then recover cameras
+and establish a measured scale before attempting geometry or training.
+
+Keep these private capture folders outside runtime `assets/`, which the normal
+builder copies. No Python, `splat-local`, or training environment is required
+for intake. Run `cargo test -p cubacadabra-room-capture` for selection and local
+FFmpeg integration checks. See the canonical
+[capture contract](../docs/contracts/room-capture.md) and
+[product proposal](../docs/products/studio/room-capture-to-playable-world.md).
 
 ## Roblox visual-reference import
 

@@ -4,6 +4,7 @@ members = [
     "crates/builder",
     "crates/project",
     "crates/reference-import",
+    "crates/room-capture",
     "crates/cli",
     "crates/scene",
 ]

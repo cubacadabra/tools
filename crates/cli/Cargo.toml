@@ -12,6 +12,7 @@ path = "src/main.rs"
 cubacadabra-builder = { path = "../builder" }
 cubacadabra-project = { path = "../project" }
 cubacadabra-reference-import = { path = "../reference-import" }
+cubacadabra-room-capture = { path = "../room-capture" }
 cubacadabra-scene = { path = "../scene" }
 glam = "0.30"
 serde_json = "1"
