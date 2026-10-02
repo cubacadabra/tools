@@ -78,6 +78,51 @@ evaluation markers, and diagnostics to `capture.json`. Existing output is
 refused; the source video is preserved. Review the frames, then recover cameras
 and establish a measured scale before attempting geometry or training.
 
+Install optional COLMAP on `PATH` (macOS: `brew install colmap`) to run sparse
+camera recovery. COLMAP 4.2.1 on macOS is the tested initial backend. It remains
+outside the ordinary build and runtime dependencies.
+
+```sh
+cargo run --bin cubacadabra -- recover-cameras \
+  --capture /path/to/room-capture/capture.json --output /path/to/new-room-cameras
+```
+
+Optional `--colmap /path/to/executable` and `--threads 1..16` override the
+backend and default four CPU threads. Only reconstruction frames enter COLMAP;
+evaluation frames are withheld. The result preserves copied JPEGs, estimated
+shared camera intrinsics, per-frame poses, bounded sparse-point shards and
+source observations, registration/reprojection/parallax diagnostics, and
+backend logs. Components are independent solutions and may overlap. Existing
+output and the original capture are preserved. Low reprojection error alone
+does not certify depth, physical scale, or room coverage.
+
+Review this evidence in Studio, measure a visible distance, and select three
+non-collinear floor points. Studio and the CLI use the same alignment math:
+
+```sh
+cargo run --bin cubacadabra -- align-capture \
+  --reconstruction /path/to/room-cameras/reconstruction.json \
+  --component component-001 --distance-points 123,456 --meters 1.2 \
+  --floor-points 789,1011,1213
+```
+
+Point IDs are examples; use reviewed anchors from that component. Alignment
+saves bind to the exact reconstruction, use meters and +Y up, and preserve the
+camera evidence. Dense surfaces, splat training, collision, and scene conversion
+are not part of this command. See the canonical
+[reconstruction and alignment contract](../docs/contracts/room-reconstruction.md).
+
+Retain known dimensions before choosing anchors with `measure-capture`:
+
+```sh
+cargo run --bin cubacadabra -- measure-capture \
+  --reconstruction /path/to/room-cameras/reconstruction.json \
+  --object desk --label Desk --dimensions-meters 1.8288,0.9144,0.9144
+```
+
+The ordered dimensions are length, depth, height in meters. Studio offers these
+saved values in its alignment controls; point anchors still require review.
+
 Keep these private capture folders outside runtime `assets/`, which the normal
 builder copies. No Python, `splat-local`, or training environment is required
 for intake. Run `cargo test -p cubacadabra-room-capture` for selection and local

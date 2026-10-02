@@ -1,5 +1,9 @@
 //! Local, creator-only video intake. Reconstruction and runtime packaging are separate stages.
 
+pub mod alignment;
+pub mod measurements;
+pub mod reconstruction;
+
 use image::{GrayImage, imageops::FilterType};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
