@@ -12,11 +12,152 @@ use std::{
     process::{Command, Stdio},
     sync::atomic::{AtomicBool, Ordering},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 pub const CAPTURE_FORMAT_VERSION: u32 = 1;
 const MAX_JSON_BYTES: usize = 4_000_000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureStage {
+    Inspecting,
+    Hashing,
+    Decoding,
+    Selecting,
+    Saving,
+    Complete,
+}
+
+impl CaptureStage {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Inspecting => "Inspecting video…",
+            Self::Hashing => "Hashing source video…",
+            Self::Decoding => "Decoding candidate frames…",
+            Self::Selecting => "Selecting sharp frames across the video…",
+            Self::Saving => "Saving capture dataset…",
+            Self::Complete => "Capture complete",
+        }
+    }
+
+    pub fn step(self) -> usize {
+        match self {
+            Self::Inspecting => 1,
+            Self::Hashing => 2,
+            Self::Decoding => 3,
+            Self::Selecting => 4,
+            Self::Saving | Self::Complete => 5,
+        }
+    }
+}
+
+/// Transient progress, never serialized into capture.json. Units are bytes for
+/// hashing, video milliseconds for decoding, and frames for selection/saving.
+#[derive(Clone, Copy, Debug)]
+pub struct CaptureProgress {
+    pub stage: CaptureStage,
+    pub completed: u64,
+    pub total: Option<u64>,
+    pub elapsed: Duration,
+    pub stage_elapsed: Duration,
+}
+
+impl CaptureProgress {
+    pub fn fraction(self) -> Option<f32> {
+        self.total
+            .filter(|total| *total > 0)
+            .map(|total| (self.completed as f64 / total as f64).clamp(0.0, 1.0) as f32)
+    }
+
+    /// Average observed throughput for this step, after an initial sample.
+    /// Later steps have different costs and cannot share this estimate.
+    pub fn estimated_remaining(self) -> Option<Duration> {
+        let total = self.total?;
+        if self.completed == 0
+            || self.completed >= total
+            || self.stage_elapsed < Duration::from_secs(1)
+        {
+            return None;
+        }
+        Duration::try_from_secs_f64(
+            self.stage_elapsed.as_secs_f64() * (total - self.completed) as f64
+                / self.completed as f64,
+        )
+        .ok()
+    }
+}
+
+struct ProgressReporter<F> {
+    callback: F,
+    started: Instant,
+    stage_started: Instant,
+    stage: CaptureStage,
+    last_emit: Option<Instant>,
+}
+
+impl<F: FnMut(CaptureProgress)> ProgressReporter<F> {
+    fn new(callback: F) -> Self {
+        let started = Instant::now();
+        Self {
+            callback,
+            started,
+            stage_started: started,
+            stage: CaptureStage::Inspecting,
+            last_emit: None,
+        }
+    }
+
+    fn report(&mut self, stage: CaptureStage, completed: u64, total: Option<u64>) {
+        let now = Instant::now();
+        let changed = self.stage != stage;
+        if changed {
+            self.stage = stage;
+            self.stage_started = now;
+        }
+        if !changed
+            && self
+                .last_emit
+                .is_some_and(|last| now.duration_since(last) < Duration::from_millis(250))
+            && !total.is_some_and(|total| completed >= total)
+        {
+            return;
+        }
+        self.last_emit = Some(now);
+        (self.callback)(CaptureProgress {
+            stage,
+            completed,
+            total,
+            elapsed: now.duration_since(self.started),
+            stage_elapsed: now.duration_since(self.stage_started),
+        });
+    }
+}
+
+/// Reads complete showinfo lines as FFmpeg writes them, retaining a partial
+/// line across polls. The same timestamps drive both progress and selection.
+struct DecodeLog {
+    reader: BufReader<File>,
+    pending: Vec<u8>,
+    times: Vec<f64>,
+}
+
+impl DecodeLog {
+    fn poll(&mut self) -> Result<(), String> {
+        loop {
+            let read = self
+                .reader
+                .read_until(b'\n', &mut self.pending)
+                .map_err(|error| error.to_string())?;
+            if read == 0 || !self.pending.ends_with(b"\n") {
+                return Ok(());
+            }
+            if let Some(time) = timestamp_from_log(&String::from_utf8_lossy(&self.pending)) {
+                self.times.push(time);
+            }
+            self.pending.clear();
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -241,6 +382,25 @@ pub fn capture_video(
     cancel: &AtomicBool,
     progress: impl Fn(&str),
 ) -> Result<CaptureDataset, String> {
+    let mut previous = None;
+    capture_video_with_progress(source, output, options, cancel, |update| {
+        if previous != Some(update.stage) && update.stage != CaptureStage::Complete {
+            progress(update.stage.label());
+        }
+        previous = Some(update.stage);
+    })
+}
+
+/// Structured progress for hosts needing counts, a step bar, and time estimates.
+/// The string-callback entry point remains available for existing consumers.
+pub fn capture_video_with_progress(
+    source: &Path,
+    output: &Path,
+    options: CaptureOptions,
+    cancel: &AtomicBool,
+    progress: impl FnMut(CaptureProgress),
+) -> Result<CaptureDataset, String> {
+    let mut progress = ProgressReporter::new(progress);
     options.validate()?;
     cancelled(cancel)?;
     if output.try_exists().map_err(|error| error.to_string())? {
@@ -256,7 +416,7 @@ pub fn capture_video(
         return Err("Choose a local video file.".into());
     }
     let original_metadata = fs::metadata(&source).map_err(|error| error.to_string())?;
-    progress("Inspecting video…");
+    progress.report(CaptureStage::Inspecting, 0, None);
     let source_text = source
         .to_str()
         .ok_or("The video path must be valid Unicode.")?;
@@ -279,10 +439,12 @@ pub fn capture_video(
         .next()
         .unwrap_or("ffmpeg")
         .to_owned();
-    progress("Hashing source video…");
+    let source_bytes = original_metadata.len();
+    progress.report(CaptureStage::Hashing, 0, Some(source_bytes));
     let mut input = File::open(&source).map_err(|error| error.to_string())?;
     let mut hash = Sha256::new();
     let mut buffer = vec![0; 1024 * 1024];
+    let mut hashed_bytes = 0;
     loop {
         cancelled(cancel)?;
         let count = input.read(&mut buffer).map_err(|error| error.to_string())?;
@@ -290,6 +452,8 @@ pub fn capture_video(
             break;
         }
         hash.update(&buffer[..count]);
+        hashed_bytes += count as u64;
+        progress.report(CaptureStage::Hashing, hashed_bytes, Some(source_bytes));
     }
     let parent = output
         .parent()
@@ -306,6 +470,11 @@ pub fn capture_video(
     fs::create_dir(&candidate_dir).map_err(|error| error.to_string())?;
     let log_path = staging.path().join("decode.log");
     let log = File::create(&log_path).map_err(|error| error.to_string())?;
+    let mut decode_log = DecodeLog {
+        reader: BufReader::new(File::open(&log_path).map_err(|error| error.to_string())?),
+        pending: Vec::new(),
+        times: Vec::new(),
+    };
     let candidate_limit = options.max_frames * 3;
     let interval = (video.duration_seconds / candidate_limit as f64).max(1.0 / 30.0);
     let side = options.max_dimension;
@@ -314,7 +483,8 @@ pub fn capture_video(
     let filter = format!(
         "setpts=PTS-STARTPTS,select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.9})',scale=w='min(iw,{side})':h='min(ih,{side})':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,showinfo"
     );
-    progress("Decoding candidate frames…");
+    let video_millis = (video.duration_seconds * 1000.0).ceil() as u64;
+    progress.report(CaptureStage::Decoding, 0, Some(video_millis));
     let mut child = Command::new("ffmpeg")
         .args([
             "-hide_banner",
@@ -351,6 +521,17 @@ pub fn capture_video(
             let _ = child.wait();
             return Err("Capture cancelled.".into());
         }
+        if let Err(error) = decode_log.poll() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("Could not read decoder progress: {error}"));
+        }
+        let decoded_millis = (decode_log.times.last().copied().unwrap_or(0.0) * 1000.0) as u64;
+        progress.report(
+            CaptureStage::Decoding,
+            decoded_millis.min(video_millis),
+            Some(video_millis),
+        );
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) => thread::sleep(Duration::from_millis(100)),
@@ -364,12 +545,17 @@ pub fn capture_video(
     if !status.success() {
         return Err("Video decoding failed. Check the file and FFmpeg codec support.".into());
     }
-    let times = BufReader::new(File::open(&log_path).map_err(|error| error.to_string())?)
-        .lines()
-        .map_while(Result::ok)
-        .filter_map(|line| timestamp_from_log(&line))
-        .collect::<Vec<_>>();
-    progress("Selecting sharp frames across the video…");
+    decode_log.poll()?;
+    progress.report(CaptureStage::Decoding, video_millis, Some(video_millis));
+    let times = std::mem::take(&mut decode_log.times);
+    // Release the reader before removing decode.log (required on Windows).
+    drop(decode_log);
+    // showinfo can record one buffered frame beyond the encoder limit.
+    let candidate_total = times.len().min(candidate_limit);
+    let candidate_total = (1..=candidate_total)
+        .take_while(|index| candidate_dir.join(format!("{index:06}.jpg")).is_file())
+        .count() as u64;
+    progress.report(CaptureStage::Selecting, 0, Some(candidate_total));
     let mut candidates = Vec::new();
     for (index, timestamp) in times.into_iter().enumerate().take(candidate_limit) {
         cancelled(cancel)?;
@@ -387,12 +573,19 @@ pub fn capture_video(
             width: image.width(),
             height: image.height(),
         });
+        progress.report(
+            CaptureStage::Selecting,
+            candidates.len() as u64,
+            Some(candidate_total),
+        );
     }
     if candidates.is_empty() {
         return Err("No frames could be extracted from this video.".into());
     }
     let candidate_count = candidates.len();
     let selected = select_candidates(candidates, video.duration_seconds, options.max_frames);
+    let selected_total = selected.len() as u64;
+    progress.report(CaptureStage::Saving, 0, Some(selected_total + 1));
     let frame_dir = staging.path().join("frames");
     fs::create_dir(&frame_dir).map_err(|error| error.to_string())?;
     let mut frames = Vec::new();
@@ -414,6 +607,12 @@ pub fn capture_video(
             width: candidate.width,
             height: candidate.height,
         });
+        // Reserve the final unit for metadata and the completion marker.
+        progress.report(
+            CaptureStage::Saving,
+            frames.len() as u64,
+            Some(selected_total + 1),
+        );
     }
     let mut diagnostics = vec![
         "Camera poses, intrinsics, overlap, and coverage have not been solved. Review the frames before reconstruction.".into(),
@@ -469,7 +668,6 @@ pub fn capture_video(
         frames,
         diagnostics,
     };
-    progress("Saving capture dataset…");
     let mut json = serde_json::to_vec_pretty(&dataset).map_err(|error| error.to_string())?;
     json.push(b'\n');
     if json.len() > MAX_JSON_BYTES {
@@ -494,12 +692,69 @@ pub fn capture_video(
         let _ = fs::remove_dir(output);
         return Err(format!("Could not finalize capture metadata: {error}"));
     }
+    progress.report(
+        CaptureStage::Complete,
+        selected_total + 1,
+        Some(selected_total + 1),
+    );
     Ok(dataset)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn estimates_use_current_step_throughput_and_wait_for_a_sample() {
+        let mut progress = CaptureProgress {
+            stage: CaptureStage::Selecting,
+            completed: 25,
+            total: Some(100),
+            elapsed: Duration::from_secs(120),
+            stage_elapsed: Duration::from_secs(10),
+        };
+        assert_eq!(progress.fraction(), Some(0.25));
+        assert_eq!(
+            progress.estimated_remaining(),
+            Some(Duration::from_secs(30))
+        );
+        progress.stage_elapsed = Duration::from_millis(500);
+        assert_eq!(progress.estimated_remaining(), None);
+        progress.stage_elapsed = Duration::from_secs(10);
+        for completed in [0, 100, 101] {
+            progress.completed = completed;
+            assert_eq!(progress.estimated_remaining(), None);
+        }
+        progress.total = None;
+        assert_eq!(progress.fraction(), None);
+        progress.total = Some(0);
+        assert_eq!(progress.fraction(), None);
+    }
+
+    #[test]
+    fn live_decoder_log_retains_partial_lines_without_duplicate_timestamps() {
+        use std::io::Write;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("decode.log");
+        let mut writer = File::create(&path).unwrap();
+        let mut log = DecodeLog {
+            reader: BufReader::new(File::open(&path).unwrap()),
+            pending: Vec::new(),
+            times: Vec::new(),
+        };
+        writer
+            .write_all(b"[Parsed_showinfo_4 @ 0x00] n: 0 pts_time:0.")
+            .unwrap();
+        log.poll().unwrap();
+        assert!(log.times.is_empty());
+        writer
+            .write_all(b"533333 duration:20\nother log line\n")
+            .unwrap();
+        log.poll().unwrap();
+        assert_eq!(log.times, [0.533333]);
+        log.poll().unwrap();
+        assert_eq!(log.times, [0.533333]);
+    }
 
     #[test]
     fn ranking_preserves_time_coverage_and_prefers_sharp_frames() {
@@ -625,8 +880,63 @@ mod tests {
             max_frames: 10,
             max_dimension: 320,
         };
-        let dataset =
-            capture_video(&video, &output, options, &AtomicBool::new(false), |_| {}).unwrap();
+        let mut updates = Vec::new();
+        let dataset = capture_video_with_progress(
+            &video,
+            &output,
+            options,
+            &AtomicBool::new(false),
+            |progress| {
+                if progress.stage == CaptureStage::Complete {
+                    assert!(output.join("capture.json").is_file());
+                }
+                updates.push(progress);
+            },
+        )
+        .unwrap();
+        let mut stages = updates
+            .iter()
+            .map(|progress| progress.stage)
+            .collect::<Vec<_>>();
+        stages.dedup();
+        assert_eq!(
+            stages,
+            [
+                CaptureStage::Inspecting,
+                CaptureStage::Hashing,
+                CaptureStage::Decoding,
+                CaptureStage::Selecting,
+                CaptureStage::Saving,
+                CaptureStage::Complete
+            ]
+        );
+        assert!(
+            updates
+                .windows(2)
+                .all(|pair| pair[0].elapsed <= pair[1].elapsed)
+        );
+        for stage in [
+            CaptureStage::Hashing,
+            CaptureStage::Decoding,
+            CaptureStage::Selecting,
+        ] {
+            let step = updates
+                .iter()
+                .filter(|update| update.stage == stage)
+                .collect::<Vec<_>>();
+            assert_eq!(step.first().unwrap().completed, 0);
+            assert_eq!(step.last().unwrap().fraction(), Some(1.0));
+            assert!(
+                step.windows(2)
+                    .all(|pair| pair[0].completed <= pair[1].completed)
+            );
+        }
+        let selection = updates
+            .iter()
+            .find(|update| update.stage == CaptureStage::Selecting)
+            .unwrap();
+        assert_eq!(selection.total, Some(dataset.candidate_count as u64));
+        assert_eq!(updates.last().unwrap().fraction(), Some(1.0));
         assert_eq!(dataset.frames.len(), 10);
         assert!(dataset.candidate_count <= 30);
         assert_eq!(
@@ -671,6 +981,16 @@ mod tests {
                 cancel.store(true, Ordering::Relaxed);
             }
         });
+        assert!(result.unwrap_err().contains("cancelled"));
+        assert!(!cancelled_output.exists());
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+        cancel.store(false, Ordering::Relaxed);
+        let result =
+            capture_video_with_progress(&video, &cancelled_output, options, &cancel, |progress| {
+                if progress.stage == CaptureStage::Selecting {
+                    cancel.store(true, Ordering::Relaxed);
+                }
+            });
         assert!(result.unwrap_err().contains("cancelled"));
         assert!(!cancelled_output.exists());
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
