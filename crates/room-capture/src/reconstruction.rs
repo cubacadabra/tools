@@ -36,13 +36,12 @@ impl Default for ReconstructionOptions {
 }
 
 fn default_colmap() -> PathBuf {
-    if let Some(paths) = std::env::var_os("PATH") {
-        if let Some(executable) = std::env::split_paths(&paths)
+    if let Some(paths) = std::env::var_os("PATH")
+        && let Some(executable) = std::env::split_paths(&paths)
             .map(|p| p.join("colmap"))
             .find(|p| p.is_file())
-        {
-            return executable;
-        }
+    {
+        return executable;
     }
     // Finder-launched applications commonly omit package-manager executables from PATH.
     #[cfg(target_os = "macos")]
