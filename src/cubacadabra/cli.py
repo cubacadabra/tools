@@ -79,8 +79,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             "  cubacadabra build-game\n"
-            "  cubacadabra build-game ../first-game --output /tmp/first-game\n"
-            "  cubacadabra build-game ../second-game --zip build/second-game.zip"
+            "  cubacadabra build-game ../examples/cuboom --output /tmp/cuboom-package\n"
+            "  cubacadabra build-game ../examples/second-game --zip /tmp/second-game.zip"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -128,9 +128,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     upload_parser = commands.add_parser(
         "upload-examples",
-        help="Bump, build, and upload both example games.",
+        help="Bump, build, and upload Cuboom and the three introductory examples.",
         description=(
-            "Bump the patch version in both example manifests, build their "
+            "Bump the patch version in the four example manifests, build their "
             "portable ZIP packages, sign in with the review account, and "
             "upload them to the cube backend."
         ),
@@ -161,7 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(".."),
         metavar="DIR",
-        help="Directory for the two ZIP archives (default: ..).",
+        help="Directory for ZIP archives (default: ..).",
     )
     upload_parser.add_argument(
         "--target",
@@ -186,7 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
     upload_parser.add_argument(
         "--password",
         default=None,
-        help="Review account password (default: CUBACADABRA_REVIEW_PASSWORD or testing).",
+        help="Review account password (CUBACADABRA_REVIEW_PASSWORD, or testing for local uploads only).",
     )
     upload_parser.add_argument(
         "--no-bump",

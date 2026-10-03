@@ -20,6 +20,7 @@ mod maze;
 mod package;
 mod validation;
 use bundle::*;
+pub use collision::merge_sources as merge_collision_sources;
 use cubacadabra_scene::parse_authoring_scene;
 use package::*;
 use validation::*;

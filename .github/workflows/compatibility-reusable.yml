@@ -19,18 +19,6 @@ on:
         required: false
         type: string
         default: main
-      first_game_ref:
-        required: false
-        type: string
-        default: main
-      second_game_ref:
-        required: false
-        type: string
-        default: main
-      third_game_ref:
-        required: false
-        type: string
-        default: main
       examples_ref:
         required: false
         type: string
@@ -43,11 +31,11 @@ on:
         required: false
         type: string
         default: main
-      ios_app_ref:
+      ios_ref:
         required: false
         type: string
         default: main
-      android_app_ref:
+      android_ref:
         required: false
         type: string
         default: main
@@ -61,21 +49,6 @@ jobs:
           repository: ${{ inputs.tools_repository }}
           ref: ${{ inputs.tools_ref }}
           path: tools
-      - uses: actions/checkout@v4
-        with:
-          repository: cubacadabra/first-game
-          ref: ${{ inputs.first_game_ref }}
-          path: first-game
-      - uses: actions/checkout@v4
-        with:
-          repository: cubacadabra/second-game
-          ref: ${{ inputs.second_game_ref }}
-          path: second-game
-      - uses: actions/checkout@v4
-        with:
-          repository: cubacadabra/third-game
-          ref: ${{ inputs.third_game_ref }}
-          path: third-game
       - uses: actions/checkout@v4
         with:
           repository: cubacadabra/examples
@@ -103,22 +76,27 @@ jobs:
           path: desktop
       - uses: actions/checkout@v4
         with:
-          repository: cubacadabra/ios_app
-          ref: ${{ inputs.ios_app_ref }}
-          path: ios_app
+          repository: cubacadabra/ios
+          ref: ${{ inputs.ios_ref }}
+          path: ios
       - uses: actions/checkout@v4
         with:
-          repository: cubacadabra/android_app
-          ref: ${{ inputs.android_app_ref }}
-          path: android_app
+          repository: cubacadabra/android
+          ref: ${{ inputs.android_ref }}
+          path: android
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test web/src/engine/renderer-startup.test.js web/scripts/prepare-deployment.test.js
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
       - run: sh rust/scripts/build_web_renderer.sh --debug
+      - run: node web/scripts/check-app-contract.mjs
       - run: PYTHONPATH=tools/src python3 tools/scripts/check_workspace_compatibility.py
       - run: python3 tools/scripts/check_world_model_hosts.py
       - run: cargo test --manifest-path studio/Cargo.toml --no-default-features

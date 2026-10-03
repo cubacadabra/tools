@@ -13,18 +13,12 @@ TOOLS_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = TOOLS_ROOT.parent
 sys.path.insert(0, str(TOOLS_ROOT / "src"))
 
-BASE_PROJECTS = (
-    WORKSPACE_ROOT / "first-game",
-    WORKSPACE_ROOT / "second-game",
-    WORKSPACE_ROOT / "third-game",
-)
-EXAMPLE_PROJECTS = tuple(
+PROJECTS = tuple(
     sorted(
         (manifest.parent for manifest in (WORKSPACE_ROOT / "examples").glob("*/manifest.json")),
         key=lambda path: path.name,
     )
 )
-PROJECTS = BASE_PROJECTS + EXAMPLE_PROJECTS
 
 
 def native_build(project: Path, output: Path) -> None:
@@ -45,6 +39,9 @@ def native_build(project: Path, output: Path) -> None:
 
 
 def main() -> int:
+    if not PROJECTS:
+        print("No example projects found; check out cubacadabra/examples alongside tools.", file=sys.stderr)
+        return 1
     missing = [path for path in PROJECTS if not (path / "manifest.json").is_file()]
     rust_root = WORKSPACE_ROOT / "rust"
     studio_root = WORKSPACE_ROOT / "studio"

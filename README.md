@@ -6,11 +6,15 @@ raw-project builds do not require Python.
 
 ## Run
 
-cargo run --release --bin cubacadabra -- --help
+```sh
+sh scripts/cubacadabra.sh --help
+sh scripts/cubacadabra.sh build-game --source ../examples/cuboom --output /tmp/cuboom-package
+sh scripts/cubacadabra.sh create-game --title "My Game" --path /tmp/my-game
+```
 
-cargo run --release --bin cubacadabra -- create-game --title "The Wild West" --path /Users/aa/cubacadabra/examples
-
-cargo run --release --bin cubacadabra -- build-game --source /Users/aa/cubacadabra/examples/the-wild-west --output /tmp/foo --zip ../the-wild-west.zip
+Start with [Cuboom](https://github.com/cubacadabra/examples/blob/main/cuboom/README.md) and the
+[contribution guide](https://github.com/cubacadabra/docs/blob/main/CONTRIBUTING.md). The native CLI is the shared build
+path used by Studio and the player hosts.
 
 ## Install
 
@@ -56,7 +60,7 @@ Commands:
   build-game  Build a portable game package from a game project.
   capture-video Select sharp room-video frames for local reconstruction.
   import-roblox-reference Extract a static visual-reference scene from Roblox XML.
-  upload-examples Bump, build, and upload both example games. (legacy Python)
+  upload-examples Bump, build, and upload Cuboom and three introductory examples. (legacy Python)
   setup-local  Build and install the Morph catalog in local R2/D1. (legacy Python)
   morph ...     Morph release commands. (legacy Python)
 ```
@@ -110,7 +114,7 @@ Point IDs are examples; use reviewed anchors from that component. Alignment
 saves bind to the exact reconstruction, use meters and +Y up, and preserve the
 camera evidence. Dense surfaces, splat training, collision, and scene conversion
 are not part of this command. See the canonical
-[reconstruction and alignment contract](../docs/contracts/room-reconstruction.md).
+[reconstruction and alignment contract](https://github.com/cubacadabra/docs/blob/main/contracts/room-reconstruction.md).
 
 Retain known dimensions before choosing anchors with `measure-capture`:
 
@@ -127,8 +131,8 @@ Keep these private capture folders outside runtime `assets/`, which the normal
 builder copies. No Python, `splat-local`, or training environment is required
 for intake. Run `cargo test -p cubacadabra-room-capture` for selection and local
 FFmpeg integration checks. See the canonical
-[capture contract](../docs/contracts/room-capture.md) and
-[product proposal](../docs/products/studio/room-capture-to-playable-world.md).
+[capture contract](https://github.com/cubacadabra/docs/blob/main/contracts/room-capture.md) and
+[product proposal](https://github.com/cubacadabra/docs/blob/main/products/studio/room-capture-to-playable-world.md).
 
 ## Roblox visual-reference import
 
@@ -152,15 +156,18 @@ lighting and post-effect settings, computed visible bounds, and source hashes.
 Roblox smooth-terrain voxel blobs are recorded by size and SHA-256 but are not
 decoded yet; that limitation is explicit in the generated scene.
 
-`import-roblox-scene` automatically promotes every losslessly representable
+`import-roblox-scene` automatically promotes every supported
 physical `Part` under `Workspace:Workspace[1]` into a native authoring
 primitive. Parts from services such as ServerStorage remain source-only. The
 current slice accepts
-anchored, ordinary block Parts with supported axis-aligned rotations and no
+ordinary block Parts and uniform spheres with supported axis-aligned rotations and no
 mesh, transparency, or reflectance overrides. Promotion preserves position,
 rotation, size, color, supported Roblox material mappings, `CanCollide`, and
-`CastShadow`: collidable Parts receive a native box collision component, while
-non-collidable Parts remain editable visual-only primitives. Parts with
+`CastShadow`: collidable blocks receive a native box collision component, while
+non-collidable blocks remain editable visual-only primitives. Uniform spheres
+compile as round decorations; sphere collision is not simulated. Unanchored
+Parts preview at their starting positions as static geometry, with their source
+physics properties preserved for Roblox export. Parts with
 `CastShadow=false` remain visible and lit but are excluded from the runtime
 directional shadow-caster geometry. The native block field defaults to `true`
 for older authoring scenes and manifests. Unsupported material mappings
@@ -225,9 +232,9 @@ cubacadabra --create-game --title "The Wild West" --path ~/games
 Build any compatible game repository from its project directory:
 
 ```sh
-cubacadabra build-game ../first-game
-cubacadabra build-game ../second-game --output ../second-game/build/package
-cubacadabra build-game ../third-game --zip ../third-game/build/third-game.zip
+cubacadabra build-game ../examples/first-game
+cubacadabra build-game ../examples/second-game --output ../examples/second-game/build/package
+cubacadabra build-game ../examples/third-game --zip ../examples/third-game/build/third-game.zip
 ```
 
 The starter created above follows the standard `src/main.luau` and `assets/`
@@ -277,7 +284,7 @@ Every generated package also contains `package.json`, whose SHA-256 map binds
 the manifest, script, and asset files to that package release. It also records
 the reachable SDK helper modules and their source hashes. Clients should
 validate those hashes before executing or caching a remote package. See
-[preview licensing](https://github.com/cubacadabra/docs/blob/main/platform/licensing.md) for the current reuse policy.
+[preview licensing](https://github.com/cubacadabra/docs/blob/main/systems/publishing/licensing.md) for the current reuse policy.
 
 `CubaSharedState` v1 owns bounded intent queuing, compare-and-set retries,
 conflict rebasing, and reconnect snapshots. Games provide their own initial
@@ -361,8 +368,8 @@ use `--skip-thumbnails` for headless builds. Use `cubacadabra morph build` to
 only generate the ignored release directory. `--starter-set DIR`, `--endpoint
 URL`, and `--dry-run` remain available.
 
-Upload both example games after a change to the engine, web client, or example
-projects. The default target is the local backend at `127.0.0.1:8787`:
+The maintainer upload command builds Cuboom and three introductory examples.
+Review version changes before using it. The default target is the local backend at `127.0.0.1:8787`:
 
 ```sh
 PYTHONPATH=src python3 -m cubacadabra upload-examples
@@ -370,9 +377,25 @@ PYTHONPATH=src python3 -m cubacadabra upload-examples --target production
 ```
 
 The command increments each example's patch version, rebuilds the ZIPs in the
-parent directory, and uploads them with the review account. Set
-`CUBACADABRA_REVIEW_PASSWORD` to override the default testing password. Use
+parent directory, and uploads them with the review account. Remote uploads require an explicit
+`CUBACADABRA_REVIEW_PASSWORD` or `--password`. The testing password works only
+with a loopback backend. Use
 `--no-bump` when retrying an upload for versions that were already built.
+
+## Public source checks
+
+From a complete sibling checkout, run `python3 scripts/check_public_review.py`.
+It checks changed JSON against the 4,000,000-byte limit, root licenses, canonical
+documentation links, retired game repository links, and tracked credential
+filenames. It excludes preserved historical documentation and unchanged
+publication artifacts.
+
+Large collision source exports are automatically split into ordered JSON shards.
+Use `shard-collision-source --input old.json --output reference/collision.json`
+to migrate an inline file, or `merge-collision-sources --input a.json --input
+b.json --output reference/collision.json` to join inline or sharded exports.
+Optional `--round-decimals 3` rounds and revalidates geometry. These are
+authoring operations; runtime packages still receive inline triangles.
 
 ## Development
 

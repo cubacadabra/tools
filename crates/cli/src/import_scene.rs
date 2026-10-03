@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_block_shapes_and_dynamic_parts_but_promotes_non_shadowing_parts() {
+    fn rejects_unsupported_shapes_and_promotes_static_previews_of_unanchored_parts() {
         let mut value = reference_fixture();
         value["geometry"][0]["shape"] = json!(2);
         value["geometry"][1]["anchored"] = json!(false);
@@ -415,10 +415,21 @@ mod tests {
         );
         assert_eq!(
             selection.statuses["Workspace:Workspace[1]/Folder:Imported[1]/Part:Decor[1]"],
-            PromotionStatus::Fallback {
-                reason: "unsupported-dynamic"
+            PromotionStatus::Promoted {
+                node_id: primitive_node_id(
+                    "Workspace:Workspace[1]/Folder:Imported[1]/Part:Decor[1]"
+                )
             }
         );
+        // Native promotion preserves appearance, not Roblox dynamics.
+        let promoted = selection
+            .promoted
+            .iter()
+            .find(|part| {
+                part.source_path == "Workspace:Workspace[1]/Folder:Imported[1]/Part:Decor[1]"
+            })
+            .expect("unanchored Part should have a static preview");
+        assert!(!promoted.can_collide);
         assert_eq!(
             selection.statuses["Workspace:Workspace[1]/Folder:Imported[1]/Part:RotX[1]"],
             PromotionStatus::Promoted {

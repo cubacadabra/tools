@@ -19,18 +19,6 @@ on:
         description: "Web ref to test"
         required: false
         default: main
-      first_game_ref:
-        description: "First-game ref to test"
-        required: false
-        default: main
-      second_game_ref:
-        description: "Second-game ref to test"
-        required: false
-        default: main
-      third_game_ref:
-        description: "Third-game ref to test"
-        required: false
-        default: main
       examples_ref:
         description: "Examples ref to test"
         required: false
@@ -43,11 +31,11 @@ on:
         description: "Desktop ref to test"
         required: false
         default: main
-      ios_app_ref:
+      ios_ref:
         description: "iOS app ref to test"
         required: false
         default: main
-      android_app_ref:
+      android_ref:
         description: "Android app ref to test"
         required: false
         default: main
@@ -60,11 +48,8 @@ jobs:
       tools_ref: ${{ inputs.tools_ref || github.sha }}
       rust_ref: ${{ inputs.rust_ref || 'main' }}
       web_ref: ${{ inputs.web_ref || 'main' }}
-      first_game_ref: ${{ inputs.first_game_ref || 'main' }}
-      second_game_ref: ${{ inputs.second_game_ref || 'main' }}
-      third_game_ref: ${{ inputs.third_game_ref || 'main' }}
       examples_ref: ${{ inputs.examples_ref || 'main' }}
       studio_ref: ${{ inputs.studio_ref || 'main' }}
       desktop_ref: ${{ inputs.desktop_ref || 'main' }}
-      ios_app_ref: ${{ inputs.ios_app_ref || 'main' }}
-      android_app_ref: ${{ inputs.android_app_ref || 'main' }}
+      ios_ref: ${{ inputs.ios_ref || 'main' }}
+      android_ref: ${{ inputs.android_ref || 'main' }}

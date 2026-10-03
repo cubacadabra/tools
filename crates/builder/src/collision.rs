@@ -7,7 +7,7 @@ use cubacadabra_scene::AUTHORING_COLLISION_INSTANCES_KEY;
 use glam::{EulerRot, Quat, Vec3};
 use serde_json::{Map, Value, json};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Component, Path, PathBuf},
 };
@@ -16,7 +16,48 @@ pub(crate) const FORMAT_VERSION: u64 = 1;
 pub(crate) const MAX_TRIANGLES: usize = 200_000;
 pub(crate) const MAX_COORDINATE: f64 = 4096.0;
 pub(crate) const MAX_JSON_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_SOURCE_SHARDS: usize = 128;
+const MAX_SHARD_BYTES: u64 = 4_000_000;
 const MIN_AREA_SQUARED: f64 = 1.0e-12;
+
+/// Merge inline or sharded authoring collision in the supplied order.
+/// Optional decimal rounding is validated again before any output is written.
+pub fn merge_sources(paths: &[PathBuf], round_decimals: Option<u32>) -> super::Result<Value> {
+    if paths.is_empty() || round_decimals.is_some_and(|digits| digits > 6) {
+        return Err(super::BuildError(
+            "collision merge needs inputs and 0 through 6 rounding decimals".into(),
+        ));
+    }
+    let mut triangles = Vec::new();
+    for path in paths {
+        let path = fs::canonicalize(path)
+            .map_err(super::io_error("could not resolve collision merge input"))?;
+        let mut source = read_source_json(&path, "collision merge input")?;
+        validate_inline(&source, "collision merge input")?;
+        let incoming = source["triangles"]
+            .as_array_mut()
+            .expect("validated triangles");
+        if triangles.len() + incoming.len() > MAX_TRIANGLES {
+            return Err(super::BuildError(format!(
+                "merged collision cannot contain more than {MAX_TRIANGLES} triangles"
+            )));
+        }
+        triangles.append(incoming);
+    }
+    if let Some(digits) = round_decimals {
+        let factor = 10_f64.powi(digits as i32);
+        for triangle in &mut triangles {
+            for point in triangle.as_array_mut().expect("validated triangle") {
+                for coordinate in point.as_array_mut().expect("validated point") {
+                    *coordinate = json!((coordinate.as_f64().unwrap() * factor).round() / factor);
+                }
+            }
+        }
+    }
+    let result = json!({"formatVersion": FORMAT_VERSION, "triangles": triangles});
+    validate_inline(&result, "merged collision")?;
+    Ok(result)
+}
 
 pub(crate) fn resolve_manifest_sources(
     manifest: &mut Map<String, Value>,
@@ -329,25 +370,92 @@ fn resolve_source_path(project_root: &Path, source: &str, field: &str) -> super:
 }
 
 fn read_source_json(path: &Path, field: &str) -> super::Result<Value> {
+    let (value, mut total_bytes) = read_json(path, field, MAX_JSON_BYTES)?;
+    let Some(object) = value
+        .as_object()
+        .filter(|object| object.contains_key("sources"))
+    else {
+        return Ok(value);
+    };
+    if total_bytes > MAX_SHARD_BYTES {
+        return Err(super::BuildError(format!(
+            "{field}.source index exceeds the {MAX_SHARD_BYTES}-byte limit"
+        )));
+    }
+    if object.len() != 2
+        || object.get("formatVersion").and_then(Value::as_u64) != Some(FORMAT_VERSION)
+    {
+        return Err(super::BuildError(format!(
+            "{field}.source index must contain only formatVersion 1 and sources"
+        )));
+    }
+    let sources = object
+        .get("sources")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            super::BuildError(format!("{field}.source index sources must be an array"))
+        })?;
+    if sources.is_empty() || sources.len() > MAX_SOURCE_SHARDS {
+        return Err(super::BuildError(format!(
+            "{field}.source index must reference 1 through {MAX_SOURCE_SHARDS} shards"
+        )));
+    }
+    let source_root = path.parent().expect("resolved source file has a parent");
+    let mut seen = BTreeSet::new();
+    let mut triangles = Vec::new();
+    for (index, source) in sources.iter().enumerate() {
+        let shard_field = format!("{field}.source.sources[{index}]");
+        let relative = source.as_str().ok_or_else(|| {
+            super::BuildError(format!("{shard_field} must be a relative JSON path"))
+        })?;
+        let shard_path = resolve_source_path(source_root, relative, &shard_field)?;
+        if !seen.insert(shard_path.clone()) {
+            return Err(super::BuildError(format!(
+                "{shard_field} duplicates a collision shard"
+            )));
+        }
+        let (shard, bytes) = read_json(&shard_path, &shard_field, MAX_SHARD_BYTES)?;
+        total_bytes += bytes;
+        if total_bytes > MAX_JSON_BYTES {
+            return Err(super::BuildError(format!(
+                "{field}.source index and shards exceed the 64 MiB JSON limit"
+            )));
+        }
+        // Shards must be inline documents; nested indexes cannot recurse.
+        validate_inline(&shard, &shard_field)?;
+        let mut shard_triangles = shard["triangles"].as_array().unwrap().clone();
+        if triangles.len() + shard_triangles.len() > MAX_TRIANGLES {
+            return Err(super::BuildError(format!(
+                "{field}.triangles cannot contain more than {MAX_TRIANGLES} triangles"
+            )));
+        }
+        triangles.append(&mut shard_triangles);
+    }
+    Ok(json!({"formatVersion": FORMAT_VERSION, "triangles": triangles}))
+}
+
+fn read_json(path: &Path, field: &str, max_bytes: u64) -> super::Result<(Value, u64)> {
     let metadata =
         fs::metadata(path).map_err(super::io_error("could not inspect collision source"))?;
-    if metadata.len() > MAX_JSON_BYTES {
+    if metadata.len() > max_bytes {
         return Err(super::BuildError(format!(
-            "{field}.source exceeds the 64 MiB JSON limit"
+            "{field}.source exceeds the {max_bytes}-byte JSON limit"
         )));
     }
     let bytes = fs::read(path).map_err(super::io_error("could not read collision source"))?;
-    if bytes.len() as u64 > MAX_JSON_BYTES {
+    if bytes.len() as u64 > max_bytes {
         return Err(super::BuildError(format!(
-            "{field}.source exceeds the 64 MiB JSON limit"
+            "{field}.source exceeds the {max_bytes}-byte JSON limit"
         )));
     }
-    serde_json::from_slice(&bytes).map_err(|error| {
-        super::BuildError(format!(
-            "invalid JSON in collision source {}: {error}",
-            path.display()
-        ))
-    })
+    serde_json::from_slice(&bytes)
+        .map(|value| (value, bytes.len() as u64))
+        .map_err(|error| {
+            super::BuildError(format!(
+                "invalid JSON in collision source {}: {error}",
+                path.display()
+            ))
+        })
 }
 
 fn validate_inline(value: &Value, field: &str) -> super::Result<()> {
@@ -459,6 +567,125 @@ mod tests {
 
     fn triangle() -> Value {
         json!([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    }
+
+    #[test]
+    fn merge_reads_inline_and_sharded_inputs_in_order_and_revalidates_rounding() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("first.json");
+        let index = root.path().join("index.json");
+        let part = root.path().join("part.json");
+        let second = json!([[2.1234, 0, 0], [3.1234, 0, 0], [2.1234, 0, 1]]);
+        fs::write(
+            &first,
+            json!({"formatVersion": 1, "triangles": [triangle()]}).to_string(),
+        )
+        .unwrap();
+        fs::write(
+            &part,
+            json!({"formatVersion": 1, "triangles": [second]}).to_string(),
+        )
+        .unwrap();
+        fs::write(
+            &index,
+            json!({"formatVersion": 1, "sources": ["part.json"]}).to_string(),
+        )
+        .unwrap();
+        let merged = merge_sources(&[first, index], Some(3)).unwrap();
+        assert_eq!(merged["triangles"][0], triangle());
+        assert_eq!(merged["triangles"][1][0][0], 2.123);
+        fs::write(
+            &part,
+            json!({"formatVersion": 1, "triangles": [
+                [[0,0,0], [0.0004,0,0], [0,0,1]]
+            ]})
+            .to_string(),
+        )
+        .unwrap();
+        assert!(
+            merge_sources(&[part], Some(3))
+                .unwrap_err()
+                .0
+                .contains("non-zero area")
+        );
+        assert!(merge_sources(&[], None).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn source_index_rejects_shard_symlinks_outside_its_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let part = outside.path().join("part.json");
+        fs::write(
+            &part,
+            json!({"formatVersion": 1, "triangles": [triangle()]}).to_string(),
+        )
+        .unwrap();
+        symlink(&part, root.path().join("part.json")).unwrap();
+        fs::write(
+            root.path().join("index.json"),
+            json!({"formatVersion": 1, "sources": ["part.json"]}).to_string(),
+        )
+        .unwrap();
+        assert!(
+            merge_sources(&[root.path().join("index.json")], None)
+                .unwrap_err()
+                .0
+                .contains("inside the game project")
+        );
+    }
+
+    #[test]
+    fn resolves_ordered_source_shards_without_changing_runtime_geometry() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("reference");
+        fs::create_dir(&directory).unwrap();
+        let first = json!({"formatVersion": 1, "triangles": [triangle()]});
+        let second = json!({"formatVersion": 1, "triangles": [[[2,0,0],[3,0,0],[2,0,1]]]});
+        fs::write(directory.join("a.json"), first.to_string()).unwrap();
+        fs::write(directory.join("b.json"), second.to_string()).unwrap();
+        fs::write(
+            directory.join("index.json"),
+            json!({"formatVersion": 1, "sources": ["a.json", "b.json"]}).to_string(),
+        )
+        .unwrap();
+        let resolved = resolve_definition(
+            &json!({"source": "reference/index.json"}),
+            root.path(),
+            "collision",
+        )
+        .unwrap();
+        assert_eq!(
+            resolved,
+            json!({"formatVersion": 1, "triangles": [first["triangles"][0], second["triangles"][0]]})
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_nested_and_escaping_collision_shards() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(
+            root.path().join("part.json"),
+            json!({"formatVersion": 1, "triangles": [triangle()]}).to_string(),
+        )
+        .unwrap();
+        for sources in [
+            json!(["part.json", "part.json"]),
+            json!(["index.json"]),
+            json!(["../outside.json"]),
+            json!([]),
+        ] {
+            fs::write(
+                root.path().join("index.json"),
+                json!({"formatVersion": 1, "sources": sources}).to_string(),
+            )
+            .unwrap();
+            assert!(
+                resolve_definition(&json!({"source": "index.json"}), root.path(), "collision")
+                    .is_err()
+            );
+        }
     }
 
     #[test]

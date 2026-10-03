@@ -8,6 +8,7 @@ import re
 import subprocess
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,7 @@ DEFAULT_REVIEW_EMAIL = "play-review@cubacadabra.com"
 DEFAULT_REVIEW_PASSWORD = "testing"
 DEFAULT_BACKEND_URL = "http://127.0.0.1:8787"
 PRODUCTION_BACKEND_URL = "https://api.cubacadabra.com"
-EXAMPLE_NAMES = ("the-wild-west", "survival-101", "adventure-101")
+EXAMPLE_NAMES = ("cuboom", "the-wild-west", "survival-101", "adventure-101")
 SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
     r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
@@ -34,7 +35,7 @@ class ExampleUploadError(RuntimeError):
 def _native_build(plan: "ExamplePlan") -> None:
     result = subprocess.run(
         [
-            "cargo", "run", "--quiet", "--bin", "cubacadabra", "--",
+            "cargo", "run", "--quiet", "--locked", "--bin", "cubacadabra", "--",
             "build-game", "--source", str(plan.project),
             "--output", str(plan.output), "--zip", str(plan.zip_path),
         ],
@@ -214,16 +215,19 @@ def _plans(
     bump_versions: bool,
 ) -> list[ExamplePlan]:
     plans: list[ExamplePlan] = []
-    for game_id in EXAMPLE_NAMES:
-        project = (examples_dir / game_id).resolve()
+    game_ids: set[str] = set()
+    for project_name in EXAMPLE_NAMES:
+        project = (examples_dir / project_name).resolve()
         manifest_path = project / "manifest.json"
         manifest = _read_manifest(manifest_path)
-        manifest_id = manifest.get("id")
-        if manifest_id != game_id:
+        game_id = manifest.get("id")
+        if not isinstance(game_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", game_id):
             raise ExampleUploadError(
-                f"{manifest_path}: expected manifest.id to be {game_id!r}, "
-                f"got {manifest_id!r}"
+                f"{manifest_path}: expected a lowercase package id, got {game_id!r}"
             )
+        if game_id in game_ids:
+            raise ExampleUploadError(f"duplicate package id {game_id!r}")
+        game_ids.add(game_id)
         version = manifest.get("version")
         next_version = _next_patch_version(version) if bump_versions else version
         if not isinstance(next_version, (int, str)) or isinstance(next_version, bool):
@@ -258,6 +262,14 @@ def upload_examples(
     bump_versions: bool = True,
 ) -> tuple[list[ExamplePlan], list[ExampleUploadResult]]:
     """Bump, build, authenticate, and upload the example games."""
+
+    if password == DEFAULT_REVIEW_PASSWORD and urlparse(backend_url).hostname not in {
+        "localhost", "127.0.0.1", "::1"
+    }:
+        raise ExampleUploadError(
+            "The testing password is for the local backend only. Set "
+            "CUBACADABRA_REVIEW_PASSWORD or --password for a remote upload."
+        )
 
     plans = _plans(
         examples_dir.resolve(),

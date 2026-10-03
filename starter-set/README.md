@@ -86,7 +86,7 @@ when a production release is intended.
 
 ## Mobile-first delivery limits
 
-[central performance notes](https://github.com/cubacadabra/docs/blob/main/verification/performance.md) record the budget that prompted these limits: the
+[central performance notes](https://github.com/cubacadabra/docs/blob/main/quality/verification/performance.md) record the budget that prompted these limits: the
 default first preview was 8.30 MB and about 93,800 Near triangles. The target
 for the pre-launch starter set is **2–4 MB for the complete first-preview
 loadout** and **30,000–50,000 composed Near triangles**. These limits apply to

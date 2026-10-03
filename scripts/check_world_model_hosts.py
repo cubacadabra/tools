@@ -36,33 +36,33 @@ REQUIREMENTS = {
         r"registerWorldMesh",
     ),
     "studio registration": (
-        WORKSPACE_ROOT / "studio/src/app.rs",
+        WORKSPACE_ROOT / "studio/src/app_start.rs",
         r"register_world_mesh",
     ),
     "iOS package loading": (
-        WORKSPACE_ROOT / "ios_app/cubacadabra/GamePackage.swift",
+        WORKSPACE_ROOT / "ios/cubacadabra/GamePackage.swift",
         r"loadWorldModels",
     ),
     "iOS registration": (
-        WORKSPACE_ROOT / "ios_app/cubacadabra/EngineBridge.swift",
+        WORKSPACE_ROOT / "ios/cubacadabra/EngineBridge.swift",
         r"engine_renderer_register_world_mesh",
     ),
     "iOS C bridge declaration": (
-        WORKSPACE_ROOT / "ios_app/cubacadabra/cubacadabra_engine.h",
+        WORKSPACE_ROOT / "ios/cubacadabra/cubacadabra_engine.h",
         r"engine_renderer_register_world_mesh",
     ),
     "Android package loading": (
         WORKSPACE_ROOT
-        / "android_app/app/src/main/java/dev/andrewarrow/cubacadabra/game/GamePackageLoader.kt",
+        / "android/app/src/main/java/dev/andrewarrow/cubacadabra/game/GamePackageLoader.kt",
         r"loadWorldModels",
     ),
     "Android registration": (
         WORKSPACE_ROOT
-        / "android_app/app/src/main/java/dev/andrewarrow/cubacadabra/game/GameViewModel.kt",
+        / "android/app/src/main/java/dev/andrewarrow/cubacadabra/game/GameViewModel.kt",
         r"nativeRegisterWorldMesh",
     ),
     "Android JNI bridge": (
-        WORKSPACE_ROOT / "android_app/app/src/main/cpp/jni_bridge.c",
+        WORKSPACE_ROOT / "android/app/src/main/cpp/jni_bridge.c",
         r"nativeRegisterWorldMesh|engine_renderer_register_world_mesh",
     ),
 }

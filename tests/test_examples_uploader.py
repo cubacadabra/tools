@@ -9,7 +9,7 @@ import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from cubacadabra.examples_uploader import upload_examples
+from cubacadabra.examples_uploader import ExampleUploadError, upload_examples
 
 
 class ExampleUploadTests(unittest.TestCase):
@@ -17,12 +17,13 @@ class ExampleUploadTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             examples = root / "examples"
-            for game_id, version in (
-                ("the-wild-west", "0.3.6"),
-                ("survival-101", "0.3.1"),
-                ("adventure-101", "0.4.0"),
+            for folder, game_id, version in (
+                ("cuboom", "heavy2", "0.4.2"),
+                ("the-wild-west", "the-wild-west", "0.3.6"),
+                ("survival-101", "survival-101", "0.3.1"),
+                ("adventure-101", "adventure-101", "0.4.0"),
             ):
-                project = examples / game_id
+                project = examples / folder
                 (project / "src").mkdir(parents=True)
                 (project / "manifest.json").write_text(
                     json.dumps({"id": game_id, "version": version}),
@@ -81,14 +82,16 @@ class ExampleUploadTests(unittest.TestCase):
                 thread.join()
                 server.server_close()
 
-            self.assertEqual([plan.version for plan in plans], ["0.3.7", "0.3.2", "0.4.1"])
-            self.assertEqual([result.version for result in results], ["0.3.7", "0.3.2", "0.4.1"])
-            self.assertEqual(len(requests), 3)
+            self.assertEqual([plan.version for plan in plans], ["0.4.3", "0.3.7", "0.3.2", "0.4.1"])
+            self.assertEqual([result.version for result in results], ["0.4.3", "0.3.7", "0.3.2", "0.4.1"])
+            self.assertEqual(plans[0].game_id, "heavy2")
+            self.assertEqual(plans[0].project.name, "cuboom")
+            self.assertEqual(len(requests), 4)
             self.assertEqual(
                 [request[1] for request in requests],
-                ["cubacadabra_session=test-session"] * 3,
+                ["cubacadabra_session=test-session"] * 4,
             )
-            self.assertEqual(user_agents, ["cubacadabra-tools/0.3.0"] * 4)
+            self.assertEqual(user_agents, ["cubacadabra-tools/0.3.0"] * 5)
             self.assertEqual(
                 json.loads((examples / "the-wild-west/manifest.json").read_text())["version"],
                 "0.3.7",
@@ -96,3 +99,16 @@ class ExampleUploadTests(unittest.TestCase):
             self.assertTrue((root / "archives/the-wild-west.zip").exists())
             self.assertTrue((root / "archives/survival-101.zip").exists())
             self.assertTrue((root / "archives/adventure-101.zip").exists())
+            self.assertTrue((root / "archives/heavy2.zip").exists())
+
+    def test_remote_upload_requires_credentials_before_reading_or_changing_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ExampleUploadError, "local backend only"):
+                upload_examples(
+                    examples_dir=root / "missing-examples",
+                    build_dir=root / "build",
+                    zip_dir=root / "archives",
+                    backend_url="https://example.invalid",
+                )
+            self.assertEqual(list(root.iterdir()), [])

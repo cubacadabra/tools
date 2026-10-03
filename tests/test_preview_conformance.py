@@ -44,11 +44,7 @@ def native_build(project: Path, output: Path) -> None:
 
 
 class PreviewConformanceTests(unittest.TestCase):
-    SUPPORTED_GAME_PROJECTS = (
-        ROOT / "first-game",
-        ROOT / "second-game",
-        ROOT / "third-game",
-    ) + tuple(
+    SUPPORTED_GAME_PROJECTS = tuple(
         sorted(
             (manifest.parent for manifest in (ROOT / "examples").glob("*/manifest.json")),
             key=lambda path: path.name,
@@ -73,7 +69,7 @@ class PreviewConformanceTests(unittest.TestCase):
                         )
 
     def test_capability_probe_covers_the_documented_game_api(self) -> None:
-        game = ROOT / "third-game"
+        game = ROOT / "examples/third-game"
         source = (game / "src/main.luau").read_text(encoding="utf-8")
         manifest_source = (game / "manifest.json").read_text(encoding="utf-8")
         contract_text = CONTRACT_TEXT
@@ -132,13 +128,13 @@ class PreviewConformanceTests(unittest.TestCase):
     def test_preview_packages_use_one_compatible_version(self) -> None:
         for game_id in ("first-game", "second-game", "third-game"):
             manifest = json.loads(
-                (ROOT / game_id / "manifest.json").read_text(encoding="utf-8")
+                (ROOT / "examples" / game_id / "manifest.json").read_text(encoding="utf-8")
             )
             self.assertEqual(manifest["version"], "0.3.0", game_id)
             self.assertEqual(manifest["sdkVersion"], "0.3.0", game_id)
 
     def test_game_workspaces_map_the_sdk_alias_to_real_luau_modules(self) -> None:
-        for workspace in ("first-game", "second-game", "third-game", "examples"):
+        for workspace in ("examples/first-game", "examples/second-game", "examples/third-game", "examples"):
             config = json.loads((ROOT / workspace / ".luaurc").read_text())
             sdk_root = (ROOT / workspace / config["aliases"]["cubacadabra"]).resolve()
             self.assertEqual(sdk_root, (ROOT / "tools/src/cubacadabra/sdk").resolve())
@@ -161,9 +157,9 @@ class PreviewConformanceTests(unittest.TestCase):
         for status in ("pending", "accepted", "rejected", "expired"):
             self.assertIn(status, shared_state_docs)
 
-        first_round = (ROOT / "first-game/src/round.luau").read_text()
-        second_relay = (ROOT / "second-game/src/relay.luau").read_text()
-        probe = (ROOT / "third-game/src/main.luau").read_text()
+        first_round = (ROOT / "examples/first-game/src/round.luau").read_text()
+        second_relay = (ROOT / "examples/second-game/src/relay.luau").read_text()
+        probe = (ROOT / "examples/third-game/src/main.luau").read_text()
         self.assertIn('mode = "distinct"', probe)
         self.assertIn("operationStatus = operation_status", probe)
         self.assertIn("operationId = operation_prefix", probe)
